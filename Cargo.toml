@@ -1,0 +1,73 @@
+[package]
+name = "dulce-de-leche"
+version = "0.1.0"
+edition = "2024"
+description = "Orchestrator for the charly-vibes tool ecosystem — one command to install, configure, and update every tool"
+license = "Apache-2.0"
+repository = "https://github.com/charly-vibes/dulce-de-leche"
+readme = "README.md"
+keywords = ["cli", "orchestrator", "bootstrap", "charly-vibes", "toolchain"]
+categories = ["command-line-utilities", "development-tools"]
+include = ["src/**/*", "/Cargo.toml", "/Cargo.lock", "/LICENSE", "/README.md"]
+
+[lib]
+name = "dulce_de_leche"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ddl"
+path = "src/main.rs"
+
+[dependencies]
+# CLI argument parsing
+clap = { version = "4", features = ["derive", "env", "wrap_help"] }
+
+# Error handling — beautiful diagnostics
+miette = { version = "7", features = ["fancy"] }
+thiserror = "2"
+
+# Interactive prompts
+cliclack = "0.3"
+
+# Colors (respects NO_COLOR)
+owo-colors = "4"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# Date/time
+chrono = { version = "0.4", features = ["serde"] }
+
+# HTTP client (blocking, JSON)
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+
+# File system paths
+dirs = "6"
+
+# Semantic versioning parsing
+semver = "1"
+
+# Cross-platform symlinks
+fs2 = "0.4"
+
+# Progress indicators
+indicatif = "0.17"
+
+# Shell-word splitting
+shell-words = "1"
+
+# Shared infra crate (envelope, suggestions, scaffold)
+genesis-vibes = "0.2"
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+tempfile = "3"
+serial_test = "3"
+
+[profile.release]
+lto = "fat"
+strip = "symbols"
+codegen-units = 1
