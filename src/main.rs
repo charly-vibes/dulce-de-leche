@@ -271,20 +271,10 @@ fn cmd_status(args: &dulce_de_leche::cli::Args) -> Result<()> {
     use dulce_de_leche::diagnostics;
 
     let ddl_dir = DdlDir::find_or_create().ok();
-    let health = diagnostics::collect_all_health(ddl_dir.as_ref());
+    let report = diagnostics::build_status_report(ddl_dir.as_ref());
 
     if args.json {
-        let tools: Vec<serde_json::Value> = health.iter().map(|h| {
-            serde_json::json!({
-                "name": h.name,
-                "description": h.description,
-                "installed": h.installed,
-                "version": h.version,
-                "config_ok": h.config_ok,
-                "suggestion": h.suggestion
-            })
-        }).collect();
-        let data = serde_json::json!({ "tools": tools });
+        let data = serde_json::json!(report);
         let json_str = output::json_output(true, EnvelopeKind::List, data, vec![], vec![])?;
         println!("{json_str}");
         return Ok(());
@@ -293,13 +283,14 @@ fn cmd_status(args: &dulce_de_leche::cli::Args) -> Result<()> {
     println!("dulce-de-leche — ecosystem status");
     println!();
 
-    for h in &health {
-        println!("{}", diagnostics::format_health_line(h));
+    for section in &report.sections {
+        for item in &section.items {
+            println!("{}", diagnostics::format_health_line(item));
+        }
     }
 
     println!();
-    let refs: Vec<&diagnostics::ToolHealth> = health.iter().collect();
-    println!("{}", diagnostics::status_summary(refs));
+    println!("{}", diagnostics::status_summary(&report.sections));
 
     Ok(())
 }
@@ -333,6 +324,12 @@ fn cmd_version(check: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
 
     if args.json {
         let mut tools = Vec::new();
+        let latest_versions = if check {
+            dulce_de_leche::installer::check_all_latest_versions()
+        } else {
+            std::collections::HashMap::new()
+        };
+
         if let Ok(ddl_dir) = DdlDir::find_or_create() {
             let matrix = dulce_de_leche::compat::load_compatibility(&ddl_dir.path);
             let mut names: Vec<&String> = ddl_dir.manifest.tools.keys().collect();
@@ -341,9 +338,13 @@ fn cmd_version(check: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
                 if let Some(entry) = ddl_dir.manifest.tools.get(name) {
                     let constraint = matrix.constraint(name).unwrap_or("*");
                     let compatible = matrix.is_compatible(name, &entry.installed);
+                    let latest = latest_versions.get(name.as_str());
+                    let update_available = latest.map_or(false, |lv| *lv != entry.installed);
                     tools.push(serde_json::json!({
                         "name": name,
                         "version": entry.installed,
+                        "latest": latest,
+                        "update_available": update_available,
                         "source": entry.source,
                         "status": entry.status,
                         "compatible": compatible,
@@ -354,10 +355,15 @@ fn cmd_version(check: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
         }
         let data = serde_json::json!({
             "ddl_version": ddl_version,
+            "check": check,
             "tools": tools
         });
         let json_str = output::json_output(true, EnvelopeKind::Version, data, vec![], vec![])?;
         println!("{json_str}");
+
+        if check && tools.iter().any(|t| t["update_available"] == true) {
+            return Err(DdlError::PartialFailure);
+        }
         return Ok(());
     }
 
@@ -390,37 +396,66 @@ fn cmd_version(check: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
         println!();
         println!("Checking for updates... (requires network)");
         println!();
-        if let Ok(ddl_dir) = DdlDir::find_or_create() {
-            let matrix = dulce_de_leche::compat::load_compatibility(&ddl_dir.path);
-            for tool in dulce_de_leche::platform::MANAGED_TOOLS {
-                let installed = dulce_de_leche::installer::is_tool_installed(tool.name);
-                let constraint = matrix.constraint(tool.name).unwrap_or("*");
-                if installed {
-                    let version = dulce_de_leche::installer::get_installed_version(tool.name)
-                        .unwrap_or_else(|| "?".to_string());
-                    let compatible = if matrix.is_compatible(tool.name, &version) {
-                        "✓"
-                    } else {
-                        "⚠ incompatible"
-                    };
-                    println!("  {:12} v{} (constraint: {}) {}", tool.name, version, constraint, compatible);
-                } else {
-                    println!("  {:12} not installed (constraint: {})", tool.name, constraint);
-                }
-            }
+
+        let latest_versions = dulce_de_leche::installer::check_all_latest_versions();
+        let network_ok = !latest_versions.is_empty();
+
+        if !network_ok {
+            println!("  ⚠ Network unavailable — showing cached/embedded versions");
+            println!();
+        }
+
+        let mut any_outdated = false;
+        let matrix = if let Ok(ddl_dir) = DdlDir::find_or_create() {
+            dulce_de_leche::compat::load_compatibility(&ddl_dir.path)
         } else {
-            let matrix = dulce_de_leche::compat::CompatibilityMatrix::embedded();
-            for tool in dulce_de_leche::platform::MANAGED_TOOLS {
-                let constraint = matrix.constraint(tool.name).unwrap_or("*");
-                let installed = dulce_de_leche::installer::is_tool_installed(tool.name);
-                if installed {
-                    let version = dulce_de_leche::installer::get_installed_version(tool.name)
-                        .unwrap_or_else(|| "?".to_string());
-                    println!("  {:12} v{} (constraint: {})", tool.name, version, constraint);
+            dulce_de_leche::compat::CompatibilityMatrix::embedded()
+        };
+
+        for tool in dulce_de_leche::platform::MANAGED_TOOLS {
+            let installed = dulce_de_leche::installer::is_tool_installed(tool.name);
+            let constraint = matrix.constraint(tool.name).unwrap_or("*");
+            let version = if installed {
+                dulce_de_leche::installer::get_installed_version(tool.name)
+                    .unwrap_or_else(|| "?".to_string())
+            } else {
+                "not installed".to_string()
+            };
+
+            let latest = latest_versions.get(tool.name);
+            let status = if !installed {
+                "".to_string()
+            } else if let Some(lv) = latest {
+                if *lv != version {
+                    any_outdated = true;
+                    format!("update available: v{lv}")
                 } else {
-                    println!("  {:12} not installed (constraint: {})", tool.name, constraint);
+                    "up to date".to_string()
                 }
+            } else if network_ok {
+                // Network worked but no version found for this tool
+                "".to_string()
+            } else {
+                "".to_string()
+            };
+
+            if installed {
+                println!(
+                    "  {:12} v{} (constraint: {}) {}",
+                    tool.name, version, constraint, status
+                );
+            } else {
+                println!(
+                    "  {:12} {} (constraint: {})",
+                    tool.name, version, constraint
+                );
             }
+        }
+
+        if any_outdated {
+            println!();
+            println!("Some tools have updates available. Run `ddl upgrade` to update.");
+            return Err(DdlError::PartialFailure);
         }
     }
 

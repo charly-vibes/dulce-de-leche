@@ -743,6 +743,40 @@ fn which(cmd: &str) -> Option<PathBuf> {
     })
 }
 
+/// Check the latest available version of a tool from its GitHub releases.
+pub fn check_latest_version(tool: &Tool) -> Option<String> {
+    let client = reqwest::blocking::Client::builder()
+        .user_agent("ddl/0.1.0")
+        .build()
+        .ok()?;
+
+    let releases_url = format!(
+        "https://api.github.com/repos/{}/releases/latest",
+        tool.repo
+    );
+    let resp = client.get(&releases_url).send().ok()?;
+
+    if !resp.status().is_success() {
+        return None;
+    }
+
+    let release: serde_json::Value = resp.json().ok()?;
+    let tag = release["tag_name"].as_str()?;
+    Some(tag.trim_start_matches('v').to_string())
+}
+
+/// Check the latest versions of all managed tools.
+/// Returns a map of tool name to latest version.
+pub fn check_all_latest_versions() -> std::collections::HashMap<&'static str, String> {
+    let mut versions = std::collections::HashMap::new();
+    for tool in MANAGED_TOOLS {
+        if let Some(ver) = check_latest_version(tool) {
+            versions.insert(tool.name, ver);
+        }
+    }
+    versions
+}
+
 /// Install all tools, returning results for each.
 pub fn install_all_tools(
     platform: &Platform,
