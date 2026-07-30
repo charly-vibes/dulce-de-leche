@@ -79,16 +79,48 @@ fn cmd_init(tools: Option<String>, no_install: bool, args: &dulce_de_leche::cli:
         tools_str.split(',').map(|s| s.trim().to_string()).collect()
     } else if args.yes || args.json {
         // Non-interactive: install all tools
-        dulce_de_leche::platform::MANAGED_TOOLS
-            .iter()
-            .map(|t| t.name.to_string())
-            .collect()
+        // Already initialized: retry failed tools, skip existing
+        if ddl_dir.manifest.tools.is_empty() {
+            dulce_de_leche::platform::MANAGED_TOOLS
+                .iter()
+                .map(|t| t.name.to_string())
+                .collect()
+        } else {
+            // Only install tools that are not yet installed or previously failed
+            dulce_de_leche::platform::MANAGED_TOOLS
+                .iter()
+                .filter(|t| {
+                    !dulce_de_leche::installer::is_tool_installed(t.name)
+                        || ddl_dir.should_retry(t.name)
+                })
+                .map(|t| t.name.to_string())
+                .collect()
+        }
     } else {
         // Interactive: prompt user to select tools
-        let items: Vec<(&str, &str, &str)> = dulce_de_leche::platform::MANAGED_TOOLS
-            .iter()
-            .map(|t| (t.name, t.name, t.description))
-            .collect();
+        let already_initialized = !ddl_dir.manifest.tools.is_empty();
+
+        let items: Vec<(&str, &str, &str)> = if already_initialized {
+            // Show only missing/failed tools
+            dulce_de_leche::platform::MANAGED_TOOLS
+                .iter()
+                .filter(|t| {
+                    !dulce_de_leche::installer::is_tool_installed(t.name)
+                        || ddl_dir.should_retry(t.name)
+                })
+                .map(|t| (t.name, t.name, t.description))
+                .collect()
+        } else {
+            dulce_de_leche::platform::MANAGED_TOOLS
+                .iter()
+                .map(|t| (t.name, t.name, t.description))
+                .collect()
+        };
+
+        if items.is_empty() {
+            output::print_success("All tools are already installed and configured.", args.json);
+            return Ok(());
+        }
 
         let selected: Vec<&str> = cliclack::multiselect("Which tools would you like to install?")
             .items(&items)
@@ -109,6 +141,9 @@ fn cmd_init(tools: Option<String>, no_install: bool, args: &dulce_de_leche::cli:
 
     if no_install {
         output::print_success("Skipping installation (--no-install)", args.json);
+    } else if selected_tools.is_empty() {
+        // All tools already installed and configured
+        output::print_success("All tools are already installed.", args.json);
     } else {
         if !args.json {
             let failed = ddl_dir.failed_tools();
@@ -130,11 +165,16 @@ fn cmd_init(tools: Option<String>, no_install: bool, args: &dulce_de_leche::cli:
             )
         };
 
+        let mut success_count = 0u32;
+        let mut fail_count = 0u32;
+
         for result in &results {
             if result.success {
                 ddl_dir.record_installed(result.tool, &result.version, &result.method.to_string())?;
+                success_count += 1;
             } else {
                 ddl_dir.record_failed(result.tool, &result.method.to_string())?;
+                fail_count += 1;
             }
             output::print_install_result(result.success, result.tool, &result.message, args.json);
         }
@@ -147,6 +187,31 @@ fn cmd_init(tools: Option<String>, no_install: bool, args: &dulce_de_leche::cli:
                     let _ = dulce_de_leche::installer::run_tool_init(t, args.verbose);
                 }
             }
+        }
+
+        // Summary and error reporting for non-interactive / CI mode
+        if !args.json && !no_install {
+            println!();
+            if fail_count > 0 && success_count == 0 {
+                println!("All {fail_count} tools failed to install.");
+                println!("Check network connectivity and try again.");
+            } else if fail_count > 0 {
+                println!("{success_count} installed, {fail_count} failed — partial failure");
+            } else {
+                println!("All {success_count} tools installed successfully.");
+            }
+        }
+
+        // Return error if all tools failed
+        if fail_count > 0 && success_count == 0 {
+            return Err(DdlError::InstallFailed(format!(
+                "All {fail_count} tool(s) failed to install"
+            )));
+        }
+
+        // Return PartialFailure if some tools failed
+        if fail_count > 0 {
+            return Err(DdlError::PartialFailure);
         }
     }
 
