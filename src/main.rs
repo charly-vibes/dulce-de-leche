@@ -439,25 +439,64 @@ fn cmd_upgrade(tool_name: Option<&str>, args: &dulce_de_leche::cli::Args) -> Res
         if !args.json {
             println!("Upgrading {}...", tool.name);
         }
-        let result = dulce_de_leche::installer::install_tool(tool, &platform, &mut ddl_dir.manifest, false);
-        if result.success {
-            ddl_dir.record_installed(result.tool, &result.version, &result.method.to_string())?;
-        } else {
-            ddl_dir.record_failed(result.tool, &result.method.to_string())?;
-        }
+        let result = dulce_de_leche::installer::upgrade_tool(
+            tool, &platform, &mut ddl_dir.manifest, args.verbose,
+        );
+        ddl_dir.save_manifest()?;
         output::print_install_result(result.success, result.tool, &result.message, args.json);
+        if !result.success {
+            return Err(DdlError::InstallFailed(result.message));
+        }
     } else {
         if !args.json {
             println!("Upgrading all tools...");
         }
-        let results = dulce_de_leche::installer::install_all_tools(&platform, &mut ddl_dir.manifest, false);
+        let results = dulce_de_leche::installer::upgrade_all_tools(
+            &platform, &mut ddl_dir.manifest, args.verbose,
+        );
+        ddl_dir.save_manifest()?;
+
+        let mut success_count = 0u32;
+        let mut fail_count = 0u32;
+        let mut skipped_count = 0u32;
+
         for result in &results {
-            if result.success {
-                ddl_dir.record_installed(result.tool, &result.version, &result.method.to_string())?;
-            } else {
-                ddl_dir.record_failed(result.tool, &result.method.to_string())?;
+            match result.method {
+                dulce_de_leche::installer::InstallMethod::Skipped => {
+                    skipped_count += 1;
+                }
+                _ if result.success => {
+                    success_count += 1;
+                }
+                _ => {
+                    fail_count += 1;
+                }
             }
             output::print_install_result(result.success, result.tool, &result.message, args.json);
+        }
+
+        if !args.json {
+            println!();
+            if fail_count > 0 && success_count == 0 && skipped_count == 0 {
+                println!("All upgrades failed. Check network connectivity.");
+            } else if fail_count > 0 {
+                println!(
+                    "{success_count} upgraded, {fail_count} failed, {skipped_count} up to date"
+                );
+            } else if skipped_count > 0 {
+                println!("All {skipped_count} tools are already up to date.");
+            } else {
+                println!("All {success_count} tools upgraded successfully.");
+            }
+        }
+
+        if fail_count > 0 && success_count == 0 && skipped_count == 0 {
+            return Err(DdlError::InstallFailed(
+                "All upgrades failed".to_string(),
+            ));
+        }
+        if fail_count > 0 {
+            return Err(DdlError::PartialFailure);
         }
     }
 

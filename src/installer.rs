@@ -227,7 +227,7 @@ pub fn install_tool(
 /// Install a tool via binary download from GitHub releases.
 fn install_binary(tool: &Tool, platform: &Platform, _verbose: bool) -> Result<()> {
     let binary_name = if platform.os == Os::Windows {
-        format!("{}.exe", tool.name)
+        std::path::PathBuf::from(tool.name).with_extension("exe").to_string_lossy().to_string()
     } else {
         tool.name.to_string()
     };
@@ -534,6 +534,196 @@ fn ensure_on_path(dir: &Path, platform: &Platform) -> Result<()> {
     Ok(())
 }
 
+/// Upgrade a tool using the method recorded in the manifest.
+pub fn upgrade_tool(
+    tool: &Tool,
+    platform: &Platform,
+    manifest: &mut Manifest,
+    verbose: bool,
+) -> InstallResult {
+    // Determine the upgrade method based on the manifest's recorded source
+    let method = match manifest.get_tool(tool.name) {
+        Some(entry) => match entry.source.as_str() {
+            "brew install" => InstallMethod::Brew,
+            "cargo install" => InstallMethod::Cargo,
+            "binary download" => InstallMethod::Binary,
+            "scoop install" => InstallMethod::Scoop,
+            // Fall back to best method for unknown sources
+            _ => best_install_method(tool, platform),
+        },
+        // Not in manifest — use best method
+        None => best_install_method(tool, platform),
+    };
+
+    let old_version = get_installed_version(tool.name);
+
+    let result = match method {
+        InstallMethod::Brew => upgrade_brew(tool, verbose),
+        InstallMethod::Cargo => upgrade_cargo(tool, verbose),
+        InstallMethod::Binary => upgrade_binary(tool, platform, verbose),
+        InstallMethod::Scoop => upgrade_scoop(tool, verbose),
+        InstallMethod::Skipped => unreachable!(),
+    };
+
+    let new_version = get_installed_version(tool.name);
+
+    match result {
+        Ok(()) => {
+            let ver = new_version.clone().unwrap_or_else(|| "unknown".to_string());
+            let was_upgraded = match (&old_version, &new_version) {
+                (Some(old), Some(new)) => old != new,
+                _ => true,
+            };
+
+            manifest.set_tool(
+                tool.name,
+                ToolEntry {
+                    installed: ver.clone(),
+                    source: method.to_string(),
+                    status: "installed".to_string(),
+                    compatible: ">=0.0.0".to_string(),
+                },
+            );
+
+            if was_upgraded {
+                InstallResult {
+                    tool: tool.name,
+                    success: true,
+                    method: method.clone(),
+                    version: ver.clone(),
+                    message: format!("{} upgraded to v{} via {}", tool.name, ver, method),
+                }
+            } else {
+                InstallResult {
+                    tool: tool.name,
+                    success: true,
+                    method: InstallMethod::Skipped,
+                    version: ver.clone(),
+                    message: format!("{} v{} is already up to date", tool.name, ver),
+                }
+            }
+        }
+        Err(e) => {
+            manifest.set_tool(
+                tool.name,
+                ToolEntry {
+                    installed: old_version.unwrap_or_else(|| "unknown".to_string()),
+                    source: method.to_string(),
+                    status: "failed".to_string(),
+                    compatible: ">=0.0.0".to_string(),
+                },
+            );
+            InstallResult {
+                tool: tool.name,
+                success: false,
+                method,
+                version: String::new(),
+                message: format!("{} upgrade failed: {}", tool.name, e),
+            }
+        }
+    }
+}
+
+/// Upgrade a tool installed via Homebrew.
+fn upgrade_brew(tool: &Tool, _verbose: bool) -> Result<()> {
+    let status = Command::new("brew")
+        .args(["upgrade", tool.formula_name])
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .status()
+        .map_err(|e| DdlError::InstallFailed(format!("Failed to run brew upgrade: {e}")))?;
+
+    if status.success() {
+        Ok(())
+    } else {
+        Err(DdlError::InstallFailed(format!(
+            "brew upgrade {} exited with code {}",
+            tool.formula_name,
+            status.code().unwrap_or(-1)
+        )))
+    }
+}
+
+/// Upgrade a tool installed via cargo.
+fn upgrade_cargo(tool: &Tool, _verbose: bool) -> Result<()> {
+    // `cargo install` is idempotent — it upgrades if already installed
+    let status = Command::new("cargo")
+        .args(["install", tool.crate_name])
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .status()
+        .map_err(|e| DdlError::InstallFailed(format!("Failed to run cargo: {e}")))?;
+
+    if status.success() {
+        Ok(())
+    } else {
+        Err(DdlError::InstallFailed(format!(
+            "cargo install {} exited with code {}",
+            tool.crate_name,
+            status.code().unwrap_or(-1)
+        )))
+    }
+}
+
+/// Upgrade a tool installed via binary download (re-download).
+fn upgrade_binary(tool: &Tool, platform: &Platform, verbose: bool) -> Result<()> {
+    // Re-download the binary — same as install_binary but without the
+    // is_tool_installed check (which is handled by the caller)
+    install_binary(tool, platform, verbose)
+}
+
+/// Upgrade a tool installed via Scoop.
+fn upgrade_scoop(tool: &Tool, _verbose: bool) -> Result<()> {
+    let status = Command::new("scoop")
+        .args(["update", tool.formula_name])
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .status()
+        .map_err(|e| DdlError::InstallFailed(format!("Failed to run scoop update: {e}")))?;
+
+    if status.success() {
+        Ok(())
+    } else {
+        Err(DdlError::InstallFailed(format!(
+            "scoop update {} exited with code {}",
+            tool.formula_name,
+            status.code().unwrap_or(-1)
+        )))
+    }
+}
+
+/// Upgrade all tools recorded in the manifest.
+pub fn upgrade_all_tools(
+    platform: &Platform,
+    manifest: &mut Manifest,
+    verbose: bool,
+) -> Vec<InstallResult> {
+    let tool_names: Vec<String> = manifest.tools.keys().cloned().collect();
+    tool_names
+        .iter()
+        .filter_map(|name| {
+            let tool = crate::platform::find_tool(name)?;
+            Some(upgrade_tool(tool, platform, manifest, verbose))
+        })
+        .collect()
+}
+
+/// Upgrade a subset of tools by name.
+pub fn upgrade_selected_tools(
+    names: &[String],
+    platform: &Platform,
+    manifest: &mut Manifest,
+    verbose: bool,
+) -> Vec<InstallResult> {
+    names
+        .iter()
+        .filter_map(|name| {
+            let tool = crate::platform::find_tool(name)?;
+            Some(upgrade_tool(tool, platform, manifest, verbose))
+        })
+        .collect()
+}
+
 fn which(cmd: &str) -> Option<PathBuf> {
     std::env::var_os("PATH").and_then(|paths| {
         for dir in std::env::split_paths(&paths) {
@@ -543,7 +733,7 @@ fn which(cmd: &str) -> Option<PathBuf> {
             }
             #[cfg(windows)]
             {
-                let full_exe = dir.join(format!("{cmd}.exe"));
+                let full_exe = dir.join(std::path::PathBuf::from(cmd).with_extension("exe"));
                 if full_exe.is_file() {
                     return Some(full_exe);
                 }

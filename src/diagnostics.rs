@@ -276,7 +276,7 @@ pub fn which(cmd: &str) -> Option<std::path::PathBuf> {
             }
             #[cfg(windows)]
             {
-                let full_exe = dir.join(format!("{cmd}.exe"));
+                let full_exe = dir.join(std::path::PathBuf::from(cmd).with_extension("exe"));
                 if full_exe.is_file() {
                     return Some(full_exe);
                 }
