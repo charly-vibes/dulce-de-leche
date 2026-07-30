@@ -9,6 +9,7 @@ pub mod dot_ddl;
 pub mod error;
 pub mod installer;
 pub mod manifest;
+pub mod output;
 pub mod platform;
 
 use std::path::PathBuf;

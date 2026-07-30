@@ -22,3 +22,5 @@
 {"id":"int-13d37e27","kind":"field_change","created_at":"2026-07-30T18:11:59.236592846Z","actor":"charly vibes","issue_id":"DDL-2te.2","extra":{"field":"status","new_value":"closed","old_value":"open","reason":"Closed"}}
 {"id":"int-c697c4cc","kind":"field_change","created_at":"2026-07-30T18:26:38.638363442Z","actor":"charly vibes","issue_id":"DDL-wlr.1","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
 {"id":"int-e7676ca9","kind":"field_change","created_at":"2026-07-30T18:26:39.121671707Z","actor":"charly vibes","issue_id":"DDL-wlr.2","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
+{"id":"int-72475963","kind":"field_change","created_at":"2026-07-30T18:53:51.016495578Z","actor":"charly vibes","issue_id":"DDL-r2t.6","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
+{"id":"int-21d897bb","kind":"field_change","created_at":"2026-07-30T18:53:51.474843194Z","actor":"charly vibes","issue_id":"DDL-2te.3","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
