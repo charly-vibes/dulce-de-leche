@@ -195,3 +195,52 @@ pub const MANAGED_TOOLS: &[Tool] = &[
 pub fn find_tool(name: &str) -> Option<&'static Tool> {
     MANAGED_TOOLS.iter().find(|t| t.name == name || t.crate_name == name)
 }
+
+/// Simple "did you mean?" suggestion using edit distance.
+/// Returns the closest matching tool name if within threshold.
+pub fn did_you_mean(input: &str, candidates: &[&str]) -> Option<String> {
+    let input_lower = input.to_lowercase();
+    let mut best: Option<(&str, usize)> = None;
+
+    for &candidate in candidates {
+        let candidate_lower = candidate.to_lowercase();
+        let dist = edit_distance(&input_lower, &candidate_lower);
+        let threshold = (input_lower.len().max(1) + 1) / 2; // allow up to 50% edit distance
+
+        if dist <= threshold {
+            match best {
+                Some((_, best_dist)) if dist < best_dist => best = Some((candidate, dist)),
+                None => best = Some((candidate, dist)),
+                _ => {}
+            }
+        }
+    }
+
+    best.map(|(name, _)| name.to_string())
+}
+
+/// Simple Levenshtein edit distance.
+fn edit_distance(a: &str, b: &str) -> usize {
+    let a_len = a.chars().count();
+    let b_len = b.chars().count();
+
+    if a_len == 0 { return b_len; }
+    if b_len == 0 { return a_len; }
+
+    let mut prev_row: Vec<usize> = (0..=b_len).collect();
+    let mut curr_row = vec![0; b_len + 1];
+
+    for (i, ca) in a.chars().enumerate() {
+        curr_row[0] = i + 1;
+        for (j, cb) in b.chars().enumerate() {
+            let cost = if ca == cb { 0 } else { 1 };
+            curr_row[j + 1] = std::cmp::min(
+                std::cmp::min(curr_row[j] + 1, prev_row[j + 1] + 1),
+                prev_row[j] + cost,
+            );
+        }
+        std::mem::swap(&mut prev_row, &mut curr_row);
+    }
+
+    prev_row[b_len]
+}

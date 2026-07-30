@@ -58,8 +58,13 @@ indicatif = "0.17"
 # Shell-word splitting
 shell-words = "1"
 
+# Archive extraction (tar.gz for unix, zip for windows)
+tar = "0.4"
+flate2 = "1"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
 # Shared infra crate (envelope, suggestions, scaffold)
-genesis-vibes = "0.2"
+genesis-vibes = "0.4"
 
 [dev-dependencies]
 assert_cmd = "2"
