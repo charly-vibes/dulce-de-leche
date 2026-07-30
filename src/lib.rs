@@ -4,6 +4,7 @@
 //! every charly-vibes tool from a single CLI.
 
 pub mod cli;
+pub mod compat;
 pub mod diagnostics;
 pub mod dot_ddl;
 pub mod error;

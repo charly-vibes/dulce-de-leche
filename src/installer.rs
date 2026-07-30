@@ -2,12 +2,14 @@
 //!
 //! Fallback order: binary download → cargo install → brew/scoop install.
 //! Binary download is the preferred path — no prerequisites beyond curl/wget.
+//! On 404 (binary not published), ddl reports the error rather than falling
+//! back to cargo (per spec — avoids unexpected behavior).
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::error::{DdlError, Result};
-use crate::manifest::Manifest;
+use crate::manifest::{Manifest, ToolEntry};
 use crate::platform::{Os, PackageManager, Platform, Tool, MANAGED_TOOLS};
 
 /// Result of a single tool installation attempt.
@@ -16,6 +18,7 @@ pub struct InstallResult {
     pub tool: &'static str,
     pub success: bool,
     pub method: InstallMethod,
+    pub version: String,
     pub message: String,
 }
 
@@ -83,7 +86,6 @@ impl InstallMethod {
 pub fn best_install_method(tool: &Tool, platform: &Platform) -> InstallMethod {
     match platform.os {
         Os::Macos => {
-            // Prefer brew if available and not a placeholder
             if PackageManager::Brew.is_available() && !is_placeholder_formula(tool) {
                 InstallMethod::Brew
             } else if PackageManager::Cargo.is_available() {
@@ -93,7 +95,6 @@ pub fn best_install_method(tool: &Tool, platform: &Platform) -> InstallMethod {
             }
         }
         Os::Linux => {
-            // Prefer binary download, fallback to cargo
             if PackageManager::Cargo.is_available() {
                 InstallMethod::Cargo
             } else {
@@ -101,7 +102,6 @@ pub fn best_install_method(tool: &Tool, platform: &Platform) -> InstallMethod {
             }
         }
         Os::Windows => {
-            // Prefer scoop if available, fallback to binary
             if PackageManager::Scoop.is_available() {
                 InstallMethod::Scoop
             } else {
@@ -116,23 +116,40 @@ pub fn is_tool_installed(name: &str) -> bool {
     which(name).is_some()
 }
 
+/// Get the version of an installed tool.
+pub fn get_installed_version(name: &str) -> Option<String> {
+    let output = Command::new(name).arg("--version").output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let first_line = stdout.lines().next()?;
+    let parts: Vec<&str> = first_line.split_whitespace().collect();
+    if parts.len() >= 2 {
+        let candidate = if parts[0].to_lowercase() == name { parts[1] } else { parts[0] };
+        let version = if candidate.to_lowercase() == "version" && parts.len() >= 3 {
+            parts[2]
+        } else {
+            candidate.trim_start_matches('v')
+        };
+        Some(version.to_string())
+    } else {
+        Some(first_line.to_string())
+    }
+}
+
 /// Check if a Homebrew formula is a placeholder (version 0.0.0).
 pub fn is_placeholder_formula(tool: &Tool) -> bool {
-    // Query the brew formula info and check if version is 0.0.0
     let output = Command::new("brew")
         .args(["info", "--json=v2", tool.formula_name])
         .output();
     match output {
         Ok(out) if out.status.success() => {
             let stdout = String::from_utf8_lossy(&out.stdout);
-            // Check if the formula has version 0.0.0
             stdout.contains("\"version\":\"0.0.0\"")
                 || stdout.contains("\"version\": \"0.0.0\"")
         }
-        _ => {
-            // If brew info fails (formula doesn't exist yet), treat as placeholder
-            true
-        }
+        _ => true,
     }
 }
 
@@ -145,13 +162,14 @@ pub fn install_tool(
 ) -> InstallResult {
     let method = best_install_method(tool, platform);
 
-    // Check if already installed
     if is_tool_installed(tool.name) {
+        let ver = get_installed_version(tool.name).unwrap_or_else(|| "?".to_string());
         return InstallResult {
             tool: tool.name,
             success: true,
             method: InstallMethod::Skipped,
-            message: format!("{} is already installed", tool.name),
+            version: ver.clone(),
+            message: format!("{} v{} is already installed", tool.name, ver),
         };
     }
 
@@ -163,12 +181,15 @@ pub fn install_tool(
         InstallMethod::Skipped => unreachable!(),
     };
 
+    let detected = get_installed_version(tool.name)
+        .unwrap_or_else(|| "unknown".to_string());
+
     match result {
         Ok(()) => {
             manifest.set_tool(
                 tool.name,
-                crate::manifest::ToolEntry {
-                    installed: "unknown".to_string(),
+                ToolEntry {
+                    installed: detected.clone(),
                     source: method.to_string(),
                     status: "installed".to_string(),
                     compatible: ">=0.0.0".to_string(),
@@ -178,13 +199,14 @@ pub fn install_tool(
                 tool: tool.name,
                 success: true,
                 method: method.clone(),
-                message: format!("{} installed via {}", tool.name, method.clone()),
+                version: detected.clone(),
+                message: format!("{} v{} installed via {}", tool.name, detected, method),
             }
         }
         Err(e) => {
             manifest.set_tool(
                 tool.name,
-                crate::manifest::ToolEntry {
+                ToolEntry {
                     installed: "unknown".to_string(),
                     source: method.to_string(),
                     status: "failed".to_string(),
@@ -195,6 +217,7 @@ pub fn install_tool(
                 tool: tool.name,
                 success: false,
                 method,
+                version: String::new(),
                 message: format!("{} failed: {}", tool.name, e),
             }
         }
@@ -218,7 +241,6 @@ fn install_binary(tool: &Tool, platform: &Platform, _verbose: bool) -> Result<()
         _ => return Err(DdlError::UnsupportedPlatform(platform.as_str())),
     };
 
-    // Fetch latest release tag from GitHub API
     let client = reqwest::blocking::Client::builder()
         .user_agent("ddl/0.1.0")
         .build()
@@ -230,6 +252,12 @@ fn install_binary(tool: &Tool, platform: &Platform, _verbose: bool) -> Result<()
         .send()
         .map_err(|e| DdlError::Network(e))?;
 
+    if resp.status() == reqwest::StatusCode::NOT_FOUND {
+        return Err(DdlError::InstallFailed(format!(
+            "No releases found for {} — the first release may not be published yet. Try `cargo install {}` manually.",
+            tool.repo, tool.crate_name
+        )));
+    }
     if !resp.status().is_success() {
         return Err(DdlError::InstallFailed(format!(
             "GitHub API returned {} for {}",
@@ -245,10 +273,8 @@ fn install_binary(tool: &Tool, platform: &Platform, _verbose: bool) -> Result<()
     let tag = release["tag_name"]
         .as_str()
         .ok_or_else(|| DdlError::InstallFailed("No tag_name in release".to_string()))?;
-
     let version = tag.trim_start_matches('v');
 
-    // Build download URL
     let ext = if platform.os == Os::Windows { "zip" } else { "tar.gz" };
     let archive_name = format!("{}_{}_{}", tool.name, version, target);
     let download_url = format!(
@@ -259,13 +285,15 @@ fn install_binary(tool: &Tool, platform: &Platform, _verbose: bool) -> Result<()
     // Determine install destination
     let dest_dir = if platform.os == Os::Windows {
         let local_app_data = std::env::var("LOCALAPPDATA")
-            .map_err(|_| DdlError::Other("LOCALAPPDATA not set".to_string()))?;
+            .map_err(|_| DdlError::PrerequisiteMissing(
+                "%LOCALAPPDATA% not set. On Windows, this should point to AppData\\Local.".to_string()
+            ))?;
         PathBuf::from(local_app_data).join("ddl").join("bin")
     } else {
-        // Try to install to a common location, fallback to ~/.ddl/bin
-        let home = dirs::home_dir()
-            .ok_or_else(|| DdlError::Other("Cannot find home directory".to_string()))?;
-        home.join(".ddl").join("bin")
+        dirs::home_dir()
+            .ok_or_else(|| DdlError::Other("Cannot find home directory".to_string()))?
+            .join(".ddl")
+            .join("bin")
     };
 
     std::fs::create_dir_all(&dest_dir)
@@ -279,7 +307,6 @@ fn install_binary(tool: &Tool, platform: &Platform, _verbose: bool) -> Result<()
         download_and_extract_tar_gz(&download_url, &dest_path, tool.name)?;
     }
 
-    // Make executable on Unix
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -287,30 +314,29 @@ fn install_binary(tool: &Tool, platform: &Platform, _verbose: bool) -> Result<()
             .map_err(|e| DdlError::Io(e))?;
     }
 
-    // Add to PATH if needed
     ensure_on_path(&dest_dir, platform)?;
 
     eprintln!("  ✓ {} downloaded to {}", tool.name, dest_path.display());
     Ok(())
 }
 
-/// Download a `.tar.gz` archive, extract the binary, and place it at `dest`.
 fn download_and_extract_tar_gz(url: &str, dest: &Path, binary_name: &str) -> Result<()> {
     let response = reqwest::blocking::get(url)
         .map_err(|e| DdlError::Network(e))?;
 
+    if response.status() == reqwest::StatusCode::NOT_FOUND {
+        return Err(DdlError::InstallFailed(format!(
+            "Binary not found at {url} — the release may not include this platform yet."
+        )));
+    }
     if !response.status().is_success() {
         return Err(DdlError::InstallFailed(format!(
             "Download failed: HTTP {} for {}",
-            response.status(),
-            url
+            response.status(), url
         )));
     }
 
-    let bytes = response
-        .bytes()
-        .map_err(|e| DdlError::Network(e))?;
-
+    let bytes = response.bytes().map_err(|e| DdlError::Network(e))?;
     let decoder = flate2::read::GzDecoder::new(&bytes[..]);
     let mut archive = tar::Archive::new(decoder);
 
@@ -324,43 +350,38 @@ fn download_and_extract_tar_gz(url: &str, dest: &Path, binary_name: &str) -> Res
     }
 
     Err(DdlError::InstallFailed(format!(
-        "Binary '{}' not found in archive",
-        binary_name
+        "Binary '{}' not found in archive from {url}", binary_name
     )))
 }
 
-/// Download a `.zip` archive, extract the binary, and place it at `dest`.
 fn download_and_extract_zip(url: &str, dest: &Path) -> Result<()> {
     let response = reqwest::blocking::get(url)
         .map_err(|e| DdlError::Network(e))?;
 
+    if response.status() == reqwest::StatusCode::NOT_FOUND {
+        return Err(DdlError::InstallFailed(format!(
+            "Binary not found at {url} — the release may not include Windows yet."
+        )));
+    }
     if !response.status().is_success() {
         return Err(DdlError::InstallFailed(format!(
             "Download failed: HTTP {} for {}",
-            response.status(),
-            url
+            response.status(), url
         )));
     }
 
-    let bytes = response
-        .bytes()
-        .map_err(|e| DdlError::Network(e))?;
-
+    let bytes = response.bytes().map_err(|e| DdlError::Network(e))?;
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes.to_vec()))
         .map_err(|e| DdlError::Other(e.to_string()))?;
 
-    let binary_name = dest
-        .file_name()
+    let binary_name = dest.file_name()
         .and_then(|n| n.to_str())
         .ok_or_else(|| DdlError::Other("Invalid destination path".to_string()))?;
 
     for i in 0..archive.len() {
-        let mut entry = archive
-            .by_index(i)
+        let mut entry = archive.by_index(i)
             .map_err(|e| DdlError::Other(e.to_string()))?;
-        let path = entry
-            .name()
-            .to_string();
+        let path = entry.name().to_string();
 
         if path.ends_with(binary_name) || path == binary_name {
             let mut out = std::fs::File::create(dest)
@@ -372,12 +393,10 @@ fn download_and_extract_zip(url: &str, dest: &Path) -> Result<()> {
     }
 
     Err(DdlError::InstallFailed(format!(
-        "Binary '{}' not found in zip archive",
-        binary_name
+        "Binary '{binary_name}' not found in zip archive from {url}"
     )))
 }
 
-/// Install a tool via `cargo install`.
 fn install_cargo(tool: &Tool, _verbose: bool) -> Result<()> {
     let status = Command::new("cargo")
         .args(["install", tool.crate_name])
@@ -397,7 +416,6 @@ fn install_cargo(tool: &Tool, _verbose: bool) -> Result<()> {
     }
 }
 
-/// Install a tool via `brew install`.
 fn install_brew(tool: &Tool, _verbose: bool) -> Result<()> {
     let status = Command::new("brew")
         .args(["install", tool.formula_name])
@@ -417,7 +435,6 @@ fn install_brew(tool: &Tool, _verbose: bool) -> Result<()> {
     }
 }
 
-/// Install a tool via `scoop install`.
 fn install_scoop(tool: &Tool, _verbose: bool) -> Result<()> {
     let status = Command::new("scoop")
         .args(["install", tool.formula_name])
@@ -445,55 +462,78 @@ pub fn run_tool_init(tool: &Tool, _verbose: bool) -> Result<()> {
         "ah" => ("ah", &["init"]),
         "pretender" => ("pretender", &["init"]),
         "testaruda" => ("testaruda", &["init"]),
-        _ => return Ok(()), // some tools don't have init commands
+        "fotos-mcp" => ("fotos-mcp", &["init"]),
+        "fabbro" => ("fabbro", &["init"]),
+        _ => return Ok(()),
     };
 
-    let status = Command::new(cmd)
+    // Check if tool is on PATH first
+    if !is_tool_installed(cmd) {
+        eprintln!("  ⚠ {} not found on PATH — skipping init", cmd);
+        return Ok(());
+    }
+
+    let output = Command::new(cmd)
         .args(args)
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .status()
+        .output()
         .map_err(|e| {
             DdlError::InstallFailed(format!("Failed to run {} init: {e}", tool.name))
         })?;
 
-    if status.success() {
-        eprintln!("  ✓ {} initialized", tool.name);
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let first_line = stdout.lines().next().unwrap_or("");
+        if !first_line.is_empty() {
+            eprintln!("  ✓ {} initialized: {}", tool.name, first_line);
+        } else {
+            eprintln!("  ✓ {} initialized", tool.name);
+        }
         Ok(())
     } else {
-        eprintln!("  ⚠ {} init exited with code {}", tool.name, status.code().unwrap_or(-1));
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        eprintln!(
+            "  ⚠ {} init exited with code {}: {}",
+            tool.name,
+            output.status.code().unwrap_or(-1),
+            stderr.lines().next().unwrap_or("unknown error")
+        );
         // Don't fail the whole install — init is advisory
         Ok(())
     }
 }
 
-/// Ensure a directory is on PATH (or suggest adding it).
 fn ensure_on_path(dir: &Path, platform: &Platform) -> Result<()> {
     let dir_str = dir.to_string_lossy().to_string();
 
-    // Check if already on PATH
     if let Some(paths) = std::env::var_os("PATH") {
         for path in std::env::split_paths(&paths) {
             if path == dir {
-                return Ok(()); // already on PATH
+                return Ok(());
             }
         }
     }
 
     match platform.os {
         Os::Windows => {
-            eprintln!("  ⚠ Add {} to your PATH", dir_str);
+            eprintln!("  ⚠ Add {} to your PATH environment variable", dir_str);
+            eprintln!("     set PATH=%PATH%;{}", dir_str);
         }
         _ => {
+            let rc_file = if dirs::home_dir().map_or(false, |h| h.join(".zshrc").exists()) {
+                "~/.zshrc"
+            } else if dirs::home_dir().map_or(false, |h| h.join(".bashrc").exists()) {
+                "~/.bashrc"
+            } else {
+                "your shell config"
+            };
             eprintln!("  ⚠ Add {} to your PATH", dir_str);
             eprintln!("     export PATH=\"{}:$PATH\"", dir_str);
-            eprintln!("     Or add the above to your shell config (~/.zshrc, ~/.bashrc)");
+            eprintln!("     Add the above to {rc_file}");
         }
     }
     Ok(())
 }
 
-/// Check if a command exists on PATH.
 fn which(cmd: &str) -> Option<PathBuf> {
     std::env::var_os("PATH").and_then(|paths| {
         for dir in std::env::split_paths(&paths) {
@@ -511,56 +551,6 @@ fn which(cmd: &str) -> Option<PathBuf> {
         }
         None
     })
-}
-
-/// Get the version of a tool from its `--version` output.
-pub fn get_tool_version(name: &str) -> Option<String> {
-    let output = Command::new(name).arg("--version").output().ok()?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    // Parse first line: "wai 2026.5.1" or "ddl 0.1.0"
-    stdout
-        .lines()
-        .next()?
-        .split_whitespace()
-        .nth(1)
-        .map(|s| s.to_string())
-}
-
-/// Check prerequisites for a given install method.
-pub fn check_prerequisites(method: &InstallMethod) -> Result<()> {
-    match method {
-        InstallMethod::Cargo => {
-            if !which("cargo").is_some() {
-                return Err(DdlError::PrerequisiteMissing(
-                    "cargo is not installed. Install Rust via https://rustup.rs".to_string(),
-                ));
-            }
-        }
-        InstallMethod::Brew => {
-            if !which("brew").is_some() {
-                return Err(DdlError::PrerequisiteMissing(
-                    "Homebrew is not installed. Install via https://brew.sh".to_string(),
-                ));
-            }
-        }
-        InstallMethod::Scoop => {
-            if !which("scoop").is_some() {
-                return Err(DdlError::PrerequisiteMissing(
-                    "Scoop is not installed. Install via https://scoop.sh".to_string(),
-                ));
-            }
-        }
-        InstallMethod::Binary => {
-            // Binary download needs curl or wget, but these are pre-installed on most systems
-            if !which("curl").is_some() && !which("wget").is_some() {
-                return Err(DdlError::PrerequisiteMissing(
-                    "curl or wget is required for binary download".to_string(),
-                ));
-            }
-        }
-        InstallMethod::Skipped => {}
-    }
-    Ok(())
 }
 
 /// Install all tools, returning results for each.

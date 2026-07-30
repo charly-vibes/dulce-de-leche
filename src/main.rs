@@ -132,7 +132,7 @@ fn cmd_init(tools: Option<String>, no_install: bool, args: &dulce_de_leche::cli:
 
         for result in &results {
             if result.success {
-                ddl_dir.record_installed(result.tool, "unknown", &result.method.to_string())?;
+                ddl_dir.record_installed(result.tool, &result.version, &result.method.to_string())?;
             } else {
                 ddl_dir.record_failed(result.tool, &result.method.to_string())?;
             }
@@ -192,7 +192,7 @@ fn cmd_install(tool_name: &str, args: &dulce_de_leche::cli::Args) -> Result<()> 
     let result = dulce_de_leche::installer::install_tool(tool, &platform, &mut ddl_dir.manifest, args.verbose);
 
     if result.success {
-        ddl_dir.record_installed(result.tool, "unknown", &result.method.to_string())?;
+        ddl_dir.record_installed(result.tool, &result.version, &result.method.to_string())?;
         output::print_install_result(true, result.tool, &result.message, args.json);
         let _ = dulce_de_leche::installer::run_tool_init(tool, args.verbose);
         Ok(())
@@ -269,15 +269,20 @@ fn cmd_version(check: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
     if args.json {
         let mut tools = Vec::new();
         if let Ok(ddl_dir) = DdlDir::find_or_create() {
+            let matrix = dulce_de_leche::compat::load_compatibility(&ddl_dir.path);
             let mut names: Vec<&String> = ddl_dir.manifest.tools.keys().collect();
             names.sort();
             for name in names {
                 if let Some(entry) = ddl_dir.manifest.tools.get(name) {
+                    let constraint = matrix.constraint(name).unwrap_or("*");
+                    let compatible = matrix.is_compatible(name, &entry.installed);
                     tools.push(serde_json::json!({
                         "name": name,
                         "version": entry.installed,
                         "source": entry.source,
-                        "status": entry.status
+                        "status": entry.status,
+                        "compatible": compatible,
+                        "constraint": constraint
                     }));
                 }
             }
@@ -319,7 +324,39 @@ fn cmd_version(check: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
     if check {
         println!();
         println!("Checking for updates... (requires network)");
-        println!("  ℹ  Online version check not yet implemented");
+        println!();
+        if let Ok(ddl_dir) = DdlDir::find_or_create() {
+            let matrix = dulce_de_leche::compat::load_compatibility(&ddl_dir.path);
+            for tool in dulce_de_leche::platform::MANAGED_TOOLS {
+                let installed = dulce_de_leche::installer::is_tool_installed(tool.name);
+                let constraint = matrix.constraint(tool.name).unwrap_or("*");
+                if installed {
+                    let version = dulce_de_leche::installer::get_installed_version(tool.name)
+                        .unwrap_or_else(|| "?".to_string());
+                    let compatible = if matrix.is_compatible(tool.name, &version) {
+                        "✓"
+                    } else {
+                        "⚠ incompatible"
+                    };
+                    println!("  {:12} v{} (constraint: {}) {}", tool.name, version, constraint, compatible);
+                } else {
+                    println!("  {:12} not installed (constraint: {})", tool.name, constraint);
+                }
+            }
+        } else {
+            let matrix = dulce_de_leche::compat::CompatibilityMatrix::embedded();
+            for tool in dulce_de_leche::platform::MANAGED_TOOLS {
+                let constraint = matrix.constraint(tool.name).unwrap_or("*");
+                let installed = dulce_de_leche::installer::is_tool_installed(tool.name);
+                if installed {
+                    let version = dulce_de_leche::installer::get_installed_version(tool.name)
+                        .unwrap_or_else(|| "?".to_string());
+                    println!("  {:12} v{} (constraint: {})", tool.name, version, constraint);
+                } else {
+                    println!("  {:12} not installed (constraint: {})", tool.name, constraint);
+                }
+            }
+        }
     }
 
     Ok(())
@@ -339,7 +376,7 @@ fn cmd_upgrade(tool_name: Option<&str>, args: &dulce_de_leche::cli::Args) -> Res
         }
         let result = dulce_de_leche::installer::install_tool(tool, &platform, &mut ddl_dir.manifest, false);
         if result.success {
-            ddl_dir.record_installed(result.tool, "unknown", &result.method.to_string())?;
+            ddl_dir.record_installed(result.tool, &result.version, &result.method.to_string())?;
         } else {
             ddl_dir.record_failed(result.tool, &result.method.to_string())?;
         }
@@ -351,7 +388,7 @@ fn cmd_upgrade(tool_name: Option<&str>, args: &dulce_de_leche::cli::Args) -> Res
         let results = dulce_de_leche::installer::install_all_tools(&platform, &mut ddl_dir.manifest, false);
         for result in &results {
             if result.success {
-                ddl_dir.record_installed(result.tool, "unknown", &result.method.to_string())?;
+                ddl_dir.record_installed(result.tool, &result.version, &result.method.to_string())?;
             } else {
                 ddl_dir.record_failed(result.tool, &result.method.to_string())?;
             }
