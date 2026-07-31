@@ -41,3 +41,4 @@
 {"id":"int-69d6e25f","kind":"field_change","created_at":"2026-07-30T20:31:32.140613598Z","actor":"charly vibes","issue_id":"DDL-h0x","extra":{"field":"status","new_value":"closed","old_value":"open","reason":"Closed"}}
 {"id":"int-61c01e61","kind":"field_change","created_at":"2026-07-30T20:31:44.529773244Z","actor":"charly vibes","issue_id":"DDL-jes.1","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
 {"id":"int-30d887c4","kind":"field_change","created_at":"2026-07-30T20:31:44.877852637Z","actor":"charly vibes","issue_id":"DDL-jes","extra":{"field":"status","new_value":"closed","old_value":"open","reason":"Closed"}}
+{"id":"int-2c6c13ff","kind":"field_change","created_at":"2026-07-31T18:57:06.465893024Z","actor":"charly vibes","issue_id":"DDL-0lc","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
