@@ -28,7 +28,10 @@ pub fn json_output<T: Serialize + std::fmt::Debug>(
         let err = genesis::envelope::ErrorResult::new(
             "DDL_ERR",
             &format!("{:?}", data),
-            None, None, None, vec![],
+            None,
+            None,
+            None,
+            vec![],
             vec![genesis::envelope::RemediationEntry {
                 command: "ddl doctor".to_string(),
                 description: "Run diagnostics for details".to_string(),
@@ -95,7 +98,11 @@ pub fn print_install_result(success: bool, tool: &str, message: &str, json: bool
         });
         if let Ok(json_str) = json_output(
             success,
-            if success { EnvelopeKind::Ok } else { EnvelopeKind::Warning },
+            if success {
+                EnvelopeKind::Ok
+            } else {
+                EnvelopeKind::Warning
+            },
             data,
             vec![],
             vec![],

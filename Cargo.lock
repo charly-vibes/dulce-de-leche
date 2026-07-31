@@ -403,11 +403,12 @@ dependencies = [
 
 [[package]]
 name = "dulce-de-leche"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "assert_cmd",
  "chrono",
  "clap",
+ "clap_complete",
  "cliclack",
  "dirs",
  "flate2",

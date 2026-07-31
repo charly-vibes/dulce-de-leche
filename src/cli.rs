@@ -1,6 +1,21 @@
 //! CLI command structure using clap derive.
+//!
+//! Uses genesis::guide for verbosity and output format:
+//!
+//! **Verbosity:** `-v`/`-vv`/`-vvv` for progressive-disclosure output (was
+//! a single `--verbose` bool before the genesis adoption). `-q` for silence.
+//!
+//! **Output format:** `--json` / `--human` / auto-detect.
+//! When neither `--json` nor `--human` is passed, the format is auto-detected:
+//! human-readable for TTYs, JSON envelopes for piped/redirected stdout.
+//! This means agents and CI pipelines get machine-readable output by default.
+//! Use `--human` to force human output in a non-TTY context.
+//!
+//! The `Completions` subcommand ignores the format flags — completions are
+//! always plain shell script text.
 
 use clap::{Parser, Subcommand};
+use genesis::guide::{CliFormat, CliVerbosity};
 
 /// dulce-de-leche (ddl) — orchestrate the charly-vibes tool ecosystem.
 ///
@@ -9,21 +24,15 @@ use clap::{Parser, Subcommand};
 #[command(name = "ddl", version, about, long_about = None)]
 #[command(propagate_version = true)]
 pub struct Args {
-    /// Enable verbose output
-    #[arg(short = 'v', long = "verbose", global = true)]
-    pub verbose: bool,
+    #[command(flatten)]
+    pub verbose_quiet: CliVerbosity,
 
-    /// Suppress output except errors
-    #[arg(short = 'q', long = "quiet", global = true)]
-    pub quiet: bool,
+    #[command(flatten)]
+    pub format: CliFormat,
 
     /// Non-interactive mode — use defaults for all prompts
     #[arg(short = 'y', long = "yes", global = true)]
     pub yes: bool,
-
-    /// Output as JSON for machine parsing
-    #[arg(long = "json", global = true)]
-    pub json: bool,
 
     #[command(subcommand)]
     pub command: Option<Commands>,
@@ -81,11 +90,28 @@ pub enum Commands {
 
     /// Show which .ddl/ is active
     Scope,
+
+    /// Generate shell completions
+    Completions {
+        /// The shell to generate completions for
+        #[arg(value_enum)]
+        shell: clap_complete::Shell,
+    },
 }
 
 impl Args {
     /// Parse CLI args and return the parsed structure.
     pub fn parse_or_exit() -> Self {
         Self::parse()
+    }
+
+    /// Convenience: is JSON output requested or auto-detected?
+    pub fn is_json(&self) -> bool {
+        self.format.is_json()
+    }
+
+    /// Convenience: is human output requested or auto-detected?
+    pub fn is_human(&self) -> bool {
+        self.format.is_human()
     }
 }

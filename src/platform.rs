@@ -193,7 +193,9 @@ pub const MANAGED_TOOLS: &[Tool] = &[
 
 /// Find a tool by name (case-insensitive).
 pub fn find_tool(name: &str) -> Option<&'static Tool> {
-    MANAGED_TOOLS.iter().find(|t| t.name == name || t.crate_name == name)
+    MANAGED_TOOLS
+        .iter()
+        .find(|t| t.name == name || t.crate_name == name)
 }
 
 /// Simple "did you mean?" suggestion using genesis SuggestionEngine.
@@ -202,16 +204,11 @@ pub fn did_you_mean(input: &str, candidates: &[&str]) -> Option<String> {
     use genesis::suggestions::{CommandRegistry, SuggestionEngine};
 
     let mut registry = CommandRegistry::new();
-    registry.register(
-        "ddl",
-        candidates.iter().map(|c| c.to_string()).collect(),
-    );
+    registry.register("ddl", candidates.iter().map(|c| c.to_string()).collect());
 
     let engine = SuggestionEngine::new();
     match engine.suggest_typo(input, &registry) {
-        Some(genesis::suggestions::Suggestion::DidYouMean { suggestion, .. }) => {
-            Some(suggestion)
-        }
+        Some(genesis::suggestions::Suggestion::DidYouMean { suggestion, .. }) => Some(suggestion),
         _ => None,
     }
 }

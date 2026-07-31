@@ -10,7 +10,7 @@ use std::process::Command;
 
 use crate::error::{DdlError, Result};
 use crate::manifest::{Manifest, ToolEntry};
-use crate::platform::{Os, PackageManager, Platform, Tool, MANAGED_TOOLS};
+use crate::platform::{MANAGED_TOOLS, Os, PackageManager, Platform, Tool};
 
 /// Result of a single tool installation attempt.
 #[derive(Debug, Clone)]
@@ -126,7 +126,11 @@ pub fn get_installed_version(name: &str) -> Option<String> {
     let first_line = stdout.lines().next()?;
     let parts: Vec<&str> = first_line.split_whitespace().collect();
     if parts.len() >= 2 {
-        let candidate = if parts[0].to_lowercase() == name { parts[1] } else { parts[0] };
+        let candidate = if parts[0].to_lowercase() == name {
+            parts[1]
+        } else {
+            parts[0]
+        };
         let version = if candidate.to_lowercase() == "version" && parts.len() >= 3 {
             parts[2]
         } else {
@@ -146,8 +150,7 @@ pub fn is_placeholder_formula(tool: &Tool) -> bool {
     match output {
         Ok(out) if out.status.success() => {
             let stdout = String::from_utf8_lossy(&out.stdout);
-            stdout.contains("\"version\":\"0.0.0\"")
-                || stdout.contains("\"version\": \"0.0.0\"")
+            stdout.contains("\"version\":\"0.0.0\"") || stdout.contains("\"version\": \"0.0.0\"")
         }
         _ => true,
     }
@@ -181,8 +184,7 @@ pub fn install_tool(
         InstallMethod::Skipped => unreachable!(),
     };
 
-    let detected = get_installed_version(tool.name)
-        .unwrap_or_else(|| "unknown".to_string());
+    let detected = get_installed_version(tool.name).unwrap_or_else(|| "unknown".to_string());
 
     match result {
         Ok(()) => {
@@ -227,7 +229,10 @@ pub fn install_tool(
 /// Install a tool via binary download from GitHub releases.
 fn install_binary(tool: &Tool, platform: &Platform, _verbose: bool) -> Result<()> {
     let binary_name = if platform.os == Os::Windows {
-        std::path::PathBuf::from(tool.name).with_extension("exe").to_string_lossy().to_string()
+        std::path::PathBuf::from(tool.name)
+            .with_extension("exe")
+            .to_string_lossy()
+            .to_string()
     } else {
         tool.name.to_string()
     };
@@ -266,16 +271,18 @@ fn install_binary(tool: &Tool, platform: &Platform, _verbose: bool) -> Result<()
         )));
     }
 
-    let release: serde_json::Value = resp
-        .json()
-        .map_err(|e| DdlError::Network(e))?;
+    let release: serde_json::Value = resp.json().map_err(|e| DdlError::Network(e))?;
 
     let tag = release["tag_name"]
         .as_str()
         .ok_or_else(|| DdlError::InstallFailed("No tag_name in release".to_string()))?;
     let version = tag.trim_start_matches('v');
 
-    let ext = if platform.os == Os::Windows { "zip" } else { "tar.gz" };
+    let ext = if platform.os == Os::Windows {
+        "zip"
+    } else {
+        "tar.gz"
+    };
     let archive_name = format!("{}_{}_{}", tool.name, version, target);
     let download_url = format!(
         "https://github.com/{}/releases/download/{}/{}.{}",
@@ -284,10 +291,12 @@ fn install_binary(tool: &Tool, platform: &Platform, _verbose: bool) -> Result<()
 
     // Determine install destination
     let dest_dir = if platform.os == Os::Windows {
-        let local_app_data = std::env::var("LOCALAPPDATA")
-            .map_err(|_| DdlError::PrerequisiteMissing(
-                "%LOCALAPPDATA% not set. On Windows, this should point to AppData\\Local.".to_string()
-            ))?;
+        let local_app_data = std::env::var("LOCALAPPDATA").map_err(|_| {
+            DdlError::PrerequisiteMissing(
+                "%LOCALAPPDATA% not set. On Windows, this should point to AppData\\Local."
+                    .to_string(),
+            )
+        })?;
         PathBuf::from(local_app_data).join("ddl").join("bin")
     } else {
         dirs::home_dir()
@@ -296,8 +305,7 @@ fn install_binary(tool: &Tool, platform: &Platform, _verbose: bool) -> Result<()
             .join("bin")
     };
 
-    std::fs::create_dir_all(&dest_dir)
-        .map_err(|e| DdlError::Io(e))?;
+    std::fs::create_dir_all(&dest_dir).map_err(|e| DdlError::Io(e))?;
 
     let dest_path = dest_dir.join(&binary_name);
 
@@ -321,8 +329,7 @@ fn install_binary(tool: &Tool, platform: &Platform, _verbose: bool) -> Result<()
 }
 
 fn download_and_extract_tar_gz(url: &str, dest: &Path, binary_name: &str) -> Result<()> {
-    let response = reqwest::blocking::get(url)
-        .map_err(|e| DdlError::Network(e))?;
+    let response = reqwest::blocking::get(url).map_err(|e| DdlError::Network(e))?;
 
     if response.status() == reqwest::StatusCode::NOT_FOUND {
         return Err(DdlError::InstallFailed(format!(
@@ -332,7 +339,8 @@ fn download_and_extract_tar_gz(url: &str, dest: &Path, binary_name: &str) -> Res
     if !response.status().is_success() {
         return Err(DdlError::InstallFailed(format!(
             "Download failed: HTTP {} for {}",
-            response.status(), url
+            response.status(),
+            url
         )));
     }
 
@@ -340,7 +348,10 @@ fn download_and_extract_tar_gz(url: &str, dest: &Path, binary_name: &str) -> Res
     let decoder = flate2::read::GzDecoder::new(&bytes[..]);
     let mut archive = tar::Archive::new(decoder);
 
-    for entry in archive.entries().map_err(|e| DdlError::Other(e.to_string()))? {
+    for entry in archive
+        .entries()
+        .map_err(|e| DdlError::Other(e.to_string()))?
+    {
         let mut entry = entry.map_err(|e| DdlError::Other(e.to_string()))?;
         let path = entry.path().map_err(|e| DdlError::Other(e.to_string()))?;
         if path.file_name().map_or(false, |f| f == binary_name) {
@@ -350,13 +361,13 @@ fn download_and_extract_tar_gz(url: &str, dest: &Path, binary_name: &str) -> Res
     }
 
     Err(DdlError::InstallFailed(format!(
-        "Binary '{}' not found in archive from {url}", binary_name
+        "Binary '{}' not found in archive from {url}",
+        binary_name
     )))
 }
 
 fn download_and_extract_zip(url: &str, dest: &Path) -> Result<()> {
-    let response = reqwest::blocking::get(url)
-        .map_err(|e| DdlError::Network(e))?;
+    let response = reqwest::blocking::get(url).map_err(|e| DdlError::Network(e))?;
 
     if response.status() == reqwest::StatusCode::NOT_FOUND {
         return Err(DdlError::InstallFailed(format!(
@@ -366,7 +377,8 @@ fn download_and_extract_zip(url: &str, dest: &Path) -> Result<()> {
     if !response.status().is_success() {
         return Err(DdlError::InstallFailed(format!(
             "Download failed: HTTP {} for {}",
-            response.status(), url
+            response.status(),
+            url
         )));
     }
 
@@ -374,20 +386,20 @@ fn download_and_extract_zip(url: &str, dest: &Path) -> Result<()> {
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes.to_vec()))
         .map_err(|e| DdlError::Other(e.to_string()))?;
 
-    let binary_name = dest.file_name()
+    let binary_name = dest
+        .file_name()
         .and_then(|n| n.to_str())
         .ok_or_else(|| DdlError::Other("Invalid destination path".to_string()))?;
 
     for i in 0..archive.len() {
-        let mut entry = archive.by_index(i)
+        let mut entry = archive
+            .by_index(i)
             .map_err(|e| DdlError::Other(e.to_string()))?;
         let path = entry.name().to_string();
 
         if path.ends_with(binary_name) || path == binary_name {
-            let mut out = std::fs::File::create(dest)
-                .map_err(|e| DdlError::Io(e))?;
-            std::io::copy(&mut entry, &mut out)
-                .map_err(|e| DdlError::Io(e))?;
+            let mut out = std::fs::File::create(dest).map_err(|e| DdlError::Io(e))?;
+            std::io::copy(&mut entry, &mut out).map_err(|e| DdlError::Io(e))?;
             return Ok(());
         }
     }
@@ -476,9 +488,7 @@ pub fn run_tool_init(tool: &Tool, _verbose: bool) -> Result<()> {
     let output = Command::new(cmd)
         .args(args)
         .output()
-        .map_err(|e| {
-            DdlError::InstallFailed(format!("Failed to run {} init: {e}", tool.name))
-        })?;
+        .map_err(|e| DdlError::InstallFailed(format!("Failed to run {} init: {e}", tool.name)))?;
 
     if output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -750,10 +760,7 @@ pub fn check_latest_version(tool: &Tool) -> Option<String> {
         .build()
         .ok()?;
 
-    let releases_url = format!(
-        "https://api.github.com/repos/{}/releases/latest",
-        tool.repo
-    );
+    let releases_url = format!("https://api.github.com/repos/{}/releases/latest", tool.repo);
     let resp = client.get(&releases_url).send().ok()?;
 
     if !resp.status().is_success() {

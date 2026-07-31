@@ -11,9 +11,9 @@ use genesis::doctor::{DoctorCheck, DoctorRunner};
 use genesis::status::{StatusBuilder, StatusContributor, StatusItem, StatusLevel, StatusSection};
 use genesis::suite_linter::{LintResult, Severity};
 
+use crate::dot_ddl::DdlDir;
 use crate::error::Result;
 use crate::platform::Tool;
-use crate::dot_ddl::DdlDir;
 
 /// Run a tool's `--version` command and parse the output.
 pub fn get_tool_version(tool: &Tool) -> Option<String> {
@@ -74,13 +74,19 @@ impl DoctorCheck for PlatformCheck {
     fn description(&self) -> &'static str {
         "Check that the current platform is supported"
     }
-    fn run(&self, _repo_root: &Path) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
+    fn run(
+        &self,
+        _repo_root: &Path,
+    ) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
         match crate::platform::Platform::detect() {
             Some(p) => Ok(vec![LintResult::new(
                 format!("Platform: {} ({})", p.os, p.arch),
                 Severity::Advisory,
             )]),
-            None => Ok(vec![LintResult::new("Could not detect platform", Severity::Error)]),
+            None => Ok(vec![LintResult::new(
+                "Could not detect platform",
+                Severity::Error,
+            )]),
         }
     }
 }
@@ -95,7 +101,10 @@ impl DoctorCheck for PrerequisitesCheck {
     fn description(&self) -> &'static str {
         "Check that required tools are on PATH"
     }
-    fn run(&self, _repo_root: &Path) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
+    fn run(
+        &self,
+        _repo_root: &Path,
+    ) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
         let mut results = Vec::new();
         for prereq in &["curl", "git", "cargo", "brew", "scoop"] {
             if which(prereq).is_some() {
@@ -127,7 +136,10 @@ impl DoctorCheck for DdlDirCheck {
     fn description(&self) -> &'static str {
         "Check .ddl/ directory structure"
     }
-    fn run(&self, _repo_root: &Path) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
+    fn run(
+        &self,
+        _repo_root: &Path,
+    ) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
         let mut results = Vec::new();
         match &self.ddl_dir {
             Some(d) => {
@@ -137,9 +149,16 @@ impl DoctorCheck for DdlDirCheck {
                 ));
                 if d.manifest_path().exists() {
                     let tool_count = d.manifest.tools.len();
-                    let installed_count = d.manifest.tools.values().filter(|e| e.status == "installed").count();
+                    let installed_count = d
+                        .manifest
+                        .tools
+                        .values()
+                        .filter(|e| e.status == "installed")
+                        .count();
                     results.push(LintResult::new(
-                        format!("manifest.json: {tool_count} tools tracked, {installed_count} installed"),
+                        format!(
+                            "manifest.json: {tool_count} tools tracked, {installed_count} installed"
+                        ),
                         Severity::Advisory,
                     ));
                 } else {
@@ -148,7 +167,10 @@ impl DoctorCheck for DdlDirCheck {
                 if d.config_path().exists() {
                     results.push(LintResult::new("config.toml found", Severity::Advisory));
                 } else {
-                    results.push(LintResult::new("config.toml not found (created on next init)", Severity::Warning));
+                    results.push(LintResult::new(
+                        "config.toml not found (created on next init)",
+                        Severity::Warning,
+                    ));
                 }
                 let broken = d.detect_broken_symlinks();
                 if broken.is_empty() {
@@ -194,7 +216,10 @@ impl DoctorCheck for ToolCheck {
     fn description(&self) -> &'static str {
         self.tool.description
     }
-    fn run(&self, _repo_root: &Path) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
+    fn run(
+        &self,
+        _repo_root: &Path,
+    ) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
         let mut results = Vec::new();
         let installed = which(self.tool.name).is_some();
 
@@ -208,10 +233,7 @@ impl DoctorCheck for ToolCheck {
         }
 
         let version = get_tool_version(self.tool).unwrap_or_else(|| "?".to_string());
-        results.push(LintResult::new(
-            format!("v{version}"),
-            Severity::Advisory,
-        ));
+        results.push(LintResult::new(format!("v{version}"), Severity::Advisory));
 
         // Config check
         if let Some(d) = &self.ddl_dir {
@@ -270,9 +292,10 @@ impl StatusContributor for DdlStatusContributor {
                 .flatten()
                 .unwrap_or_else(|| "?".to_string());
 
-            let config_ok = self.ddl_dir.as_ref().map_or(false, |d| {
-                d.manifest.is_installed(tool.name)
-            });
+            let config_ok = self
+                .ddl_dir
+                .as_ref()
+                .map_or(false, |d| d.manifest.is_installed(tool.name));
 
             let level = if !installed {
                 StatusLevel::Error
@@ -298,9 +321,18 @@ impl StatusContributor for DdlStatusContributor {
         let summary = if items.iter().all(|i| i.level == StatusLevel::Healthy) {
             format!("{} tools healthy", items.len())
         } else {
-            let errors = items.iter().filter(|i| i.level == StatusLevel::Error).count();
-            let warnings = items.iter().filter(|i| i.level == StatusLevel::Warning).count();
-            let healthy = items.iter().filter(|i| i.level == StatusLevel::Healthy).count();
+            let errors = items
+                .iter()
+                .filter(|i| i.level == StatusLevel::Error)
+                .count();
+            let warnings = items
+                .iter()
+                .filter(|i| i.level == StatusLevel::Warning)
+                .count();
+            let healthy = items
+                .iter()
+                .filter(|i| i.level == StatusLevel::Healthy)
+                .count();
             format!("{healthy} healthy, {warnings} warnings, {errors} errors")
         };
 
@@ -395,7 +427,10 @@ pub fn run_full_diagnostic(ddl_dir: Option<&DdlDir>, _fix: bool) -> Result<Vec<S
     // Format as human-readable messages
     let mut messages = Vec::new();
     messages.push("── Diagnostics ──".to_string());
-    messages.push(format!("pass: {}  warn: {}  fail: {}", report.summary.pass, report.summary.warn, report.summary.fail));
+    messages.push(format!(
+        "pass: {}  warn: {}  fail: {}",
+        report.summary.pass, report.summary.warn, report.summary.fail
+    ));
     messages.push(String::new());
 
     for check in &report.checks {

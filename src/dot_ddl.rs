@@ -6,25 +6,81 @@
 //!   - config.toml — ddl's own configuration
 //!   - <tool>/ — per-tool config directories (symlinks in Phase 1)
 
+use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use crate::error::{DdlError, Result};
 use crate::manifest::{Manifest, ToolEntry};
 
-/// Default ddl configuration.
-const DEFAULT_CONFIG: &str = r##"# dulce-de-leche configuration
-# See https://github.com/charly-vibes/dulce-de-leche for documentation
+/// ddl's own configuration, written to `.ddl/config.toml`.
+///
+/// Implements `genesis::config::ConfigFile` for standard read/write/validate.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DdlConfig {
+    /// Installation source preference: "auto", "binary", "cargo", "brew", "scoop"
+    #[serde(default = "default_install_source")]
+    pub install_source: String,
+    /// Automatically upgrade tools when running ddl init
+    #[serde(default)]
+    pub auto_upgrade: bool,
+    /// Strategy for .gitignore entries: "auto", "prompt", "skip"
+    #[serde(default = "default_gitignore_strategy")]
+    pub gitignore_strategy: String,
+}
 
-# Installation source preference: "auto", "binary", "cargo", "brew", "scoop"
-install_source = "auto"
+fn default_install_source() -> String {
+    "auto".to_string()
+}
 
-# Automatically upgrade tools when running ddl init
-auto_upgrade = false
+fn default_gitignore_strategy() -> String {
+    "prompt".to_string()
+}
 
-# Strategy for .gitignore entries: "auto", "prompt", "skip"
-gitignore_strategy = "prompt"
-"##;
+impl Default for DdlConfig {
+    fn default() -> Self {
+        Self {
+            install_source: "auto".to_string(),
+            auto_upgrade: false,
+            gitignore_strategy: "prompt".to_string(),
+        }
+    }
+}
+
+impl genesis::config::ConfigFile for DdlConfig {
+    /// The config lives at `<ddl_dir>/config.toml`.
+    ///
+    /// Although the genesis `ConfigFile` trait calls this `repo_root`,
+    /// ddl passes its `.ddl/` directory path here (not the project root).
+    fn path(repo_root: &Path) -> PathBuf {
+        repo_root.join("config.toml")
+    }
+
+    fn validate(
+        &self,
+    ) -> std::result::Result<Vec<genesis::config::ConfigValidation>, genesis::config::ConfigError>
+    {
+        let mut results = Vec::new();
+        match self.install_source.as_str() {
+            "auto" | "binary" | "cargo" | "brew" | "scoop" => {}
+            other => results.push(genesis::config::ConfigValidation::warning(
+                "install_source",
+                format!("unknown install source '{}', expected one of: auto, binary, cargo, brew, scoop", other),
+            )),
+        }
+        match self.gitignore_strategy.as_str() {
+            "auto" | "prompt" | "skip" => {}
+            other => results.push(genesis::config::ConfigValidation::warning(
+                "gitignore_strategy",
+                format!(
+                    "unknown gitignore strategy '{}', expected one of: auto, prompt, skip",
+                    other
+                ),
+            )),
+        }
+        Ok(results)
+    }
+}
 
 /// The .gitignore entries to add for .ddl/ data files.
 pub const GITIGNORE_ENTRIES: &str = r##"
@@ -80,16 +136,14 @@ impl DdlDir {
             });
         }
 
-        std::fs::create_dir_all(path)
-            .map_err(|e| DdlError::Io(e))?;
+        std::fs::create_dir_all(path).map_err(|e| DdlError::Io(e))?;
 
-        // Create config.toml
+        // Create config.toml via genesis ConfigFile (preserve existing)
         let config_path = path.join("config.toml");
         if !config_path.exists() {
-            let mut file = std::fs::File::create(&config_path)
-                .map_err(|e| DdlError::Io(e))?;
-            file.write_all(DEFAULT_CONFIG.as_bytes())
-                .map_err(|e| DdlError::Io(e))?;
+            let config = DdlConfig::default();
+            genesis::config::ConfigFile::write(&config, path)
+                .map_err(|e| DdlError::Other(e.to_string()))?;
         }
 
         let manifest = Manifest::new();
@@ -121,8 +175,7 @@ impl DdlDir {
     pub fn ensure_tool_dir(&self, name: &str) -> Result<PathBuf> {
         let tool_dir = self.tool_path(name);
         if !tool_dir.exists() {
-            std::fs::create_dir_all(&tool_dir)
-                .map_err(|e| DdlError::Io(e))?;
+            std::fs::create_dir_all(&tool_dir).map_err(|e| DdlError::Io(e))?;
         }
         Ok(tool_dir)
     }
@@ -139,12 +192,7 @@ impl DdlDir {
     }
 
     /// Record a tool as installed, with version and source.
-    pub fn record_installed(
-        &mut self,
-        name: &str,
-        version: &str,
-        source: &str,
-    ) -> Result<()> {
+    pub fn record_installed(&mut self, name: &str, version: &str, source: &str) -> Result<()> {
         self.record_tool(
             name,
             ToolEntry {
@@ -204,8 +252,8 @@ impl DdlDir {
         let gitignore_path = PathBuf::from(".gitignore");
         if !gitignore_path.exists() {
             if yes {
-                let mut file = std::fs::File::create(&gitignore_path)
-                    .map_err(|e| DdlError::Io(e))?;
+                let mut file =
+                    std::fs::File::create(&gitignore_path).map_err(|e| DdlError::Io(e))?;
                 file.write_all(GITIGNORE_ENTRIES.as_bytes())
                     .map_err(|e| DdlError::Io(e))?;
                 println!("  ✓ .gitignore created");
@@ -213,8 +261,7 @@ impl DdlDir {
             return Ok(());
         }
 
-        let contents = std::fs::read_to_string(&gitignore_path)
-            .map_err(|e| DdlError::Io(e))?;
+        let contents = std::fs::read_to_string(&gitignore_path).map_err(|e| DdlError::Io(e))?;
 
         if contents.contains(".ddl/**/*.db") {
             return Ok(()); // already has entries
@@ -256,37 +303,28 @@ impl DdlDir {
 
         // Create target directory
         if !ddl_tool_path.exists() {
-            std::fs::create_dir_all(&ddl_tool_path)
-                .map_err(|e| DdlError::Io(e))?;
+            std::fs::create_dir_all(&ddl_tool_path).map_err(|e| DdlError::Io(e))?;
         }
 
         // Move contents from legacy to .ddl/<tool>/
         if legacy_path.is_dir() {
-            for entry in std::fs::read_dir(legacy_path)
-                .map_err(|e| DdlError::Io(e))?
-            {
+            for entry in std::fs::read_dir(legacy_path).map_err(|e| DdlError::Io(e))? {
                 let entry = entry.map_err(|e| DdlError::Io(e))?;
                 let target = ddl_tool_path.join(entry.file_name());
-                std::fs::rename(&entry.path(), &target)
-                    .map_err(|e| DdlError::Io(e))?;
+                std::fs::rename(&entry.path(), &target).map_err(|e| DdlError::Io(e))?;
             }
             // Remove empty legacy directory
-            std::fs::remove_dir(legacy_path)
-                .map_err(|e| DdlError::Io(e))?;
+            std::fs::remove_dir(legacy_path).map_err(|e| DdlError::Io(e))?;
         } else if legacy_path.is_file() {
             // Single file config (e.g., .pretender.toml)
-            let target = ddl_tool_path.join(
-                legacy_path.file_name().unwrap_or_default(),
-            );
-            std::fs::rename(legacy_path, &target)
-                .map_err(|e| DdlError::Io(e))?;
+            let target = ddl_tool_path.join(legacy_path.file_name().unwrap_or_default());
+            std::fs::rename(legacy_path, &target).map_err(|e| DdlError::Io(e))?;
         }
 
         // Create symlink at legacy location
         #[cfg(unix)]
         {
-            std::os::unix::fs::symlink(&ddl_tool_path, legacy_path)
-                .map_err(|e| DdlError::Io(e))?;
+            std::os::unix::fs::symlink(&ddl_tool_path, legacy_path).map_err(|e| DdlError::Io(e))?;
         }
         #[cfg(windows)]
         {
@@ -315,18 +353,13 @@ impl DdlDir {
 
         // Move contents back
         if ddl_tool_path.exists() {
-            std::fs::create_dir_all(legacy_path)
-                .map_err(|e| DdlError::Io(e))?;
-            for entry in std::fs::read_dir(&ddl_tool_path)
-                .map_err(|e| DdlError::Io(e))?
-            {
+            std::fs::create_dir_all(legacy_path).map_err(|e| DdlError::Io(e))?;
+            for entry in std::fs::read_dir(&ddl_tool_path).map_err(|e| DdlError::Io(e))? {
                 let entry = entry.map_err(|e| DdlError::Io(e))?;
                 let target = legacy_path.join(entry.file_name());
-                std::fs::rename(&entry.path(), &target)
-                    .map_err(|e| DdlError::Io(e))?;
+                std::fs::rename(&entry.path(), &target).map_err(|e| DdlError::Io(e))?;
             }
-            std::fs::remove_dir(&ddl_tool_path)
-                .map_err(|e| DdlError::Io(e))?;
+            std::fs::remove_dir(&ddl_tool_path).map_err(|e| DdlError::Io(e))?;
         }
 
         Ok(())
@@ -434,14 +467,20 @@ impl DdlDir {
                     if crate::installer::is_tool_installed(name) {
                         messages.push(format!("✓ {} — installed and on PATH", name));
                     } else {
-                        messages.push(format!("✗ {} — recorded as installed but not on PATH", name));
+                        messages.push(format!(
+                            "✗ {} — recorded as installed but not on PATH",
+                            name
+                        ));
                         if fix {
                             messages.push(format!("  ℹ  Run `ddl install {}` to reinstall", name));
                         }
                     }
                 }
                 "failed" => {
-                    messages.push(format!("✗ {} — previously failed (via {})", name, entry.source));
+                    messages.push(format!(
+                        "✗ {} — previously failed (via {})",
+                        name, entry.source
+                    ));
                     if fix {
                         messages.push(format!("  ℹ  Run `ddl install {}` to retry", name));
                     }
@@ -489,9 +528,13 @@ fn is_symlink(path: &Path) -> bool {
     std::fs::symlink_metadata(path)
         .map(|m| {
             #[cfg(unix)]
-            { m.is_symlink() }
+            {
+                m.is_symlink()
+            }
             #[cfg(windows)]
-            { m.file_type().is_symlink() }
+            {
+                m.file_type().is_symlink()
+            }
         })
         .unwrap_or(false)
 }

@@ -29,7 +29,7 @@ fn create_failed_manifest(ddl_dir: &Path) {
     let manifest_dir = ddl_dir.join(".ddl");
     std::fs::create_dir_all(&manifest_dir).unwrap();
     let manifest = serde_json::json!({
-        "ddl_version": "0.1.0",
+        "ddl_version": "0.2.0",
         "migration_state": "none",
         "tools": {
             "wai": {
@@ -73,7 +73,10 @@ fn test_init_help_has_no_install_flag() {
 #[test]
 fn test_init_yes_prints_banner() {
     let (mut cmd, _temp) = ddl_cmd();
-    cmd.arg("init").arg("--yes").arg("--no-install");
+    cmd.arg("init")
+        .arg("--yes")
+        .arg("--human")
+        .arg("--no-install");
     cmd.timeout(CMD_TIMEOUT);
     cmd.assert()
         .success()
@@ -84,7 +87,10 @@ fn test_init_yes_prints_banner() {
 #[test]
 fn test_init_yes_detects_platform() {
     let (mut cmd, _temp) = ddl_cmd();
-    cmd.arg("init").arg("--yes").arg("--no-install");
+    cmd.arg("init")
+        .arg("--yes")
+        .arg("--human")
+        .arg("--no-install");
     cmd.timeout(CMD_TIMEOUT);
     cmd.assert()
         .success()
@@ -94,7 +100,10 @@ fn test_init_yes_detects_platform() {
 #[test]
 fn test_init_yes_creates_ddl_dir() {
     let (mut cmd, temp) = ddl_cmd();
-    cmd.arg("init").arg("--yes").arg("--no-install");
+    cmd.arg("init")
+        .arg("--yes")
+        .arg("--human")
+        .arg("--no-install");
     cmd.timeout(CMD_TIMEOUT);
     cmd.assert().success();
     let ddl_path = temp.path().join(".ddl");
@@ -112,7 +121,10 @@ fn test_init_yes_creates_ddl_dir() {
 #[test]
 fn test_init_yes_creates_gitignore() {
     let (mut cmd, temp) = ddl_cmd();
-    cmd.arg("init").arg("--yes").arg("--no-install");
+    cmd.arg("init")
+        .arg("--yes")
+        .arg("--human")
+        .arg("--no-install");
     cmd.timeout(CMD_TIMEOUT);
     cmd.assert().success();
     let gitignore = temp.path().join(".gitignore");
@@ -122,7 +134,10 @@ fn test_init_yes_creates_gitignore() {
 #[test]
 fn test_init_yes_with_no_install_skips_install() {
     let (mut cmd, _temp) = ddl_cmd();
-    cmd.arg("init").arg("--yes").arg("--no-install");
+    cmd.arg("init")
+        .arg("--yes")
+        .arg("--human")
+        .arg("--no-install");
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("Skipping installation"));
@@ -131,14 +146,17 @@ fn test_init_yes_with_no_install_skips_install() {
 #[test]
 fn test_init_yes_creates_manifest() {
     let (mut cmd, temp) = ddl_cmd();
-    cmd.arg("init").arg("--yes").arg("--no-install");
+    cmd.arg("init")
+        .arg("--yes")
+        .arg("--human")
+        .arg("--no-install");
     cmd.timeout(CMD_TIMEOUT);
     cmd.assert().success();
     let manifest_path = temp.path().join(".ddl").join("manifest.json");
     assert!(manifest_path.exists(), "manifest.json should exist");
     let content = std::fs::read_to_string(manifest_path).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
-    assert_eq!(parsed["ddl_version"], "0.1.0");
+    assert_eq!(parsed["ddl_version"], "0.2.0");
 }
 
 // ===================== Selective install tests =====================
@@ -146,7 +164,11 @@ fn test_init_yes_creates_manifest() {
 #[test]
 fn test_init_tools_parses_flag() {
     let (mut cmd, _temp) = ddl_cmd();
-    cmd.arg("init").arg("--tools").arg("wai,dont").arg("--no-install");
+    cmd.arg("init")
+        .arg("--tools")
+        .arg("wai,dont")
+        .arg("--human")
+        .arg("--no-install");
     cmd.timeout(CMD_TIMEOUT);
     // Should parse correctly and succeed with --no-install
     cmd.assert()
@@ -157,7 +179,11 @@ fn test_init_tools_parses_flag() {
 #[test]
 fn test_init_tools_creates_ddl_dir() {
     let (mut cmd, temp) = ddl_cmd();
-    cmd.arg("init").arg("--tools").arg("wai").arg("--no-install");
+    cmd.arg("init")
+        .arg("--tools")
+        .arg("wai")
+        .arg("--human")
+        .arg("--no-install");
     cmd.timeout(CMD_TIMEOUT);
     cmd.assert().success();
     let ddl_path = temp.path().join(".ddl");
@@ -170,14 +196,20 @@ fn test_init_tools_creates_ddl_dir() {
 fn test_init_yes_in_initialized_dir_skips_installed_tools() {
     let (mut cmd, temp) = ddl_cmd();
     // First run — creates .ddl/
-    cmd.arg("init").arg("--yes").arg("--no-install");
+    cmd.arg("init")
+        .arg("--yes")
+        .arg("--human")
+        .arg("--no-install");
     cmd.timeout(CMD_TIMEOUT);
     cmd.assert().success();
 
     // Second run — should detect already-initialized
     let mut cmd2 = Command::cargo_bin("ddl").unwrap();
     cmd2.current_dir(temp.path());
-    cmd2.arg("init").arg("--yes").arg("--no-install");
+    cmd2.arg("init")
+        .arg("--yes")
+        .arg("--human")
+        .arg("--no-install");
     cmd2.timeout(CMD_TIMEOUT);
     cmd2.assert()
         .success()
@@ -191,14 +223,21 @@ fn test_init_yes_retries_failed_tools() {
     // Running --yes in an already-initialized dir with a failed tool
     // should attempt to install the failed tool. With --no-install, it
     // should still handle the already-initialized manifest correctly.
-    cmd.arg("init").arg("--yes").arg("--no-install");
+    cmd.arg("init")
+        .arg("--yes")
+        .arg("--human")
+        .arg("--no-install");
     cmd.timeout(CMD_TIMEOUT);
     cmd.assert().success();
     let manifest_path = temp.path().join(".ddl").join("manifest.json");
     let content = std::fs::read_to_string(manifest_path).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
     // The tool should still be tracked in the manifest
-    assert!(parsed["tools"].as_object().map_or(false, |t| t.contains_key("wai")));
+    assert!(
+        parsed["tools"]
+            .as_object()
+            .map_or(false, |t| t.contains_key("wai"))
+    );
 }
 
 // ===================== JSON output tests =====================
@@ -209,7 +248,8 @@ fn test_init_json_output() {
     cmd.arg("init").arg("--json").arg("--no-install");
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("dulce-de-leche"));
+        .stdout(predicate::str::contains("dulce-de-leche"))
+        .stdout(predicate::str::contains("envelope_kind"));
 }
 
 // ===================== Error handling tests =====================
@@ -225,7 +265,10 @@ fn test_init_unknown_tool_flag_errors() {
 fn test_init_global_yes_flag_works() {
     // --yes is a global flag, so it should work before the subcommand too
     let (mut cmd, _temp) = ddl_cmd();
-    cmd.arg("--yes").arg("init").arg("--no-install");
+    cmd.arg("--yes")
+        .arg("init")
+        .arg("--human")
+        .arg("--no-install");
     cmd.timeout(CMD_TIMEOUT);
     cmd.assert()
         .success()

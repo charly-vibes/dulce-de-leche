@@ -1,30 +1,40 @@
 //! dulce-de-leche (ddl) — CLI entry point.
 
-use clap::CommandFactory;
 use std::process;
 
 use dulce_de_leche::dot_ddl::DdlDir;
 use dulce_de_leche::error::{DdlError, Result};
 use dulce_de_leche::installer::InstallMethod;
 use dulce_de_leche::output;
+use genesis::cli::maybe_print_version_json;
 use genesis::envelope::EnvelopeKind;
 
 fn main() {
+    // Handle --version --json before clap parses.
+    // Clap intercepts `--version` at the parser level, before global flags
+    // like `--json` are visible, so we must check for the combo ourselves.
+    if maybe_print_version_json("ddl", dulce_de_leche::VERSION) {
+        return;
+    }
+
     let args = dulce_de_leche::cli::Args::parse_or_exit();
+    let want_json = args.is_json();
 
     if let Err(e) = run(args) {
-        output::print_error(&format!("{e}"), false);
+        output::print_error(&format!("{e}"), want_json);
         process::exit(1);
     }
 }
 
 fn run(args: dulce_de_leche::cli::Args) -> Result<()> {
+    use clap::CommandFactory;
     use dulce_de_leche::cli::Commands;
 
     match args.command {
-        Some(Commands::Init { ref tools, no_install }) => {
-            cmd_init(tools.clone(), no_install, &args)
-        }
+        Some(Commands::Init {
+            ref tools,
+            no_install,
+        }) => cmd_init(tools.clone(), no_install, &args),
         Some(Commands::Install { ref tool }) => cmd_install(tool, &args),
         Some(Commands::Status) => cmd_status(&args),
         Some(Commands::Doctor { fix }) => cmd_doctor(fix, &args),
@@ -32,6 +42,11 @@ fn run(args: dulce_de_leche::cli::Args) -> Result<()> {
         Some(Commands::Upgrade { ref tool }) => cmd_upgrade(tool.as_deref(), &args),
         Some(Commands::Migrate { undo }) => cmd_migrate(undo, &args),
         Some(Commands::Scope) => cmd_scope(&args),
+        Some(Commands::Completions { shell }) => {
+            let mut cmd = dulce_de_leche::cli::Args::command();
+            genesis::cli::generate_completions(&mut cmd, shell)?;
+            Ok(())
+        }
         None => {
             dulce_de_leche::cli::Args::command().print_help().ok();
             println!();
@@ -40,12 +55,16 @@ fn run(args: dulce_de_leche::cli::Args) -> Result<()> {
     }
 }
 
-fn cmd_init(tools: Option<String>, no_install: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
+fn cmd_init(
+    tools: Option<String>,
+    no_install: bool,
+    args: &dulce_de_leche::cli::Args,
+) -> Result<()> {
     let platform = dulce_de_leche::platform::Platform::detect()
         .ok_or_else(|| DdlError::UnsupportedPlatform("Could not detect platform".to_string()))?;
 
-    output::print_banner(args.json);
-    if !args.json {
+    output::print_banner(args.is_json());
+    if !args.is_json() {
         println!("Detected platform: {} ({})", platform.os, platform.arch);
         match platform.os {
             dulce_de_leche::platform::Os::Macos => {
@@ -69,7 +88,7 @@ fn cmd_init(tools: Option<String>, no_install: bool, args: &dulce_de_leche::cli:
     }
 
     let mut ddl_dir = DdlDir::find_or_create()?;
-    if !args.json {
+    if !args.is_json() {
         println!("  ✓ .ddl/ at {}", ddl_dir.path.display());
     }
 
@@ -77,7 +96,7 @@ fn cmd_init(tools: Option<String>, no_install: bool, args: &dulce_de_leche::cli:
     let selected_tools: Vec<String> = if let Some(ref tools_str) = tools {
         // Explicit list from --tools flag
         tools_str.split(',').map(|s| s.trim().to_string()).collect()
-    } else if args.yes || args.json {
+    } else if args.yes || args.is_json() {
         // Non-interactive: install all tools
         // Already initialized: retry failed tools, skip existing
         if ddl_dir.manifest.tools.is_empty() {
@@ -118,7 +137,10 @@ fn cmd_init(tools: Option<String>, no_install: bool, args: &dulce_de_leche::cli:
         };
 
         if items.is_empty() {
-            output::print_success("All tools are already installed and configured.", args.json);
+            output::print_success(
+                "All tools are already installed and configured.",
+                args.is_json(),
+            );
             return Ok(());
         }
 
@@ -132,7 +154,7 @@ fn cmd_init(tools: Option<String>, no_install: bool, args: &dulce_de_leche::cli:
             .map_err(|e| DdlError::Other(format!("Confirmation cancelled: {e}")))?;
 
         if !confirmed {
-            output::print_success("Installation cancelled.", args.json);
+            output::print_success("Installation cancelled.", args.is_json());
             return Ok(());
         }
 
@@ -140,12 +162,12 @@ fn cmd_init(tools: Option<String>, no_install: bool, args: &dulce_de_leche::cli:
     };
 
     if no_install {
-        output::print_success("Skipping installation (--no-install)", args.json);
+        output::print_success("Skipping installation (--no-install)", args.is_json());
     } else if selected_tools.is_empty() {
         // All tools already installed and configured
-        output::print_success("All tools are already installed.", args.json);
+        output::print_success("All tools are already installed.", args.is_json());
     } else {
-        if !args.json {
+        if !args.is_json() {
             let failed = ddl_dir.failed_tools();
             if !failed.is_empty() {
                 println!();
@@ -157,11 +179,16 @@ fn cmd_init(tools: Option<String>, no_install: bool, args: &dulce_de_leche::cli:
 
         let results = if tools.is_some() {
             dulce_de_leche::installer::install_selected_tools(
-                &selected_tools, &platform, &mut ddl_dir.manifest, args.verbose,
+                &selected_tools,
+                &platform,
+                &mut ddl_dir.manifest,
+                args.verbose_quiet.raw_count() >= 1,
             )
         } else {
             dulce_de_leche::installer::install_all_tools(
-                &platform, &mut ddl_dir.manifest, args.verbose,
+                &platform,
+                &mut ddl_dir.manifest,
+                args.verbose_quiet.raw_count() >= 1,
             )
         };
 
@@ -170,13 +197,22 @@ fn cmd_init(tools: Option<String>, no_install: bool, args: &dulce_de_leche::cli:
 
         for result in &results {
             if result.success {
-                ddl_dir.record_installed(result.tool, &result.version, &result.method.to_string())?;
+                ddl_dir.record_installed(
+                    result.tool,
+                    &result.version,
+                    &result.method.to_string(),
+                )?;
                 success_count += 1;
             } else {
                 ddl_dir.record_failed(result.tool, &result.method.to_string())?;
                 fail_count += 1;
             }
-            output::print_install_result(result.success, result.tool, &result.message, args.json);
+            output::print_install_result(
+                result.success,
+                result.tool,
+                &result.message,
+                args.is_json(),
+            );
         }
 
         // Run init commands for successfully installed tools
@@ -184,13 +220,16 @@ fn cmd_init(tools: Option<String>, no_install: bool, args: &dulce_de_leche::cli:
             if result.success {
                 let tool = dulce_de_leche::platform::find_tool(result.tool);
                 if let Some(t) = tool {
-                    let _ = dulce_de_leche::installer::run_tool_init(t, args.verbose);
+                    let _ = dulce_de_leche::installer::run_tool_init(
+                        t,
+                        args.verbose_quiet.raw_count() >= 1,
+                    );
                 }
             }
         }
 
         // Summary and error reporting for non-interactive / CI mode
-        if !args.json && !no_install {
+        if !args.is_json() && !no_install {
             println!();
             if fail_count > 0 && success_count == 0 {
                 println!("All {fail_count} tools failed to install.");
@@ -217,7 +256,7 @@ fn cmd_init(tools: Option<String>, no_install: bool, args: &dulce_de_leche::cli:
 
     ddl_dir.add_gitignore_entries(args.yes)?;
 
-    if !args.json {
+    if !args.is_json() {
         println!();
         println!("Done! Run `ddl status` to verify everything.");
     }
@@ -229,8 +268,10 @@ fn cmd_install(tool_name: &str, args: &dulce_de_leche::cli::Args) -> Result<()> 
         .ok_or_else(|| DdlError::UnsupportedPlatform("Could not detect platform".to_string()))?;
 
     let tool = dulce_de_leche::platform::find_tool(tool_name).ok_or_else(|| {
-        let names: Vec<&str> =
-            dulce_de_leche::platform::MANAGED_TOOLS.iter().map(|t| t.name).collect();
+        let names: Vec<&str> = dulce_de_leche::platform::MANAGED_TOOLS
+            .iter()
+            .map(|t| t.name)
+            .collect();
         let suggestion = dulce_de_leche::platform::did_you_mean(tool_name, &names);
         DdlError::ToolNotFound(if let Some(s) = suggestion {
             format!("Unknown tool '{tool_name}'. Did you mean '{s}'?")
@@ -243,23 +284,31 @@ fn cmd_install(tool_name: &str, args: &dulce_de_leche::cli::Args) -> Result<()> 
 
     if dulce_de_leche::installer::is_tool_installed(tool.name) {
         let msg = if let Some(entry) = ddl_dir.manifest.get_tool(tool.name) {
-            format!("{} v{} is already installed (via {})", tool.name, entry.installed, entry.source)
+            format!(
+                "{} v{} is already installed (via {})",
+                tool.name, entry.installed, entry.source
+            )
         } else {
             format!("{} is already installed on PATH", tool.name)
         };
-        output::print_success(&msg, args.json);
+        output::print_success(&msg, args.is_json());
         return Ok(());
     }
 
-    if !args.json {
+    if !args.is_json() {
         println!("Installing {}...", tool.name);
     }
-    let result = dulce_de_leche::installer::install_tool(tool, &platform, &mut ddl_dir.manifest, args.verbose);
+    let result = dulce_de_leche::installer::install_tool(
+        tool,
+        &platform,
+        &mut ddl_dir.manifest,
+        args.verbose_quiet.raw_count() >= 1,
+    );
 
     if result.success {
         ddl_dir.record_installed(result.tool, &result.version, &result.method.to_string())?;
-        output::print_install_result(true, result.tool, &result.message, args.json);
-        let _ = dulce_de_leche::installer::run_tool_init(tool, args.verbose);
+        output::print_install_result(true, result.tool, &result.message, args.is_json());
+        let _ = dulce_de_leche::installer::run_tool_init(tool, args.verbose_quiet.raw_count() >= 1);
         Ok(())
     } else {
         ddl_dir.record_failed(result.tool, &result.method.to_string())?;
@@ -273,7 +322,7 @@ fn cmd_status(args: &dulce_de_leche::cli::Args) -> Result<()> {
     let ddl_dir = DdlDir::find_or_create().ok();
     let report = diagnostics::build_status_report(ddl_dir.as_ref());
 
-    if args.json {
+    if args.is_json() {
         let data = serde_json::json!(report);
         let json_str = output::json_output(true, EnvelopeKind::List, data, vec![], vec![])?;
         println!("{json_str}");
@@ -300,7 +349,7 @@ fn cmd_doctor(fix: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
 
     let ddl_dir = DdlDir::find_or_create().ok();
 
-    if args.json {
+    if args.is_json() {
         let messages = diagnostics::run_full_diagnostic(ddl_dir.as_ref(), fix)?;
         let data = serde_json::json!({ "diagnostics": messages });
         let json_str = output::json_output(true, EnvelopeKind::Doctor, data, vec![], vec![])?;
@@ -322,7 +371,7 @@ fn cmd_doctor(fix: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
 fn cmd_version(check: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
     let ddl_version = dulce_de_leche::VERSION;
 
-    if args.json {
+    if args.is_json() {
         let mut tools = Vec::new();
         let latest_versions = if check {
             dulce_de_leche::installer::check_all_latest_versions()
@@ -339,7 +388,7 @@ fn cmd_version(check: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
                     let constraint = matrix.constraint(name).unwrap_or("*");
                     let compatible = matrix.is_compatible(name, &entry.installed);
                     let latest = latest_versions.get(name.as_str());
-                    let update_available = latest.map_or(false, |lv| *lv != entry.installed);
+                    let update_available = latest.is_some_and(|lv| *lv != entry.installed);
                     tools.push(serde_json::json!({
                         "name": name,
                         "version": entry.installed,
@@ -384,8 +433,8 @@ fn cmd_version(check: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
             use dulce_de_leche::diagnostics;
             for tool in dulce_de_leche::platform::MANAGED_TOOLS {
                 if diagnostics::which(tool.name).is_some() {
-                    let version = diagnostics::get_tool_version(tool)
-                        .unwrap_or_else(|| "?".to_string());
+                    let version =
+                        diagnostics::get_tool_version(tool).unwrap_or_else(|| "?".to_string());
                     println!("  {:12} v{}", tool.name, version);
                 }
             }
@@ -471,23 +520,28 @@ fn cmd_upgrade(tool_name: Option<&str>, args: &dulce_de_leche::cli::Args) -> Res
     if let Some(name) = tool_name {
         let tool = dulce_de_leche::platform::find_tool(name)
             .ok_or_else(|| DdlError::ToolNotFound(name.to_string()))?;
-        if !args.json {
+        if !args.is_json() {
             println!("Upgrading {}...", tool.name);
         }
         let result = dulce_de_leche::installer::upgrade_tool(
-            tool, &platform, &mut ddl_dir.manifest, args.verbose,
+            tool,
+            &platform,
+            &mut ddl_dir.manifest,
+            args.verbose_quiet.raw_count() >= 1,
         );
         ddl_dir.save_manifest()?;
-        output::print_install_result(result.success, result.tool, &result.message, args.json);
+        output::print_install_result(result.success, result.tool, &result.message, args.is_json());
         if !result.success {
             return Err(DdlError::InstallFailed(result.message));
         }
     } else {
-        if !args.json {
+        if !args.is_json() {
             println!("Upgrading all tools...");
         }
         let results = dulce_de_leche::installer::upgrade_all_tools(
-            &platform, &mut ddl_dir.manifest, args.verbose,
+            &platform,
+            &mut ddl_dir.manifest,
+            args.verbose_quiet.raw_count() >= 1,
         );
         ddl_dir.save_manifest()?;
 
@@ -507,10 +561,15 @@ fn cmd_upgrade(tool_name: Option<&str>, args: &dulce_de_leche::cli::Args) -> Res
                     fail_count += 1;
                 }
             }
-            output::print_install_result(result.success, result.tool, &result.message, args.json);
+            output::print_install_result(
+                result.success,
+                result.tool,
+                &result.message,
+                args.is_json(),
+            );
         }
 
-        if !args.json {
+        if !args.is_json() {
             println!();
             if fail_count > 0 && success_count == 0 && skipped_count == 0 {
                 println!("All upgrades failed. Check network connectivity.");
@@ -526,9 +585,7 @@ fn cmd_upgrade(tool_name: Option<&str>, args: &dulce_de_leche::cli::Args) -> Res
         }
 
         if fail_count > 0 && success_count == 0 && skipped_count == 0 {
-            return Err(DdlError::InstallFailed(
-                "All upgrades failed".to_string(),
-            ));
+            return Err(DdlError::InstallFailed("All upgrades failed".to_string()));
         }
         if fail_count > 0 {
             return Err(DdlError::PartialFailure);
@@ -544,42 +601,63 @@ fn cmd_migrate(undo: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
     if undo {
         let migrated = dulce_de_leche::dot_ddl::migrated_tools(&ddl_dir);
         if migrated.is_empty() {
-            output::print_success("No migrated configs found.", args.json);
+            output::print_success("No migrated configs found.", args.is_json());
             return Ok(());
         }
         for (tool_name, legacy_path) in &migrated {
-            if !args.json {
+            if !args.is_json() {
                 println!("  Restoring {}...", tool_name);
             }
             ddl_dir.unmigrate_tool(tool_name, legacy_path)?;
-            output::print_install_result(true, tool_name, &format!("{} restored to {}", tool_name, legacy_path.display()), args.json);
+            output::print_install_result(
+                true,
+                tool_name,
+                &format!("{} restored to {}", tool_name, legacy_path.display()),
+                args.is_json(),
+            );
         }
         return Ok(());
     }
 
     let legacy_configs = ddl_dir.detect_legacy_configs();
     if legacy_configs.is_empty() {
-        output::print_success("No legacy configs found. Nothing to migrate.", args.json);
+        output::print_success(
+            "No legacy configs found. Nothing to migrate.",
+            args.is_json(),
+        );
         return Ok(());
     }
 
-    if !args.json {
+    if !args.is_json() {
         println!("Phase 1 migration — moving configs under .ddl/...");
     }
 
     for (tool_name, legacy_path) in &legacy_configs {
-        if !args.json {
-            println!("  Migrating {} from {}...", tool_name, legacy_path.display());
+        if !args.is_json() {
+            println!(
+                "  Migrating {} from {}...",
+                tool_name,
+                legacy_path.display()
+            );
         }
         ddl_dir.migrate_tool(tool_name, legacy_path)?;
-        output::print_install_result(true, tool_name, &format!("{} migrated to {}", tool_name, ddl_dir.tool_path(tool_name).display()), args.json);
+        output::print_install_result(
+            true,
+            tool_name,
+            &format!(
+                "{} migrated to {}",
+                tool_name,
+                ddl_dir.tool_path(tool_name).display()
+            ),
+            args.is_json(),
+        );
     }
 
     let mut ddl_dir = ddl_dir;
     ddl_dir.manifest.migration_state = "phase1".to_string();
     ddl_dir.save_manifest()?;
 
-    if !args.json {
+    if !args.is_json() {
         println!();
         println!("Done. All configs are now under .ddl/.");
         println!("Run `ddl migrate --undo` to restore the previous layout.");
@@ -588,11 +666,23 @@ fn cmd_migrate(undo: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
     Ok(())
 }
 
-fn cmd_scope(_args: &dulce_de_leche::cli::Args) -> Result<()> {
+fn cmd_scope(args: &dulce_de_leche::cli::Args) -> Result<()> {
     if let Some(ddl_dir) = dulce_de_leche::find_ddl_dir() {
-        println!("{}", ddl_dir.display());
+        if args.is_json() {
+            let data = serde_json::json!({"ddl_dir": ddl_dir.display().to_string()});
+            let json_str = output::json_output(true, EnvelopeKind::Info, data, vec![], vec![])?;
+            println!("{json_str}");
+        } else {
+            println!("{}", ddl_dir.display());
+        }
     } else {
-        println!("No .ddl/ directory found (walked up from CWD)");
+        if args.is_json() {
+            let data = serde_json::json!({"ddl_dir": null});
+            let json_str = output::json_output(true, EnvelopeKind::Info, data, vec![], vec![])?;
+            println!("{json_str}");
+        } else {
+            println!("No .ddl/ directory found (walked up from CWD)");
+        }
     }
     Ok(())
 }

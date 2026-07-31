@@ -1,6 +1,6 @@
 [package]
 name = "dulce-de-leche"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 description = "Orchestrator for the charly-vibes tool ecosystem — one command to install, configure, and update every tool"
 license = "Apache-2.0"
@@ -21,6 +21,7 @@ path = "src/main.rs"
 [dependencies]
 # CLI argument parsing
 clap = { version = "4", features = ["derive", "env", "wrap_help"] }
+clap_complete = "4"
 
 # Error handling — beautiful diagnostics
 miette = { version = "7", features = ["fancy"] }
