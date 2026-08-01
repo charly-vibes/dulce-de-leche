@@ -49,28 +49,28 @@ impl InstallMethod {
     pub fn check_prerequisites(&self) -> Result<()> {
         match self {
             Self::Cargo => {
-                if !which("cargo").is_some() {
+                if which("cargo").is_none() {
                     return Err(DdlError::PrerequisiteMissing(
                         "cargo is not installed. Install Rust via https://rustup.rs".to_string(),
                     ));
                 }
             }
             Self::Brew => {
-                if !which("brew").is_some() {
+                if which("brew").is_none() {
                     return Err(DdlError::PrerequisiteMissing(
                         "Homebrew is not installed. Install via https://brew.sh".to_string(),
                     ));
                 }
             }
             Self::Scoop => {
-                if !which("scoop").is_some() {
+                if which("scoop").is_none() {
                     return Err(DdlError::PrerequisiteMissing(
                         "Scoop is not installed. Install via https://scoop.sh".to_string(),
                     ));
                 }
             }
             Self::Binary => {
-                if !which("curl").is_some() && !which("wget").is_some() {
+                if which("curl").is_none() && which("wget").is_none() {
                     return Err(DdlError::PrerequisiteMissing(
                         "curl or wget is required for binary download".to_string(),
                     ));
@@ -255,7 +255,7 @@ fn install_binary(tool: &Tool, platform: &Platform, _verbose: bool) -> Result<()
     let resp = client
         .get(&releases_url)
         .send()
-        .map_err(|e| DdlError::Network(e))?;
+        .map_err(DdlError::Network)?;
 
     if resp.status() == reqwest::StatusCode::NOT_FOUND {
         return Err(DdlError::InstallFailed(format!(
@@ -271,7 +271,7 @@ fn install_binary(tool: &Tool, platform: &Platform, _verbose: bool) -> Result<()
         )));
     }
 
-    let release: serde_json::Value = resp.json().map_err(|e| DdlError::Network(e))?;
+    let release: serde_json::Value = resp.json().map_err(DdlError::Network)?;
 
     let tag = release["tag_name"]
         .as_str()
@@ -305,7 +305,7 @@ fn install_binary(tool: &Tool, platform: &Platform, _verbose: bool) -> Result<()
             .join("bin")
     };
 
-    std::fs::create_dir_all(&dest_dir).map_err(|e| DdlError::Io(e))?;
+    std::fs::create_dir_all(&dest_dir).map_err(DdlError::Io)?;
 
     let dest_path = dest_dir.join(&binary_name);
 
@@ -319,7 +319,7 @@ fn install_binary(tool: &Tool, platform: &Platform, _verbose: bool) -> Result<()
     {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&dest_path, std::fs::Permissions::from_mode(0o755))
-            .map_err(|e| DdlError::Io(e))?;
+            .map_err(DdlError::Io)?;
     }
 
     ensure_on_path(&dest_dir, platform)?;
@@ -329,7 +329,7 @@ fn install_binary(tool: &Tool, platform: &Platform, _verbose: bool) -> Result<()
 }
 
 fn download_and_extract_tar_gz(url: &str, dest: &Path, binary_name: &str) -> Result<()> {
-    let response = reqwest::blocking::get(url).map_err(|e| DdlError::Network(e))?;
+    let response = reqwest::blocking::get(url).map_err(DdlError::Network)?;
 
     if response.status() == reqwest::StatusCode::NOT_FOUND {
         return Err(DdlError::InstallFailed(format!(
@@ -344,7 +344,7 @@ fn download_and_extract_tar_gz(url: &str, dest: &Path, binary_name: &str) -> Res
         )));
     }
 
-    let bytes = response.bytes().map_err(|e| DdlError::Network(e))?;
+    let bytes = response.bytes().map_err(DdlError::Network)?;
     let decoder = flate2::read::GzDecoder::new(&bytes[..]);
     let mut archive = tar::Archive::new(decoder);
 
@@ -354,8 +354,8 @@ fn download_and_extract_tar_gz(url: &str, dest: &Path, binary_name: &str) -> Res
     {
         let mut entry = entry.map_err(|e| DdlError::Other(e.to_string()))?;
         let path = entry.path().map_err(|e| DdlError::Other(e.to_string()))?;
-        if path.file_name().map_or(false, |f| f == binary_name) {
-            entry.unpack(dest).map_err(|e| DdlError::Io(e))?;
+        if path.file_name().is_some_and(|f| f == binary_name) {
+            entry.unpack(dest).map_err(DdlError::Io)?;
             return Ok(());
         }
     }
@@ -367,7 +367,7 @@ fn download_and_extract_tar_gz(url: &str, dest: &Path, binary_name: &str) -> Res
 }
 
 fn download_and_extract_zip(url: &str, dest: &Path) -> Result<()> {
-    let response = reqwest::blocking::get(url).map_err(|e| DdlError::Network(e))?;
+    let response = reqwest::blocking::get(url).map_err(DdlError::Network)?;
 
     if response.status() == reqwest::StatusCode::NOT_FOUND {
         return Err(DdlError::InstallFailed(format!(
@@ -382,7 +382,7 @@ fn download_and_extract_zip(url: &str, dest: &Path) -> Result<()> {
         )));
     }
 
-    let bytes = response.bytes().map_err(|e| DdlError::Network(e))?;
+    let bytes = response.bytes().map_err(DdlError::Network)?;
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes.to_vec()))
         .map_err(|e| DdlError::Other(e.to_string()))?;
 
@@ -398,8 +398,8 @@ fn download_and_extract_zip(url: &str, dest: &Path) -> Result<()> {
         let path = entry.name().to_string();
 
         if path.ends_with(binary_name) || path == binary_name {
-            let mut out = std::fs::File::create(dest).map_err(|e| DdlError::Io(e))?;
-            std::io::copy(&mut entry, &mut out).map_err(|e| DdlError::Io(e))?;
+            let mut out = std::fs::File::create(dest).map_err(DdlError::Io)?;
+            std::io::copy(&mut entry, &mut out).map_err(DdlError::Io)?;
             return Ok(());
         }
     }
@@ -529,9 +529,9 @@ fn ensure_on_path(dir: &Path, platform: &Platform) -> Result<()> {
             eprintln!("     set PATH=%PATH%;{}", dir_str);
         }
         _ => {
-            let rc_file = if dirs::home_dir().map_or(false, |h| h.join(".zshrc").exists()) {
+            let rc_file = if dirs::home_dir().is_some_and(|h| h.join(".zshrc").exists()) {
                 "~/.zshrc"
-            } else if dirs::home_dir().map_or(false, |h| h.join(".bashrc").exists()) {
+            } else if dirs::home_dir().is_some_and(|h| h.join(".bashrc").exists()) {
                 "~/.bashrc"
             } else {
                 "your shell config"

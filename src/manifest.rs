@@ -38,18 +38,18 @@ impl Manifest {
         if !path.exists() {
             return Ok(Self::new());
         }
-        let contents = std::fs::read_to_string(path).map_err(|e| DdlError::Io(e))?;
-        let manifest: Manifest = serde_json::from_str(&contents).map_err(|e| DdlError::Serde(e))?;
+        let contents = std::fs::read_to_string(path).map_err(DdlError::Io)?;
+        let manifest: Manifest = serde_json::from_str(&contents).map_err(DdlError::Serde)?;
         Ok(manifest)
     }
 
     /// Save the manifest to a file path.
     pub fn save(&self, path: &Path) -> Result<()> {
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| DdlError::Io(e))?;
+            std::fs::create_dir_all(parent).map_err(DdlError::Io)?;
         }
-        let contents = serde_json::to_string_pretty(self).map_err(|e| DdlError::Serde(e))?;
-        std::fs::write(path, contents).map_err(|e| DdlError::Io(e))?;
+        let contents = serde_json::to_string_pretty(self).map_err(DdlError::Serde)?;
+        std::fs::write(path, contents).map_err(DdlError::Io)?;
         Ok(())
     }
 
@@ -67,7 +67,7 @@ impl Manifest {
     pub fn is_installed(&self, name: &str) -> bool {
         self.tools
             .get(name)
-            .map_or(false, |t| t.status == "installed")
+            .is_some_and(|t| t.status == "installed")
     }
 }
 

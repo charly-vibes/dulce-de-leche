@@ -675,14 +675,12 @@ fn cmd_scope(args: &dulce_de_leche::cli::Args) -> Result<()> {
         } else {
             println!("{}", ddl_dir.display());
         }
+    } else if args.is_json() {
+        let data = serde_json::json!({"ddl_dir": null});
+        let json_str = output::json_output(true, EnvelopeKind::Info, data, vec![], vec![])?;
+        println!("{json_str}");
     } else {
-        if args.is_json() {
-            let data = serde_json::json!({"ddl_dir": null});
-            let json_str = output::json_output(true, EnvelopeKind::Info, data, vec![], vec![])?;
-            println!("{json_str}");
-        } else {
-            println!("No .ddl/ directory found (walked up from CWD)");
-        }
+        println!("No .ddl/ directory found (walked up from CWD)");
     }
     Ok(())
 }

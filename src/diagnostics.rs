@@ -249,8 +249,8 @@ impl DoctorCheck for ToolCheck {
         // Run doctor/diagnostic subcommand
         for cmd in &["doctor", "diagnostic", "check"] {
             let output = Command::new(self.tool.name).args([cmd, "--json"]).output();
-            if let Ok(out) = output {
-                if out.status.success() {
+            if let Ok(out) = output
+                && out.status.success() {
                     let stdout = String::from_utf8_lossy(&out.stdout);
                     let first_line = stdout.lines().next().unwrap_or("");
                     results.push(LintResult::new(
@@ -259,7 +259,6 @@ impl DoctorCheck for ToolCheck {
                     ));
                     return Ok(results);
                 }
-            }
         }
 
         Ok(results)
@@ -295,7 +294,7 @@ impl StatusContributor for DdlStatusContributor {
             let config_ok = self
                 .ddl_dir
                 .as_ref()
-                .map_or(false, |d| d.manifest.is_installed(tool.name));
+                .is_some_and(|d| d.manifest.is_installed(tool.name));
 
             let level = if !installed {
                 StatusLevel::Error

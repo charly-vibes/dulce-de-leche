@@ -236,7 +236,7 @@ fn test_init_yes_retries_failed_tools() {
     assert!(
         parsed["tools"]
             .as_object()
-            .map_or(false, |t| t.contains_key("wai"))
+            .is_some_and(|t| t.contains_key("wai"))
     );
 }
 

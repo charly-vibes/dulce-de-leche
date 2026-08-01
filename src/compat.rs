@@ -29,7 +29,7 @@ impl CompatibilityMatrix {
     /// Fetch the matrix from the remote URL.
     pub fn fetch() -> Result<Self> {
         let response =
-            reqwest::blocking::get(Self::REMOTE_URL).map_err(|e| DdlError::Network(e))?;
+            reqwest::blocking::get(Self::REMOTE_URL).map_err(DdlError::Network)?;
 
         if !response.status().is_success() {
             return Err(DdlError::Network(response.error_for_status().unwrap_err()));
@@ -72,10 +72,10 @@ impl CompatibilityMatrix {
     /// Save the matrix to a local cache file.
     pub fn save_cache(&self, path: &Path) -> Result<()> {
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| DdlError::Io(e))?;
+            std::fs::create_dir_all(parent).map_err(DdlError::Io)?;
         }
-        let contents = serde_json::to_string_pretty(self).map_err(|e| DdlError::Serde(e))?;
-        std::fs::write(path, contents).map_err(|e| DdlError::Io(e))?;
+        let contents = serde_json::to_string_pretty(self).map_err(DdlError::Serde)?;
+        std::fs::write(path, contents).map_err(DdlError::Io)?;
         Ok(())
     }
 

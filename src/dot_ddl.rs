@@ -136,7 +136,7 @@ impl DdlDir {
             });
         }
 
-        std::fs::create_dir_all(path).map_err(|e| DdlError::Io(e))?;
+        std::fs::create_dir_all(path).map_err(DdlError::Io)?;
 
         // Create config.toml via genesis ConfigFile (preserve existing)
         let config_path = path.join("config.toml");
@@ -175,7 +175,7 @@ impl DdlDir {
     pub fn ensure_tool_dir(&self, name: &str) -> Result<PathBuf> {
         let tool_dir = self.tool_path(name);
         if !tool_dir.exists() {
-            std::fs::create_dir_all(&tool_dir).map_err(|e| DdlError::Io(e))?;
+            std::fs::create_dir_all(&tool_dir).map_err(DdlError::Io)?;
         }
         Ok(tool_dir)
     }
@@ -253,15 +253,15 @@ impl DdlDir {
         if !gitignore_path.exists() {
             if yes {
                 let mut file =
-                    std::fs::File::create(&gitignore_path).map_err(|e| DdlError::Io(e))?;
+                    std::fs::File::create(&gitignore_path).map_err(DdlError::Io)?;
                 file.write_all(GITIGNORE_ENTRIES.as_bytes())
-                    .map_err(|e| DdlError::Io(e))?;
+                    .map_err(DdlError::Io)?;
                 println!("  ✓ .gitignore created");
             }
             return Ok(());
         }
 
-        let contents = std::fs::read_to_string(&gitignore_path).map_err(|e| DdlError::Io(e))?;
+        let contents = std::fs::read_to_string(&gitignore_path).map_err(DdlError::Io)?;
 
         if contents.contains(".ddl/**/*.db") {
             return Ok(()); // already has entries
@@ -271,9 +271,9 @@ impl DdlDir {
             let mut file = std::fs::OpenOptions::new()
                 .append(true)
                 .open(&gitignore_path)
-                .map_err(|e| DdlError::Io(e))?;
+                .map_err(DdlError::Io)?;
             file.write_all(GITIGNORE_ENTRIES.as_bytes())
-                .map_err(|e| DdlError::Io(e))?;
+                .map_err(DdlError::Io)?;
             println!("  ✓ .gitignore updated");
         } else {
             println!("  ℹ  Run `ddl init --yes` to auto-add .gitignore entries");
@@ -303,28 +303,28 @@ impl DdlDir {
 
         // Create target directory
         if !ddl_tool_path.exists() {
-            std::fs::create_dir_all(&ddl_tool_path).map_err(|e| DdlError::Io(e))?;
+            std::fs::create_dir_all(&ddl_tool_path).map_err(DdlError::Io)?;
         }
 
         // Move contents from legacy to .ddl/<tool>/
         if legacy_path.is_dir() {
-            for entry in std::fs::read_dir(legacy_path).map_err(|e| DdlError::Io(e))? {
-                let entry = entry.map_err(|e| DdlError::Io(e))?;
+            for entry in std::fs::read_dir(legacy_path).map_err(DdlError::Io)? {
+                let entry = entry.map_err(DdlError::Io)?;
                 let target = ddl_tool_path.join(entry.file_name());
-                std::fs::rename(&entry.path(), &target).map_err(|e| DdlError::Io(e))?;
+                std::fs::rename(entry.path(), &target).map_err(DdlError::Io)?;
             }
             // Remove empty legacy directory
-            std::fs::remove_dir(legacy_path).map_err(|e| DdlError::Io(e))?;
+            std::fs::remove_dir(legacy_path).map_err(DdlError::Io)?;
         } else if legacy_path.is_file() {
             // Single file config (e.g., .pretender.toml)
             let target = ddl_tool_path.join(legacy_path.file_name().unwrap_or_default());
-            std::fs::rename(legacy_path, &target).map_err(|e| DdlError::Io(e))?;
+            std::fs::rename(legacy_path, &target).map_err(DdlError::Io)?;
         }
 
         // Create symlink at legacy location
         #[cfg(unix)]
         {
-            std::os::unix::fs::symlink(&ddl_tool_path, legacy_path).map_err(|e| DdlError::Io(e))?;
+            std::os::unix::fs::symlink(&ddl_tool_path, legacy_path).map_err(DdlError::Io)?;
         }
         #[cfg(windows)]
         {
@@ -348,18 +348,18 @@ impl DdlDir {
         if legacy_path.exists() {
             std::fs::remove_file(legacy_path)
                 .or_else(|_| std::fs::remove_dir(legacy_path))
-                .map_err(|e| DdlError::Io(e))?;
+                .map_err(DdlError::Io)?;
         }
 
         // Move contents back
         if ddl_tool_path.exists() {
-            std::fs::create_dir_all(legacy_path).map_err(|e| DdlError::Io(e))?;
-            for entry in std::fs::read_dir(&ddl_tool_path).map_err(|e| DdlError::Io(e))? {
-                let entry = entry.map_err(|e| DdlError::Io(e))?;
+            std::fs::create_dir_all(legacy_path).map_err(DdlError::Io)?;
+            for entry in std::fs::read_dir(&ddl_tool_path).map_err(DdlError::Io)? {
+                let entry = entry.map_err(DdlError::Io)?;
                 let target = legacy_path.join(entry.file_name());
-                std::fs::rename(&entry.path(), &target).map_err(|e| DdlError::Io(e))?;
+                std::fs::rename(entry.path(), &target).map_err(DdlError::Io)?;
             }
-            std::fs::remove_dir(&ddl_tool_path).map_err(|e| DdlError::Io(e))?;
+            std::fs::remove_dir(&ddl_tool_path).map_err(DdlError::Io)?;
         }
 
         Ok(())
@@ -382,14 +382,13 @@ impl DdlDir {
             // Check if it's a symlink
             #[cfg(unix)]
             {
-                if let Ok(meta) = std::fs::symlink_metadata(&path) {
-                    if meta.is_symlink() {
+                if let Ok(meta) = std::fs::symlink_metadata(&path)
+                    && meta.is_symlink() {
                         // Check if the target exists
                         if std::fs::metadata(&path).is_err() {
                             broken.push(path);
                         }
                     }
-                }
             }
             #[cfg(windows)]
             {
@@ -454,7 +453,7 @@ impl DdlDir {
                 if fix {
                     std::fs::remove_file(symlink)
                         .or_else(|_| std::fs::remove_dir(symlink))
-                        .map_err(|e| DdlError::Io(e))?;
+                        .map_err(DdlError::Io)?;
                     messages.push(format!("  ✓ removed broken symlink: {}", symlink.display()));
                 }
             }
