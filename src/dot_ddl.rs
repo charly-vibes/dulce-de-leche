@@ -104,6 +104,8 @@ const LEGACY_CONFIGS: &[(&str, &str)] = &[
     ("pretender", ".pretender.toml"),
     ("testaruda", ".testaruda"),
     ("fabbro", ".fabbro"),
+    // Note: `fotos-mcp` is intentionally excluded — it has no known legacy
+    // config file/directory to migrate; its MCP server config lives elsewhere.
 ];
 
 /// Manage the `.ddl/` directory.

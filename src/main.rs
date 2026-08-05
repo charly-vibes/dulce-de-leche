@@ -392,7 +392,7 @@ fn cmd_version(check: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
         };
 
         if let Some(ddl_dir) = DdlDir::find() {
-            let matrix = dulce_de_leche::compat::load_compatibility(&ddl_dir.path);
+            let (matrix, _warnings) = dulce_de_leche::compat::load_compatibility(&ddl_dir.path);
             let mut names: Vec<&String> = ddl_dir.manifest.tools.keys().collect();
             names.sort();
             for name in names {
@@ -468,7 +468,8 @@ fn cmd_version(check: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
 
         let mut any_outdated = false;
         let matrix = if let Some(ddl_dir) = DdlDir::find() {
-            dulce_de_leche::compat::load_compatibility(&ddl_dir.path)
+            let (matrix, _warnings) = dulce_de_leche::compat::load_compatibility(&ddl_dir.path);
+            matrix
         } else {
             dulce_de_leche::compat::CompatibilityMatrix::embedded()
         };

@@ -247,7 +247,7 @@ fn install_binary(tool: &Tool, platform: &Platform, _verbose: bool) -> Result<()
     };
 
     let client = reqwest::blocking::Client::builder()
-        .user_agent("ddl/0.1.0")
+        .user_agent(format!("ddl/{}", env!("CARGO_PKG_VERSION")))
         .build()
         .map_err(|e| DdlError::Other(format!("Failed to create HTTP client: {e}")))?;
 
@@ -756,7 +756,7 @@ fn which(cmd: &str) -> Option<PathBuf> {
 /// Check the latest available version of a tool from its GitHub releases.
 pub fn check_latest_version(tool: &Tool) -> Option<String> {
     let client = reqwest::blocking::Client::builder()
-        .user_agent("ddl/0.1.0")
+        .user_agent(format!("ddl/{}", env!("CARGO_PKG_VERSION")))
         .build()
         .ok()?;
 

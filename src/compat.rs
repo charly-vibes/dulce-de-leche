@@ -113,26 +113,28 @@ impl CompatibilityMatrix {
 }
 
 /// Load the compatibility matrix with fallback: cache → remote → embedded.
-pub fn load_compatibility(ddl_dir: &Path) -> CompatibilityMatrix {
+/// Returns the matrix and any warnings (e.g., failed network fetch).
+pub fn load_compatibility(ddl_dir: &Path) -> (CompatibilityMatrix, Vec<String>) {
     let cache_path = ddl_dir.join("compatibility-cache.json");
+    let mut warnings = Vec::new();
 
     // Try remote fetch first
     match CompatibilityMatrix::fetch() {
         Ok(matrix) => {
             // Save to cache
             let _ = matrix.save_cache(&cache_path);
-            return matrix;
+            return (matrix, warnings);
         }
         Err(e) => {
-            eprintln!("  ⚠ Could not fetch compatibility matrix: {e}");
+            warnings.push(format!("Could not fetch compatibility matrix: {e}"));
         }
     }
 
     // Try cache
     if let Some(matrix) = CompatibilityMatrix::from_cache(&cache_path) {
-        return matrix;
+        return (matrix, warnings);
     }
 
     // Fall back to embedded
-    CompatibilityMatrix::embedded()
+    (CompatibilityMatrix::embedded(), warnings)
 }

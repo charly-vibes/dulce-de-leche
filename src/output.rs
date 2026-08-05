@@ -159,7 +159,7 @@ pub fn print_banner(json: bool) {
     } else {
         println!("╭──────────────────────────────────────╮");
         println!("│  dulce-de-leche — charly-vibes       │");
-        println!("│  bundle orchestrator v{version}       │");
+        println!("│  bundle orchestrator v{version}          │");
         println!("╰──────────────────────────────────────╯");
         println!();
     }
