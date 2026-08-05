@@ -28,7 +28,7 @@ pub fn json_output<T: Serialize + std::fmt::Debug>(
         // For error cases, build an error envelope
         let err = genesis::envelope::ErrorResult::new(
             "DDL_ERR",
-            &format!("{:?}", data),
+            &serde_json::to_string(&data).unwrap_or_else(|_| format!("{:?}", data)),
             None,
             None,
             None,
