@@ -7,8 +7,11 @@
 //!   - <tool>/ — per-tool config directories (symlinks in Phase 1)
 
 use serde::{Deserialize, Serialize};
+use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+
+use fs2::FileExt;
 
 use crate::error::{DdlError, Result};
 use crate::manifest::{Manifest, ToolEntry};
@@ -180,15 +183,56 @@ impl DdlDir {
         Ok(tool_dir)
     }
 
-    /// Save the manifest to disk.
+    /// Save the manifest to disk with an exclusive file lock.
+    ///
+    /// The lock prevents concurrent manifest writes from different processes
+    /// from losing entries. Lock is released when the opened file is dropped.
     pub fn save_manifest(&self) -> Result<()> {
-        self.manifest.save(&self.manifest_path())
+        let manifest_path = self.manifest_path();
+        // Open for read+write+create (no truncate) to get a handle for locking.
+        // The actual write happens via Manifest::save which opens separately,
+        // but the advisory lock on the inode prevents concurrent writers.
+        let file = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(&manifest_path)
+            .map_err(DdlError::Io)?;
+        file.lock_exclusive().map_err(DdlError::Io)?;
+        self.manifest.save(&manifest_path)
     }
 
-    /// Update a tool entry in the manifest and save.
+    /// Update a tool entry in the manifest and save atomically.
+    ///
+    /// Uses an exclusive file lock to prevent concurrent manifest writes
+    /// from different processes from losing entries. Re-reads the manifest
+    /// from disk inside the lock to get the latest state.
     pub fn record_tool(&mut self, name: &str, entry: ToolEntry) -> Result<()> {
-        self.manifest.set_tool(name, entry);
-        self.save_manifest()
+        let manifest_path = self.manifest_path();
+
+        // Open for read+write+create (no truncate) to get a handle for locking.
+        // Reading the file before truncating preserves existing content.
+        let file = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(&manifest_path)
+            .map_err(DdlError::Io)?;
+        file.lock_exclusive().map_err(DdlError::Io)?;
+
+        // Re-read manifest from disk inside the lock to get the latest
+        // state (catches any concurrent modifications).
+        let mut manifest = Manifest::load(&manifest_path)?;
+        manifest.set_tool(name, entry);
+        manifest.save(&manifest_path)?;
+
+        // Update in-memory state to match disk
+        self.manifest = manifest;
+
+        // File is dropped, releasing the lock
+        Ok(())
     }
 
     /// Record a tool as installed, with version and source.
