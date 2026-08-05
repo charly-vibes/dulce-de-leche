@@ -8,6 +8,14 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// Print a trace message to stderr when `verbose` is enabled.
+/// Used to show what the installer is doing without cluttering normal output.
+fn verbose_print(verbose: bool, msg: &str) {
+    if verbose {
+        eprintln!("  · {msg}");
+    }
+}
+
 use crate::error::{DdlError, Result};
 use crate::manifest::{Manifest, ToolEntry};
 use crate::platform::{MANAGED_TOOLS, Os, PackageManager, Platform, Tool};
@@ -227,7 +235,7 @@ pub fn install_tool(
 }
 
 /// Install a tool via binary download from GitHub releases.
-fn install_binary(tool: &Tool, platform: &Platform, _verbose: bool) -> Result<()> {
+fn install_binary(tool: &Tool, platform: &Platform, verbose: bool) -> Result<()> {
     let binary_name = if platform.os == Os::Windows {
         std::path::PathBuf::from(tool.name)
             .with_extension("exe")
@@ -287,6 +295,11 @@ fn install_binary(tool: &Tool, platform: &Platform, _verbose: bool) -> Result<()
     let download_url = format!(
         "https://github.com/{}/releases/download/{}/{}.{}",
         tool.repo, tag, archive_name, ext
+    );
+
+    verbose_print(
+        verbose,
+        &format!("downloading {}/releases/latest for {}", tool.repo, target),
     );
 
     // Determine install destination
@@ -409,7 +422,11 @@ fn download_and_extract_zip(url: &str, dest: &Path) -> Result<()> {
     )))
 }
 
-fn install_cargo(tool: &Tool, _verbose: bool) -> Result<()> {
+fn install_cargo(tool: &Tool, verbose: bool) -> Result<()> {
+    verbose_print(
+        verbose,
+        &format!("running: cargo install {}", tool.crate_name),
+    );
     let status = Command::new("cargo")
         .args(["install", tool.crate_name])
         .stdout(std::process::Stdio::inherit())
@@ -428,7 +445,11 @@ fn install_cargo(tool: &Tool, _verbose: bool) -> Result<()> {
     }
 }
 
-fn install_brew(tool: &Tool, _verbose: bool) -> Result<()> {
+fn install_brew(tool: &Tool, verbose: bool) -> Result<()> {
+    verbose_print(
+        verbose,
+        &format!("running: brew install {}", tool.formula_name),
+    );
     let status = Command::new("brew")
         .args(["install", tool.formula_name])
         .stdout(std::process::Stdio::inherit())
@@ -447,7 +468,11 @@ fn install_brew(tool: &Tool, _verbose: bool) -> Result<()> {
     }
 }
 
-fn install_scoop(tool: &Tool, _verbose: bool) -> Result<()> {
+fn install_scoop(tool: &Tool, verbose: bool) -> Result<()> {
+    verbose_print(
+        verbose,
+        &format!("running: scoop install {}", tool.formula_name),
+    );
     let status = Command::new("scoop")
         .args(["install", tool.formula_name])
         .stdout(std::process::Stdio::inherit())
@@ -467,7 +492,7 @@ fn install_scoop(tool: &Tool, _verbose: bool) -> Result<()> {
 }
 
 /// Run a tool's init command after installation.
-pub fn run_tool_init(tool: &Tool, _verbose: bool) -> Result<()> {
+pub fn run_tool_init(tool: &Tool, verbose: bool) -> Result<()> {
     let (cmd, args): (&str, &[&str]) = match tool.name {
         "wai" => ("wai", &["init"]),
         "dont" => ("dont", &["prime", "--plain"]),
@@ -484,6 +509,8 @@ pub fn run_tool_init(tool: &Tool, _verbose: bool) -> Result<()> {
         eprintln!("  ⚠ {} not found on PATH — skipping init", cmd);
         return Ok(());
     }
+
+    verbose_print(verbose, &format!("running: {} init", cmd));
 
     let output = Command::new(cmd)
         .args(args)
@@ -635,7 +662,11 @@ pub fn upgrade_tool(
 }
 
 /// Upgrade a tool installed via Homebrew.
-fn upgrade_brew(tool: &Tool, _verbose: bool) -> Result<()> {
+fn upgrade_brew(tool: &Tool, verbose: bool) -> Result<()> {
+    verbose_print(
+        verbose,
+        &format!("running: brew upgrade {}", tool.formula_name),
+    );
     let status = Command::new("brew")
         .args(["upgrade", tool.formula_name])
         .stdout(std::process::Stdio::inherit())
@@ -655,7 +686,11 @@ fn upgrade_brew(tool: &Tool, _verbose: bool) -> Result<()> {
 }
 
 /// Upgrade a tool installed via cargo.
-fn upgrade_cargo(tool: &Tool, _verbose: bool) -> Result<()> {
+fn upgrade_cargo(tool: &Tool, verbose: bool) -> Result<()> {
+    verbose_print(
+        verbose,
+        &format!("running: cargo install {}", tool.crate_name),
+    );
     // `cargo install` is idempotent — it upgrades if already installed
     let status = Command::new("cargo")
         .args(["install", tool.crate_name])
@@ -683,7 +718,11 @@ fn upgrade_binary(tool: &Tool, platform: &Platform, verbose: bool) -> Result<()>
 }
 
 /// Upgrade a tool installed via Scoop.
-fn upgrade_scoop(tool: &Tool, _verbose: bool) -> Result<()> {
+fn upgrade_scoop(tool: &Tool, verbose: bool) -> Result<()> {
+    verbose_print(
+        verbose,
+        &format!("running: scoop update {}", tool.formula_name),
+    );
     let status = Command::new("scoop")
         .args(["update", tool.formula_name])
         .stdout(std::process::Stdio::inherit())
@@ -810,4 +849,19 @@ pub fn install_selected_tools(
             Some(install_tool(tool, platform, manifest, verbose))
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Verify verbose_print exists and accepts both values without panicking.
+    /// The actual stderr output is verified by integration tests that run
+    /// the ddl binary with --verbose.
+    #[test]
+    fn test_verbose_print_accepts_bool() {
+        // Must not panic for either value
+        verbose_print(true, "trace message");
+        verbose_print(false, "trace message");
+    }
 }
