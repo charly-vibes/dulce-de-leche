@@ -306,6 +306,9 @@ impl DdlDir {
             std::fs::create_dir_all(&ddl_tool_path).map_err(DdlError::Io)?;
         }
 
+        // Track whether the original was a file, for correct symlink and undo.
+        let legacy_path_was_file = legacy_path.is_file();
+
         // Move contents from legacy to .ddl/<tool>/
         if legacy_path.is_dir() {
             for entry in std::fs::read_dir(legacy_path).map_err(DdlError::Io)? {
@@ -315,24 +318,30 @@ impl DdlDir {
             }
             // Remove empty legacy directory
             std::fs::remove_dir(legacy_path).map_err(DdlError::Io)?;
-        } else if legacy_path.is_file() {
+        } else if legacy_path_was_file {
             // Single file config (e.g., .pretender.toml)
             let target = ddl_tool_path.join(legacy_path.file_name().unwrap_or_default());
             std::fs::rename(legacy_path, &target).map_err(DdlError::Io)?;
         }
 
-        // Create symlink at legacy location
+        // Create symlink at legacy location.
+        // For single-file configs, point to the file inside .ddl/<tool>/, not the directory.
+        let symlink_target = if legacy_path_was_file {
+            ddl_tool_path.join(legacy_path.file_name().unwrap_or_default())
+        } else {
+            ddl_tool_path.clone()
+        };
         #[cfg(unix)]
         {
-            std::os::unix::fs::symlink(&ddl_tool_path, legacy_path).map_err(DdlError::Io)?;
+            std::os::unix::fs::symlink(&symlink_target, legacy_path).map_err(DdlError::Io)?;
         }
         #[cfg(windows)]
         {
-            if legacy_path.is_dir() || ddl_tool_path.is_dir() {
-                std::os::windows::fs::symlink_dir(&ddl_tool_path, legacy_path)
+            if symlink_target.is_dir() {
+                std::os::windows::fs::symlink_dir(&symlink_target, legacy_path)
                     .map_err(|e| DdlError::Io(e))?;
             } else {
-                std::os::windows::fs::symlink_file(&ddl_tool_path, legacy_path)
+                std::os::windows::fs::symlink_file(&symlink_target, legacy_path)
                     .map_err(|e| DdlError::Io(e))?;
             }
         }
@@ -341,8 +350,27 @@ impl DdlDir {
     }
 
     /// Undo migration for a single tool: remove symlink, move contents back.
+    ///
+    /// Detects single-file configs (e.g. `.pretender.toml`) by checking the
+    /// symlink target type before removing it, so the correct restore method
+    /// (file vs directory) is used.
     pub fn unmigrate_tool(&self, tool_name: &str, legacy_path: &Path) -> Result<()> {
         let ddl_tool_path = self.tool_path(tool_name);
+
+        // Check symlink target type BEFORE removing it — this tells us whether
+        // the original was a single-file config (symlink points to a file)
+        // or a directory config (symlink points to a directory).
+        let is_single_file = std::fs::read_link(legacy_path)
+            .ok()
+            .map(|target| {
+                let resolved = if target.is_relative() {
+                    legacy_path.parent().unwrap_or(Path::new(".")).join(&target)
+                } else {
+                    target
+                };
+                resolved.is_file()
+            })
+            .unwrap_or(false);
 
         // Remove symlink
         if legacy_path.exists() {
@@ -353,11 +381,23 @@ impl DdlDir {
 
         // Move contents back
         if ddl_tool_path.exists() {
-            std::fs::create_dir_all(legacy_path).map_err(DdlError::Io)?;
-            for entry in std::fs::read_dir(&ddl_tool_path).map_err(DdlError::Io)? {
-                let entry = entry.map_err(DdlError::Io)?;
-                let target = legacy_path.join(entry.file_name());
-                std::fs::rename(entry.path(), &target).map_err(DdlError::Io)?;
+            if is_single_file {
+                // Single-file config: move the file directly to legacy_path
+                let entries: Vec<_> = std::fs::read_dir(&ddl_tool_path)
+                    .map_err(DdlError::Io)?
+                    .filter_map(|e| e.ok())
+                    .collect();
+                if let Some(entry) = entries.into_iter().next() {
+                    std::fs::rename(entry.path(), legacy_path).map_err(DdlError::Io)?;
+                }
+            } else {
+                // Directory config: create legacy directory, move files back
+                std::fs::create_dir_all(legacy_path).map_err(DdlError::Io)?;
+                for entry in std::fs::read_dir(&ddl_tool_path).map_err(DdlError::Io)? {
+                    let entry = entry.map_err(DdlError::Io)?;
+                    let target = legacy_path.join(entry.file_name());
+                    std::fs::rename(entry.path(), &target).map_err(DdlError::Io)?;
+                }
             }
             std::fs::remove_dir(&ddl_tool_path).map_err(DdlError::Io)?;
         }
@@ -505,18 +545,35 @@ pub enum ToolStatus {
 
 /// Collect all tool config directories that have been migrated.
 /// Returns a map of tool name to legacy path.
+///
+/// Detects both directory and single-file symlink targets (e.g. `.pretender.toml`
+/// pointing to `.ddl/pretender/.pretender.toml`). Resolves relative symlink targets
+/// to absolute before comparing, and normalises the expected path so that detection
+/// works regardless of whether the DdlDir was created with a relative or absolute path.
 pub fn migrated_tools(ddl_dir: &DdlDir) -> Vec<(String, PathBuf)> {
     let mut result = Vec::new();
     for (tool_name, legacy_path_str) in LEGACY_CONFIGS {
         let legacy_path = PathBuf::from(legacy_path_str);
-        if is_symlink(&legacy_path) {
-            // Check if it points to .ddl/<tool>/
-            if let Ok(target) = std::fs::read_link(&legacy_path) {
+        if is_symlink(&legacy_path)
+            && let Ok(target) = std::fs::read_link(&legacy_path)
+        {
+                // Resolve relative symlink targets to absolute (relative to the
+                // symlink's parent directory) before comparing.
+                let resolved = if target.is_relative() {
+                    legacy_path.parent().unwrap_or(Path::new(".")).join(&target)
+                } else {
+                    target.clone()
+                };
+                // Canonicalise both resolved and expected paths so that relative
+                // vs absolute DdlDir paths don't break detection.
+                let resolved = std::fs::canonicalize(&resolved).unwrap_or(resolved);
                 let expected = ddl_dir.tool_path(tool_name);
-                if target == expected {
+                let expected = std::fs::canonicalize(&expected).unwrap_or(expected);
+                // Directory configs: symlink points directly to .ddl/<tool>/.
+                // Single-file configs: symlink points to a file inside .ddl/<tool>/.
+                if resolved == expected || resolved.parent() == Some(&expected) {
                     result.push((tool_name.to_string(), legacy_path));
                 }
-            }
         }
     }
     result
