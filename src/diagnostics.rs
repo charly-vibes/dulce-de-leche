@@ -366,7 +366,7 @@ pub fn format_health_line(health: &StatusItem) -> String {
 
 /// Build a human-readable status summary (legacy, for cmd_status).
 pub fn status_summary(sections: &[StatusSection]) -> String {
-    let total = sections.len();
+    let total: usize = sections.iter().map(|s| s.items.len()).sum();
     if total == 0 {
         return "No tools tracked. Run `ddl init` to get started.".to_string();
     }
