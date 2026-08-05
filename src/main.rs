@@ -63,6 +63,17 @@ fn cmd_init(
     let platform = dulce_de_leche::platform::Platform::detect()
         .ok_or_else(|| DdlError::UnsupportedPlatform("Could not detect platform".to_string()))?;
 
+    // In JSON mode, collect all output data and emit a single envelope
+    // on drop (handles all return paths including early returns).
+    let _json_guard = if args.is_json() {
+        Some(output::JsonCollectorGuard::start(
+            dulce_de_leche::VERSION,
+            genesis::envelope::EnvelopeKind::List,
+        ))
+    } else {
+        None
+    };
+
     output::print_banner(args.is_json());
     if !args.is_json() {
         println!("Detected platform: {} ({})", platform.os, platform.arch);
@@ -260,6 +271,7 @@ fn cmd_init(
         println!();
         println!("Done! Run `ddl status` to verify everything.");
     }
+
     Ok(())
 }
 

@@ -5,11 +5,79 @@
 //! format for machine-parsable responses.
 
 use serde::Serialize;
+use std::sync::Mutex;
 
 use crate::error::{DdlError, Result};
 
 /// Wrapper for genesis-vibes envelope types.
 use genesis::envelope::{Envelope, EnvelopeKind, HintEntry, Warning};
+
+/// Thread-local JSON output collector.
+///
+/// When active (via [`start_json_collection`]), JSON output functions push
+/// their data here instead of printing a separate envelope. Callers can
+/// retrieve the collected data with [`finish_json_collection`] and emit a
+/// single envelope. Used by `cmd_init --json` to avoid multiple envelopes.
+static JSON_COLLECTOR: Mutex<Option<Vec<serde_json::Value>>> = Mutex::new(None);
+
+/// Begin collecting JSON output data instead of printing envelopes.
+pub fn start_json_collection() {
+    *JSON_COLLECTOR.lock().unwrap() = Some(Vec::new());
+}
+
+/// End collection and return the collected data, if any.
+pub fn finish_json_collection() -> Option<Vec<serde_json::Value>> {
+    JSON_COLLECTOR.lock().unwrap().take()
+}
+
+/// RAII guard that starts JSON collection on construction and emits a single
+/// envelope with all collected data on drop (covers all return paths, including
+/// early returns and errors).
+pub struct JsonCollectorGuard {
+    cli_version: &'static str,
+    kind: EnvelopeKind,
+}
+
+impl JsonCollectorGuard {
+    /// Start collecting JSON output. The guard emits a single envelope on drop.
+    pub fn start(cli_version: &'static str, kind: EnvelopeKind) -> Self {
+        start_json_collection();
+        Self {
+            cli_version,
+            kind,
+        }
+    }
+}
+
+impl Drop for JsonCollectorGuard {
+    fn drop(&mut self) {
+        if let Some(results) = finish_json_collection() {
+            let data = serde_json::json!({ "events": results });
+            if let Ok(json_str) = json_output(
+                self.cli_version,
+                true,
+                self.kind,
+                data,
+                vec![],
+                vec![],
+            ) {
+                println!("{json_str}");
+            }
+        }
+    }
+}
+
+/// Push a JSON value to the collector if active. Returns `true` if collected,
+/// `false` if no collector is active (caller should print normally).
+fn collect_json(data: &serde_json::Value) -> bool {
+    let mut guard = JSON_COLLECTOR.lock().unwrap();
+    if let Some(ref mut collector) = *guard {
+        collector.push(data.clone());
+        true
+    } else {
+        false
+    }
+}
 
 /// Render a result as JSON using the genesis-vibes envelope format.
 pub fn json_output<T: Serialize + std::fmt::Debug>(
@@ -49,6 +117,10 @@ pub fn json_output<T: Serialize + std::fmt::Debug>(
 pub fn print_success(msg: &str, json: bool) {
     if json {
         let data = serde_json::json!({ "message": msg });
+        // If a collector is active, buffer instead of printing separately.
+        if collect_json(&data) {
+            return;
+        }
         if let Ok(json_str) = json_output(crate::VERSION, true, EnvelopeKind::Ok, data, vec![], vec![]) {
             println!("{json_str}");
         }
@@ -77,6 +149,10 @@ pub fn print_banner(json: bool) {
             "version": version,
             "name": "dulce-de-leche"
         });
+        // If a collector is active, buffer instead of printing separately.
+        if collect_json(&data) {
+            return;
+        }
         if let Ok(json_str) = json_output(crate::VERSION, true, EnvelopeKind::Info, data, vec![], vec![]) {
             println!("{json_str}");
         }
@@ -97,6 +173,10 @@ pub fn print_install_result(success: bool, tool: &str, message: &str, json: bool
             "success": success,
             "message": message
         });
+        // If a collector is active, buffer instead of printing separately.
+        if collect_json(&data) {
+            return;
+        }
         if let Ok(json_str) = json_output(
             crate::VERSION,
             success,
