@@ -1,6 +1,6 @@
 [package]
 name = "dulce-de-leche"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 description = "Orchestrator for the charly-vibes tool ecosystem — one command to install, configure, and update every tool"
 license = "Apache-2.0"

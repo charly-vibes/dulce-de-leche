@@ -11,8 +11,7 @@ use dulce_de_leche::dot_ddl::DdlDir;
 /// Helper: create a temp dir with a `.ddl/` directory.
 fn setup_ddl_dir() -> (TempDir, DdlDir) {
     let tmp = TempDir::new().expect("create temp dir");
-    let ddl_dir = DdlDir::create_at(tmp.path().join(".ddl").as_path())
-        .expect("create .ddl dir");
+    let ddl_dir = DdlDir::create_at(tmp.path().join(".ddl").as_path()).expect("create .ddl dir");
     (tmp, ddl_dir)
 }
 

@@ -29,7 +29,7 @@ fn create_failed_manifest(ddl_dir: &Path) {
     let manifest_dir = ddl_dir.join(".ddl");
     std::fs::create_dir_all(&manifest_dir).unwrap();
     let manifest = serde_json::json!({
-        "ddl_version": "0.2.0",
+        "ddl_version": "0.3.0",
         "migration_state": "none",
         "tools": {
             "wai": {
@@ -156,7 +156,7 @@ fn test_init_yes_creates_manifest() {
     assert!(manifest_path.exists(), "manifest.json should exist");
     let content = std::fs::read_to_string(manifest_path).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
-    assert_eq!(parsed["ddl_version"], "0.2.0");
+    assert_eq!(parsed["ddl_version"], "0.3.0");
 }
 
 // ===================== Selective install tests =====================

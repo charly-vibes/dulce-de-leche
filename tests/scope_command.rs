@@ -15,7 +15,7 @@ fn ddl_cmd() -> (Command, tempfile::TempDir) {
     let manifest_dir = temp.path().join(".ddl");
     std::fs::create_dir_all(&manifest_dir).unwrap();
     let manifest = serde_json::json!({
-        "ddl_version": "0.2.0",
+        "ddl_version": "0.3.0",
         "migration_state": "none",
         "tools": {}
     });

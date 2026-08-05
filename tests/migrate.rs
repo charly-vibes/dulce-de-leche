@@ -14,8 +14,7 @@ use dulce_de_leche::dot_ddl::DdlDir;
 /// Helper: create a temp dir with a `.ddl/` directory and return both.
 fn setup_ddl_dir() -> (TempDir, DdlDir) {
     let tmp = TempDir::new().expect("create temp dir");
-    let ddl_dir = DdlDir::create_at(tmp.path().join(".ddl").as_path())
-        .expect("create .ddl dir");
+    let ddl_dir = DdlDir::create_at(tmp.path().join(".ddl").as_path()).expect("create .ddl dir");
     (tmp, ddl_dir)
 }
 
@@ -82,7 +81,10 @@ fn test_migrate_single_file_config_creates_correct_symlink() {
 
     // The file content should be accessible through the symlink
     let content = std::fs::read_to_string(&legacy_path).expect("read through symlink");
-    assert_eq!(content, r#"theme = "dark""#, "content accessible through symlink");
+    assert_eq!(
+        content, r#"theme = "dark""#,
+        "content accessible through symlink"
+    );
 }
 
 #[test]
@@ -133,10 +135,7 @@ fn test_migrate_undo_single_file_restores_as_file() {
         .expect("undo migration");
 
     // After undo, legacy path should be a regular file, not a directory
-    assert!(
-        legacy_path.exists(),
-        "legacy path should exist after undo"
-    );
+    assert!(legacy_path.exists(), "legacy path should exist after undo");
     assert!(
         legacy_path.is_file(),
         "legacy path should be a file, not a directory, after undo"
@@ -152,7 +151,10 @@ fn test_migrate_undo_directory_restores_as_directory() {
     let (tmp, ddl_dir) = setup_ddl_dir();
 
     let legacy_path = tmp.path().join(".wai");
-    create_directory_legacy(&legacy_path, &[("config.toml", "key = true"), ("notes.md", "hello")]);
+    create_directory_legacy(
+        &legacy_path,
+        &[("config.toml", "key = true"), ("notes.md", "hello")],
+    );
 
     // Migrate forward
     ddl_dir
@@ -200,8 +202,7 @@ fn test_migrated_tools_detects_relative_symlinks() {
             .expect("migrate directory config");
 
         // Reconstruct DdlDir from the same .ddl/
-        let ddl_dir2 = DdlDir::create_at(Path::new(".ddl"))
-            .expect("recreate DdlDir");
+        let ddl_dir2 = DdlDir::create_at(Path::new(".ddl")).expect("recreate DdlDir");
 
         // migrated_tools should detect the symlink regardless of relative/absolute
         let migrated = dulce_de_leche::dot_ddl::migrated_tools(&ddl_dir2);
@@ -229,8 +230,7 @@ fn test_migrated_tools_detects_single_file_symlinks() {
             .expect("migrate single-file config");
 
         // Reconstruct DdlDir
-        let ddl_dir2 = DdlDir::create_at(Path::new(".ddl"))
-            .expect("recreate DdlDir");
+        let ddl_dir2 = DdlDir::create_at(Path::new(".ddl")).expect("recreate DdlDir");
 
         // migrated_tools should detect the single-file symlink
         let migrated = dulce_de_leche::dot_ddl::migrated_tools(&ddl_dir2);
@@ -277,7 +277,10 @@ fn test_migrate_round_trip_single_file() {
     // After round-trip, the file should be restored exactly
     assert!(legacy_path.is_file(), "should be a file after round-trip");
     let content = std::fs::read_to_string(&legacy_path).expect("read restored file");
-    assert_eq!(content, original_content, "content preserved through round-trip");
+    assert_eq!(
+        content, original_content,
+        "content preserved through round-trip"
+    );
 }
 
 #[test]
@@ -287,7 +290,10 @@ fn test_migrate_round_trip_directory() {
     let legacy_path = tmp.path().join(".wai");
     create_directory_legacy(
         &legacy_path,
-        &[("config.toml", "key = true"), ("profile.toml", "mode = dev")],
+        &[
+            ("config.toml", "key = true"),
+            ("profile.toml", "mode = dev"),
+        ],
     );
 
     // Migrate forward
@@ -301,7 +307,10 @@ fn test_migrate_round_trip_directory() {
         .expect("undo migration");
 
     // After round-trip, the directory should be restored
-    assert!(legacy_path.is_dir(), "should be a directory after round-trip");
+    assert!(
+        legacy_path.is_dir(),
+        "should be a directory after round-trip"
+    );
     assert!(
         legacy_path.join("config.toml").exists(),
         "config.toml should exist after round-trip"
