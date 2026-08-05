@@ -319,7 +319,7 @@ fn cmd_install(tool_name: &str, args: &dulce_de_leche::cli::Args) -> Result<()> 
 fn cmd_status(args: &dulce_de_leche::cli::Args) -> Result<()> {
     use dulce_de_leche::diagnostics;
 
-    let ddl_dir = DdlDir::find_or_create().ok();
+    let ddl_dir = DdlDir::find();
     let report = diagnostics::build_status_report(ddl_dir.as_ref());
 
     if args.is_json() {
@@ -347,7 +347,7 @@ fn cmd_status(args: &dulce_de_leche::cli::Args) -> Result<()> {
 fn cmd_doctor(fix: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
     use dulce_de_leche::diagnostics;
 
-    let ddl_dir = DdlDir::find_or_create().ok();
+    let ddl_dir = DdlDir::find();
 
     if args.is_json() {
         let messages = diagnostics::run_full_diagnostic(ddl_dir.as_ref(), fix)?;
@@ -379,7 +379,7 @@ fn cmd_version(check: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
             std::collections::HashMap::new()
         };
 
-        if let Ok(ddl_dir) = DdlDir::find_or_create() {
+        if let Some(ddl_dir) = DdlDir::find() {
             let matrix = dulce_de_leche::compat::load_compatibility(&ddl_dir.path);
             let mut names: Vec<&String> = ddl_dir.manifest.tools.keys().collect();
             names.sort();
@@ -419,8 +419,8 @@ fn cmd_version(check: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
     println!("ddl: {}", ddl_version);
     println!();
 
-    match DdlDir::find_or_create() {
-        Ok(ddl_dir) => {
+    match DdlDir::find() {
+        Some(ddl_dir) => {
             let mut names: Vec<&String> = ddl_dir.manifest.tools.keys().collect();
             names.sort();
             for name in names {
@@ -429,7 +429,7 @@ fn cmd_version(check: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
                 }
             }
         }
-        Err(_) => {
+        None => {
             use dulce_de_leche::diagnostics;
             for tool in dulce_de_leche::platform::MANAGED_TOOLS {
                 if diagnostics::which(tool.name).is_some() {
@@ -455,7 +455,7 @@ fn cmd_version(check: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
         }
 
         let mut any_outdated = false;
-        let matrix = if let Ok(ddl_dir) = DdlDir::find_or_create() {
+        let matrix = if let Some(ddl_dir) = DdlDir::find() {
             dulce_de_leche::compat::load_compatibility(&ddl_dir.path)
         } else {
             dulce_de_leche::compat::CompatibilityMatrix::embedded()

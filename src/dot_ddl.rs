@@ -129,6 +129,14 @@ impl DdlDir {
         }
     }
 
+    /// Find the nearest `.ddl/` directory by walking up from CWD (read-only).
+    /// Returns `None` if no `.ddl/` directory exists, without creating one.
+    pub fn find() -> Option<Self> {
+        let path = crate::find_ddl_dir()?;
+        let manifest = Manifest::load(&path.join("manifest.json")).ok()?;
+        Some(Self { path, manifest })
+    }
+
     /// Create a new `.ddl/` directory at the given path.
     pub fn create_at(path: &Path) -> Result<Self> {
         if path.exists() {
