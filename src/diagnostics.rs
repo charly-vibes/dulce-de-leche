@@ -405,7 +405,11 @@ pub fn status_summary(sections: &[StatusSection]) -> String {
 }
 
 /// Run a comprehensive diagnostic using genesis DoctorRunner.
-pub fn run_full_diagnostic(ddl_dir: Option<&DdlDir>, _fix: bool) -> Result<Vec<String>> {
+///
+/// When `fix` is true, also calls `DdlDir::doctor(true)` to apply fixes
+/// (create missing manifest, remove broken symlinks) and includes those
+/// messages in the output.
+pub fn run_full_diagnostic(ddl_dir: Option<&DdlDir>, fix: bool) -> Result<Vec<String>> {
     let runner = DoctorRunner::new(vec![
         Box::new(PlatformCheck),
         Box::new(PrerequisitesCheck),
@@ -420,7 +424,7 @@ pub fn run_full_diagnostic(ddl_dir: Option<&DdlDir>, _fix: bool) -> Result<Vec<S
 
     // Build report
     let report = runner
-        .run(Path::new("."), false)
+        .run(Path::new("."), fix)
         .map_err(|e| crate::error::DdlError::Other(e.to_string()))?;
 
     // Format as human-readable messages
@@ -439,9 +443,20 @@ pub fn run_full_diagnostic(ddl_dir: Option<&DdlDir>, _fix: bool) -> Result<Vec<S
             genesis::doctor::CheckStatus::Fail => "✗",
         };
         messages.push(format!("  {icon} {}: {}", check.name, check.message));
-        if let Some(ref fix) = check.fix {
-            messages.push(format!("     → Run: {fix}"));
+        if let Some(ref fix_cmd) = check.fix {
+            messages.push(format!("     → Run: {fix_cmd}"));
         }
+    }
+
+    // Apply DdlDir fixes when requested (create missing manifest, remove
+    // broken symlinks, etc.) and surface those messages.
+    if fix
+        && let Some(d) = ddl_dir
+    {
+        let fix_messages = d.doctor(true)?;
+        messages.push(String::new());
+        messages.push("── Fixes ──".to_string());
+        messages.extend(fix_messages);
     }
 
     Ok(messages)
