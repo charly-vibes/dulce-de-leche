@@ -311,3 +311,62 @@ fn test_migrate_round_trip_directory() {
         "profile.toml should exist after round-trip"
     );
 }
+// ===== DDL-40e: migrate is idempotent =====
+
+#[test]
+fn test_migrate_idempotent_directory() {
+    let (tmp, ddl_dir) = setup_ddl_dir();
+
+    let legacy_path = tmp.path().join(".wai");
+    create_directory_legacy(&legacy_path, &[("config.toml", "key = true")]);
+
+    // First migration
+    ddl_dir
+        .migrate_tool("wai", &legacy_path)
+        .expect("first migrate");
+
+    // Second migration — should be a no-op
+    ddl_dir
+        .migrate_tool("wai", &legacy_path)
+        .expect("second migrate (idempotent)");
+
+    // Symlink should still point to the correct target
+    assert!(legacy_path.is_symlink(), "should still be a symlink");
+    let target = std::fs::read_link(&legacy_path).expect("read symlink");
+    let expected = ddl_dir.tool_path("wai");
+    assert_eq!(target, expected, "symlink target should be unchanged");
+
+    // Content should be accessible
+    assert!(
+        legacy_path.join("config.toml").exists(),
+        "config.toml should be accessible after second migrate"
+    );
+}
+
+#[test]
+fn test_migrate_idempotent_single_file() {
+    let (tmp, ddl_dir) = setup_ddl_dir();
+
+    let legacy_path = tmp.path().join(".pretender.toml");
+    create_single_file_legacy(&legacy_path, r#"theme = "idempotent""#);
+
+    // First migration
+    ddl_dir
+        .migrate_tool("pretender", &legacy_path)
+        .expect("first migrate");
+
+    // Second migration — should be a no-op
+    ddl_dir
+        .migrate_tool("pretender", &legacy_path)
+        .expect("second migrate (idempotent)");
+
+    // Symlink should still point to the correct target
+    assert!(legacy_path.is_symlink(), "should still be a symlink");
+    let target = std::fs::read_link(&legacy_path).expect("read symlink");
+    let expected = ddl_dir.tool_path("pretender").join(".pretender.toml");
+    assert_eq!(target, expected, "symlink target should be unchanged");
+
+    // Content should be accessible
+    let content = std::fs::read_to_string(&legacy_path).expect("read through symlink");
+    assert_eq!(content, r#"theme = "idempotent""#);
+}

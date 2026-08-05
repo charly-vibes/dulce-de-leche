@@ -350,6 +350,12 @@ impl DdlDir {
             std::fs::create_dir_all(&ddl_tool_path).map_err(DdlError::Io)?;
         }
 
+        // Idempotency guard: if legacy path is already a symlink, it was
+        // migrated in a previous run. Skip to avoid data corruption.
+        if legacy_path.is_symlink() {
+            return Ok(());
+        }
+
         // Track whether the original was a file, for correct symlink and undo.
         let legacy_path_was_file = legacy_path.is_file();
 
