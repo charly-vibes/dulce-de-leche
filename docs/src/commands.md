@@ -90,15 +90,16 @@ ddl scope
 
 | Flag | Description |
 |------|-------------|
-| `-v`, `--verbose` | Enable verbose output |
+| `-v`, `-vv`, `-vvv` | Enable verbose output (progressive detail) |
 | `-q`, `--quiet` | Suppress output except errors |
 | `-y`, `--yes` | Non-interactive mode |
 | `--json` | Output as JSON for machine parsing |
+| `--human` | Force human-readable output in non-TTY contexts |
+| `--verbose` | Alias for `-v` |
 
 ## Exit codes
 
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | Partial failure (some tools failed) |
-| 2 | Unrecoverable error (invalid args, missing platform) |
+| 1 | Error (any failure — see stderr for details) |

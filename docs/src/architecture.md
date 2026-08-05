@@ -43,12 +43,21 @@ coordinated releases of each tool.
   config.toml            # ddl's own config
   compatibility-cache.json  # cached compatibility matrix
 
-  wai/ -> ../.wai/       # symlink (Phase 1)
-  dont/ -> ../.dont/     # symlink (Phase 1)
-  ah/ -> ../.espectacular/  # symlink (Phase 1)
-  pretender.toml -> ../.pretender.toml  # symlink (Phase 1)
-  testaruda/ -> ../.testaruda/  # symlink (Phase 1)
+  wai/                   # wai config files
+  dont/                  # dont config files
+  ah/                    # ah config files
+  pretender.toml         # pretender config file
+  testaruda/             # testaruda config files
 ```
+
+Legacy directories become symlinks pointing to `.ddl/`:
+
+```
+.wai/            -> .ddl/wai/            # symlink to .ddl/
+.dont/           -> .ddl/dont/           # symlink to .ddl/
+.espectacular/   -> .ddl/ah/             # symlink to .ddl/
+.pretender.toml  -> .ddl/pretender.toml  # symlink to .ddl/
+.testaruda/      -> .ddl/testaruda/      # symlink to .ddl/
 
 ## Data flow for `ddl status`
 

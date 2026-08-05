@@ -1,7 +1,7 @@
 # dulce-de-leche — Design Document
 
 > One `.ddl/` directory to configure all charly-vibes tools.
-> Status: **Design phase** (pre-implementation)
+> Status: **Implemented**
 
 ## Table of Contents
 

@@ -59,7 +59,7 @@ Keep this managed block so `wai init` can refresh the instructions.
 
 ## What this is
 
-`dulce-de-leche` (CLI: `ddl`) is a **design-phase** orchestrator for the charly-vibes tool ecosystem. It is not implemented yet. The repository contains:
+`dulce-de-leche` (CLI: `ddl`) is a cross-platform orchestrator for the charly-vibes tool ecosystem. It is implemented and available on crates.io. The repository contains:
 
 - `README.md` — concept overview and quick start vision
 - `docs/design.md` — full design document with architecture, commands, migration model, and open questions

@@ -28,7 +28,9 @@ The entire value proposition hinges on "repo root stays clean." But Phase 1 uses
 
 **CRITIQUE 2: The "bundle" framing is wrong for the actual usage pattern.**
 
-Nobody who uses charly-vibes tools uses all of them. The toolset is an experimental collection, not an integrated suite. wai is a workflow manager. dont is an epistemic state machine. fotos-mcp is an IPC bridge for a screenshot app. These are not complementary tools that a single user would install together. The "bundle" creates artificial coupling between tools that have independent use cases. A user who only wants wai now has to explain to ddl that they don't want the other 6 tools. The minimal install profile (`--profile minimal`) is an admission that the default (all tools) is wrong for most users.
+Nobody who uses charly-vibes tools uses all of them. The toolset is an experimental collection, not an integrated suite. wai is a workflow manager. dont is an epistemic state machine. fotos-mcp is an IPC bridge for a screenshot app. These are not complementary tools that a single user would install together. The "bundle" creates artificial coupling between tools that have independent use cases. A user who only wants wai now has to explain to ddl that they don't want the other 6 tools. The minimal install profile (`--profile minimal`)[^profile-minimal] is an admission that the default (all tools) is wrong for most users.
+
+[^profile-minimal]: `--profile minimal` is a reserved future feature — not yet implemented. Use `--tools` to select specific tools instead.
 
 **SYNTHESIS:** This could work if ddl is positioned as a **discovery portal** ("here's what charly tools exist, pick what you need") rather than a bundle manager. The interactive `ddl init` with tool selection is the right UX — but the "One command to install, configure, and update every charly-vibes tool" tagline promises the opposite of what most users need.
 

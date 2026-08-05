@@ -87,15 +87,23 @@ It is **not** a package manager, a reimplementation of any tool, or a CLI launch
 .ddl/
   manifest.json          # tool versions, migration state, ddl version
   config.toml            # ddl's own config (not tool configs)
-  wai/ -> ../.wai/              # symlink to .wai/
-  dont/ -> ../.dont/            # symlink to .dont/
-  ah/ -> ../.espectacular/      # symlink to .espectacular/
-  pretender.toml -> ../.pretender.toml  # symlink
-  testaruda/ -> ../.testaruda/  # symlink to .testaruda/
-  fabbro/ -> ../.fabbro/        # symlink to .fabbro/
+  wai/                   # wai config files live here
+  dont/                  # dont config files live here
+  ah/                    # ah config files live here
+  pretender.toml         # pretender config file
+  testaruda/             # testaruda config files
+  fabbro/                # fabbro config files
 ```
 
-Data files (`.db`, stores) are git-ignored. Config files (`.toml`) are committed by default.
+Legacy directories (`.wai/`, `.dont/`, etc.) become symlinks pointing to `.ddl/`:
+
+```
+.wai/            -> .ddl/wai/            # symlink to .ddl/
+.dont/           -> .ddl/dont/           # symlink to .ddl/
+.espectacular/   -> .ddl/ah/             # symlink to .ddl/
+.pretender.toml  -> .ddl/pretender.toml  # symlink to .ddl/
+.testaruda/      -> .ddl/testaruda/      # symlink to .ddl/
+.fabbro/         -> .ddl/fabbro/         # symlink to .ddl/
 
 ## Documentation
 
