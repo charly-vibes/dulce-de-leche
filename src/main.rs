@@ -324,7 +324,7 @@ fn cmd_status(args: &dulce_de_leche::cli::Args) -> Result<()> {
 
     if args.is_json() {
         let data = serde_json::json!(report);
-        let json_str = output::json_output(true, EnvelopeKind::List, data, vec![], vec![])?;
+        let json_str = output::json_output(dulce_de_leche::VERSION, true, EnvelopeKind::List, data, vec![], vec![])?;
         println!("{json_str}");
         return Ok(());
     }
@@ -352,7 +352,7 @@ fn cmd_doctor(fix: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
     if args.is_json() {
         let messages = diagnostics::run_full_diagnostic(ddl_dir.as_ref(), fix)?;
         let data = serde_json::json!({ "diagnostics": messages });
-        let json_str = output::json_output(true, EnvelopeKind::Doctor, data, vec![], vec![])?;
+        let json_str = output::json_output(dulce_de_leche::VERSION, true, EnvelopeKind::Doctor, data, vec![], vec![])?;
         println!("{json_str}");
         return Ok(());
     }
@@ -407,7 +407,7 @@ fn cmd_version(check: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
             "check": check,
             "tools": tools
         });
-        let json_str = output::json_output(true, EnvelopeKind::Version, data, vec![], vec![])?;
+        let json_str = output::json_output(dulce_de_leche::VERSION, true, EnvelopeKind::Version, data, vec![], vec![])?;
         println!("{json_str}");
 
         if check && tools.iter().any(|t| t["update_available"] == true) {
@@ -670,14 +670,14 @@ fn cmd_scope(args: &dulce_de_leche::cli::Args) -> Result<()> {
     if let Some(ddl_dir) = dulce_de_leche::find_ddl_dir() {
         if args.is_json() {
             let data = serde_json::json!({"ddl_dir": ddl_dir.display().to_string()});
-            let json_str = output::json_output(true, EnvelopeKind::Info, data, vec![], vec![])?;
+            let json_str = output::json_output(dulce_de_leche::VERSION, true, EnvelopeKind::Info, data, vec![], vec![])?;
             println!("{json_str}");
         } else {
             println!("{}", ddl_dir.display());
         }
     } else if args.is_json() {
         let data = serde_json::json!({"ddl_dir": null});
-        let json_str = output::json_output(true, EnvelopeKind::Info, data, vec![], vec![])?;
+        let json_str = output::json_output(dulce_de_leche::VERSION, true, EnvelopeKind::Info, data, vec![], vec![])?;
         println!("{json_str}");
     } else {
         println!("No .ddl/ directory found (walked up from CWD)");

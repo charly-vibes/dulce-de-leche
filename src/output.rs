@@ -13,6 +13,7 @@ use genesis::envelope::{Envelope, EnvelopeKind, HintEntry, Warning};
 
 /// Render a result as JSON using the genesis-vibes envelope format.
 pub fn json_output<T: Serialize + std::fmt::Debug>(
+    cli_version: &str,
     ok: bool,
     kind: EnvelopeKind,
     data: T,
@@ -20,7 +21,7 @@ pub fn json_output<T: Serialize + std::fmt::Debug>(
     hints: Vec<HintEntry>,
 ) -> Result<String> {
     if ok {
-        let envelope = Envelope::success(kind, data, warnings, hints);
+        let envelope = Envelope::success(cli_version, kind, data, warnings, hints);
         serde_json::to_string_pretty(&envelope)
             .map_err(|e| DdlError::Other(format!("JSON serialization failed: {e}")))
     } else {
@@ -38,7 +39,7 @@ pub fn json_output<T: Serialize + std::fmt::Debug>(
             }],
         )
         .map_err(|e| DdlError::Other(format!("Failed to build error envelope: {e}")))?;
-        let envelope = Envelope::error(err, warnings);
+        let envelope = Envelope::error(cli_version, err, warnings);
         serde_json::to_string_pretty(&envelope)
             .map_err(|e| DdlError::Other(format!("JSON serialization failed: {e}")))
     }
@@ -48,7 +49,7 @@ pub fn json_output<T: Serialize + std::fmt::Debug>(
 pub fn print_success(msg: &str, json: bool) {
     if json {
         let data = serde_json::json!({ "message": msg });
-        if let Ok(json_str) = json_output(true, EnvelopeKind::Ok, data, vec![], vec![]) {
+        if let Ok(json_str) = json_output(crate::VERSION, true, EnvelopeKind::Ok, data, vec![], vec![]) {
             println!("{json_str}");
         }
     } else {
@@ -60,7 +61,7 @@ pub fn print_success(msg: &str, json: bool) {
 pub fn print_error(msg: &str, json: bool) {
     if json {
         let data = serde_json::json!({ "error": msg });
-        if let Ok(json_str) = json_output(false, EnvelopeKind::Error, data, vec![], vec![]) {
+        if let Ok(json_str) = json_output(crate::VERSION, false, EnvelopeKind::Error, data, vec![], vec![]) {
             eprintln!("{json_str}");
         }
     } else {
@@ -76,7 +77,7 @@ pub fn print_banner(json: bool) {
             "version": version,
             "name": "dulce-de-leche"
         });
-        if let Ok(json_str) = json_output(true, EnvelopeKind::Info, data, vec![], vec![]) {
+        if let Ok(json_str) = json_output(crate::VERSION, true, EnvelopeKind::Info, data, vec![], vec![]) {
             println!("{json_str}");
         }
     } else {
@@ -97,6 +98,7 @@ pub fn print_install_result(success: bool, tool: &str, message: &str, json: bool
             "message": message
         });
         if let Ok(json_str) = json_output(
+            crate::VERSION,
             success,
             if success {
                 EnvelopeKind::Ok
