@@ -103,7 +103,7 @@ From `homebrew-charly/`:
 
 | Formula | Version | Has real SHA? | Notes |
 |---------|---------|---------------|-------|
-| `wai.rb` | 2026.5.3 | ✓ | Real release (upstream tag v2026.8.5 exists — formula update pending) |
+| `wai.rb` | 2026.8.5 | ✓ | Real release |
 | `fotos-mcp.rb` | 0.3.0 | ✓ | Real release |
 | `testaruda.rb` | 0.4.0 | ✓ | Real release (engine + rust/python adapters) |
 | `vampiro.rb` | 0.4.0 | ✓ | Real release |
