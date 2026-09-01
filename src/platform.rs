@@ -176,6 +176,13 @@ pub const MANAGED_TOOLS: &[Tool] = &[
         repo: "charly-vibes/testaruda",
     },
     Tool {
+        name: "vampiro",
+        description: "Cross-language composition checking at call boundaries",
+        crate_name: "vampiro",
+        formula_name: "vampiro",
+        repo: "charly-vibes/vampiro",
+    },
+    Tool {
         name: "fotos-mcp",
         description: "Screenshot and image analysis MCP server",
         crate_name: "fotos-mcp",

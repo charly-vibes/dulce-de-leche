@@ -103,10 +103,18 @@ const LEGACY_CONFIGS: &[(&str, &str)] = &[
     ("ah", ".espectacular"),
     ("pretender", ".pretender.toml"),
     ("testaruda", ".testaruda"),
+    ("vampiro", ".vampiro"),
     ("fabbro", ".fabbro"),
     // Note: `fotos-mcp` is intentionally excluded — it has no known legacy
-    // config file/directory to migrate; its MCP server config lives elsewhere.
+    // config file/directory to migrate; its MCP server config lives elsewhere
+    // (it is install-only, see docs/ecosystem-map.md inclusion criteria).
 ];
+
+/// The legacy tool config directories, as `(binary name, legacy path)` pairs.
+/// Tools without a legacy config (e.g. `fotos-mcp`) are absent.
+pub fn legacy_configs() -> &'static [(&'static str, &'static str)] {
+    LEGACY_CONFIGS
+}
 
 /// Manage the `.ddl/` directory.
 #[derive(Debug, Clone)]

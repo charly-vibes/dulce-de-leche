@@ -499,6 +499,7 @@ pub fn run_tool_init(tool: &Tool, verbose: bool) -> Result<()> {
         "ah" => ("ah", &["init"]),
         "pretender" => ("pretender", &["init"]),
         "testaruda" => ("testaruda", &["init"]),
+        "vampiro" => ("vampiro", &["init"]),
         "fotos-mcp" => ("fotos-mcp", &["init"]),
         "fabbro" => ("fabbro", &["init"]),
         _ => return Ok(()),
