@@ -93,25 +93,27 @@ All Rust tools (except fotos-mcp) depend on `genesis-vibes = "0.6"`. Genesis pro
 | Channel | Tools | Maintainer |
 |---------|-------|------------|
 | crates.io | All Rust tools | Individual repos |
-| Homebrew | wai, ah, dont, pretender, fotos-mcp, fabbro, dulce-de-leche, fotos (cask) — testaruda & vampiro formulas not yet scaffolded | `homebrew-charly` tap |
-| Scoop | wai, ah, dont, pretender, fotos-mcp, fotos, fabbro, dulce-de-leche | `scoop-charly` bucket |
+| Homebrew | wai, ah, dont, pretender, testaruda, vampiro, fotos-mcp, fabbro, dulce-de-leche, fotos (cask) — dont & fabbro formulas still placeholder stubs | `homebrew-charly` tap |
+| Scoop | wai, ah, dont, pretender, testaruda, vampiro, fotos-mcp, fotos, fabbro, dulce-de-leche | `scoop-charly` bucket |
 | GitHub Releases | All Rust tools | Individual repos |
 
 ## Homebrew formulas (current state)
 
-From `homebrew-charly/` (verified 2026-09-01):
+From `homebrew-charly/`:
 
 | Formula | Version | Has real SHA? | Notes |
 |---------|---------|---------------|-------|
 | `wai.rb` | 2026.5.3 | ✓ | Real release (upstream tag v2026.8.5 exists — formula update pending) |
 | `fotos-mcp.rb` | 0.3.0 | ✓ | Real release |
-| `dulce-de-leche.rb` | 0.1.0 | ✗ placeholder | Stale — ddl is at v0.3.0 |
-| `ah.rb` | 0.0.0 | ✗ placeholder | Not published yet (upstream v0.5.0 tagged) |
-| `dont.rb` | 0.0.0 | ✗ placeholder | Not published yet (upstream v0.3.0 tagged) |
-| `pretender.rb` | 0.0.0 | ✗ placeholder | Not published yet (upstream v0.5.0 tagged) |
-| `fabbro.rb` | 0.0.0 | ✗ placeholder | Not published yet |
-| `testaruda.rb` | — | — | Formula not scaffolded yet (upstream v0.4.0 tagged) |
-| `vampiro.rb` | — | — | Formula not scaffolded yet (upstream v0.4.0 tagged) |
+| `testaruda.rb` | 0.4.0 | ✓ | Real release (engine + rust/python adapters) |
+| `vampiro.rb` | 0.4.0 | ✓ | Real release |
+| `ah.rb` | 0.5.0 | ✓ | Real release (assets under `espectacular` releases) |
+| `pretender.rb` | 0.5.0 | ✓ | Real release |
+| `dulce-de-leche.rb` | 0.3.0 | ✓ | Real release |
+| `dont.rb` | 0.0.0 | ✗ placeholder | Blocked: no GitHub release for dont yet (tag v0.3.0 exists locally) |
+| `fabbro.rb` | 0.0.0 | ✗ placeholder | Blocked: fabbro has no tagged releases |
 | `fotos.rb` (cask) | — | ✓ | Real release |
 
-Only **wai** and **fotos-mcp** have real releases published. ddl automatically falls back to `cargo install` for tools whose formulas are placeholders (`is_placeholder_formula` in `src/installer.rs`), so `ddl init` still works — brew users just get the cargo path for those tools.
+Scoop mirrors the same versions for Windows. All formula hashes were computed from downloaded release assets and cross-verified against each release's published `checksums.txt`.
+
+Only **dont** and **fabbro** remain blocked on upstream releases. ddl automatically falls back to `cargo install` for tools whose formulas are placeholders (`is_placeholder_formula` in `src/installer.rs`), so `ddl init` works either way.
