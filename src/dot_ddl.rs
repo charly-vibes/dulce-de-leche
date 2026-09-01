@@ -306,8 +306,7 @@ impl DdlDir {
         let gitignore_path = PathBuf::from(".gitignore");
         if !gitignore_path.exists() {
             if yes {
-                let mut file =
-                    std::fs::File::create(&gitignore_path).map_err(DdlError::Io)?;
+                let mut file = std::fs::File::create(&gitignore_path).map_err(DdlError::Io)?;
                 file.write_all(GITIGNORE_ENTRIES.as_bytes())
                     .map_err(DdlError::Io)?;
                 println!("  ✓ .gitignore created");
@@ -483,12 +482,13 @@ impl DdlDir {
             #[cfg(unix)]
             {
                 if let Ok(meta) = std::fs::symlink_metadata(&path)
-                    && meta.is_symlink() {
-                        // Check if the target exists
-                        if std::fs::metadata(&path).is_err() {
-                            broken.push(path);
-                        }
+                    && meta.is_symlink()
+                {
+                    // Check if the target exists
+                    if std::fs::metadata(&path).is_err() {
+                        broken.push(path);
                     }
+                }
             }
             #[cfg(windows)]
             {
@@ -617,23 +617,23 @@ pub fn migrated_tools(ddl_dir: &DdlDir) -> Vec<(String, PathBuf)> {
         if is_symlink(&legacy_path)
             && let Ok(target) = std::fs::read_link(&legacy_path)
         {
-                // Resolve relative symlink targets to absolute (relative to the
-                // symlink's parent directory) before comparing.
-                let resolved = if target.is_relative() {
-                    legacy_path.parent().unwrap_or(Path::new(".")).join(&target)
-                } else {
-                    target.clone()
-                };
-                // Canonicalise both resolved and expected paths so that relative
-                // vs absolute DdlDir paths don't break detection.
-                let resolved = std::fs::canonicalize(&resolved).unwrap_or(resolved);
-                let expected = ddl_dir.tool_path(tool_name);
-                let expected = std::fs::canonicalize(&expected).unwrap_or(expected);
-                // Directory configs: symlink points directly to .ddl/<tool>/.
-                // Single-file configs: symlink points to a file inside .ddl/<tool>/.
-                if resolved == expected || resolved.parent() == Some(&expected) {
-                    result.push((tool_name.to_string(), legacy_path));
-                }
+            // Resolve relative symlink targets to absolute (relative to the
+            // symlink's parent directory) before comparing.
+            let resolved = if target.is_relative() {
+                legacy_path.parent().unwrap_or(Path::new(".")).join(&target)
+            } else {
+                target.clone()
+            };
+            // Canonicalise both resolved and expected paths so that relative
+            // vs absolute DdlDir paths don't break detection.
+            let resolved = std::fs::canonicalize(&resolved).unwrap_or(resolved);
+            let expected = ddl_dir.tool_path(tool_name);
+            let expected = std::fs::canonicalize(&expected).unwrap_or(expected);
+            // Directory configs: symlink points directly to .ddl/<tool>/.
+            // Single-file configs: symlink points to a file inside .ddl/<tool>/.
+            if resolved == expected || resolved.parent() == Some(&expected) {
+                result.push((tool_name.to_string(), legacy_path));
+            }
         }
     }
     result

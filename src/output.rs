@@ -42,10 +42,7 @@ impl JsonCollectorGuard {
     /// Start collecting JSON output. The guard emits a single envelope on drop.
     pub fn start(cli_version: &'static str, kind: EnvelopeKind) -> Self {
         start_json_collection();
-        Self {
-            cli_version,
-            kind,
-        }
+        Self { cli_version, kind }
     }
 }
 
@@ -53,14 +50,9 @@ impl Drop for JsonCollectorGuard {
     fn drop(&mut self) {
         if let Some(results) = finish_json_collection() {
             let data = serde_json::json!({ "events": results });
-            if let Ok(json_str) = json_output(
-                self.cli_version,
-                true,
-                self.kind,
-                data,
-                vec![],
-                vec![],
-            ) {
+            if let Ok(json_str) =
+                json_output(self.cli_version, true, self.kind, data, vec![], vec![])
+            {
                 println!("{json_str}");
             }
         }
@@ -121,7 +113,9 @@ pub fn print_success(msg: &str, json: bool) {
         if collect_json(&data) {
             return;
         }
-        if let Ok(json_str) = json_output(crate::VERSION, true, EnvelopeKind::Ok, data, vec![], vec![]) {
+        if let Ok(json_str) =
+            json_output(crate::VERSION, true, EnvelopeKind::Ok, data, vec![], vec![])
+        {
             println!("{json_str}");
         }
     } else {
@@ -133,7 +127,14 @@ pub fn print_success(msg: &str, json: bool) {
 pub fn print_error(msg: &str, json: bool) {
     if json {
         let data = serde_json::json!({ "error": msg });
-        if let Ok(json_str) = json_output(crate::VERSION, false, EnvelopeKind::Error, data, vec![], vec![]) {
+        if let Ok(json_str) = json_output(
+            crate::VERSION,
+            false,
+            EnvelopeKind::Error,
+            data,
+            vec![],
+            vec![],
+        ) {
             eprintln!("{json_str}");
         }
     } else {
@@ -153,7 +154,14 @@ pub fn print_banner(json: bool) {
         if collect_json(&data) {
             return;
         }
-        if let Ok(json_str) = json_output(crate::VERSION, true, EnvelopeKind::Info, data, vec![], vec![]) {
+        if let Ok(json_str) = json_output(
+            crate::VERSION,
+            true,
+            EnvelopeKind::Info,
+            data,
+            vec![],
+            vec![],
+        ) {
             println!("{json_str}");
         }
     } else {

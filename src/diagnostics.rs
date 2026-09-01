@@ -250,15 +250,16 @@ impl DoctorCheck for ToolCheck {
         for cmd in &["doctor", "diagnostic", "check"] {
             let output = Command::new(self.tool.name).args([cmd, "--json"]).output();
             if let Ok(out) = output
-                && out.status.success() {
-                    let stdout = String::from_utf8_lossy(&out.stdout);
-                    let first_line = stdout.lines().next().unwrap_or("");
-                    results.push(LintResult::new(
-                        format!("doctor: {first_line}"),
-                        Severity::Advisory,
-                    ));
-                    return Ok(results);
-                }
+                && out.status.success()
+            {
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                let first_line = stdout.lines().next().unwrap_or("");
+                results.push(LintResult::new(
+                    format!("doctor: {first_line}"),
+                    Severity::Advisory,
+                ));
+                return Ok(results);
+            }
         }
 
         Ok(results)
@@ -450,9 +451,7 @@ pub fn run_full_diagnostic(ddl_dir: Option<&DdlDir>, fix: bool) -> Result<Vec<St
 
     // Apply DdlDir fixes when requested (create missing manifest, remove
     // broken symlinks, etc.) and surface those messages.
-    if fix
-        && let Some(d) = ddl_dir
-    {
+    if fix && let Some(d) = ddl_dir {
         let fix_messages = d.doctor(true)?;
         messages.push(String::new());
         messages.push("── Fixes ──".to_string());

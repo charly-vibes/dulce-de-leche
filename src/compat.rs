@@ -28,8 +28,7 @@ impl CompatibilityMatrix {
 
     /// Fetch the matrix from the remote URL.
     pub fn fetch() -> Result<Self> {
-        let response =
-            reqwest::blocking::get(Self::REMOTE_URL).map_err(DdlError::Network)?;
+        let response = reqwest::blocking::get(Self::REMOTE_URL).map_err(DdlError::Network)?;
 
         if !response.status().is_success() {
             return Err(DdlError::Network(response.error_for_status().unwrap_err()));
