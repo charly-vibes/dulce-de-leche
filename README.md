@@ -24,6 +24,12 @@
 
 Repo root stays clean — everything lives under `.ddl/`.
 
+<!-- MANAGED-TOOLS:START -->
+Managed tools (8): wai, dont, ah, pretender, testaruda, vampiro, fotos-mcp, fabbro.
+Run `ddl version` for the full picture. Additions and removals must update this block
+(enforced by `tests/tool_registry_drift.rs`).
+<!-- MANAGED-TOOLS:END -->
+
 ## Installation
 
 ```bash
@@ -61,7 +67,7 @@ ddl --help
 
 ## The problem
 
-The charly-vibes ecosystem has **6 active Rust CLI tools** (wai, dont, ah/espectacular, pretender, testaruda, fotos-mcp) plus fabbro (Go), and vampiro on the way. Each tool has:
+The charly-vibes ecosystem has **7 active Rust CLI tools** (wai, dont, ah/espectacular, pretender, testaruda, vampiro, fotos-mcp) plus fabbro (Go). Each tool has:
 
 - Its own config file or directory: `.wai/`, `.dont/`, `.espectacular/`, `.pretender.toml`, `.testaruda/`
 - Its own init command: `wai init`, `dont prime`, `ah init`, `pretender init`, `testaruda init`
@@ -92,8 +98,11 @@ It is **not** a package manager, a reimplementation of any tool, or a CLI launch
   ah/                    # ah config files live here
   pretender.toml         # pretender config file
   testaruda/             # testaruda config files
+  vampiro/               # vampiro config files
   fabbro/                # fabbro config files
 ```
+
+`fotos-mcp` is install-only — its MCP client config lives outside `.ddl/`.
 
 Legacy directories (`.wai/`, `.dont/`, etc.) become symlinks pointing to `.ddl/`:
 
@@ -103,6 +112,7 @@ Legacy directories (`.wai/`, `.dont/`, etc.) become symlinks pointing to `.ddl/`
 .espectacular/   -> .ddl/ah/             # symlink to .ddl/
 .pretender.toml  -> .ddl/pretender.toml  # symlink to .ddl/
 .testaruda/      -> .ddl/testaruda/      # symlink to .ddl/
+.vampiro/        -> .ddl/vampiro/        # symlink to .ddl/
 .fabbro/         -> .ddl/fabbro/         # symlink to .ddl/
 
 ## Documentation
@@ -118,7 +128,11 @@ Full documentation is available at [charly-vibes.github.io/dulce-de-leche](https
 
 ## Status
 
-**Pre-release / design phase.** The concept has been reviewed using the Rule of 5 methodology. See [`docs/design.md`](docs/design.md) for the full design doc and [`docs/ecosystem-map.md`](docs/ecosystem-map.md) for the tool family overview.
+**v0.3.0** — orchestrator shipped and published (crates.io, brew, scoop).
+Upstream release coverage is tracked in [`docs/ecosystem-map.md`](docs/ecosystem-map.md);
+currently wai and fotos-mcp have published tap formulas — for tools whose formulas are
+still placeholders, ddl automatically falls back to `cargo install`. See
+[`docs/design.md`](docs/design.md) for the full design doc.
 
 ## Commands
 

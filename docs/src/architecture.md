@@ -39,7 +39,7 @@ coordinated releases of each tool.
 
 ```
 .ddl/
-  manifest.json          # {"ddl_version": "1.0.0", "tool_versions": {...}}
+  manifest.json          # {"ddl_version": "0.3.0", "migration_state": "...", "tools": {...}}
   config.toml            # ddl's own config
   compatibility-cache.json  # cached compatibility matrix
 
@@ -48,6 +48,8 @@ coordinated releases of each tool.
   ah/                    # ah config files
   pretender.toml         # pretender config file
   testaruda/             # testaruda config files
+  vampiro/               # vampiro config files
+  fabbro/                # fabbro config files
 ```
 
 Legacy directories become symlinks pointing to `.ddl/`:
@@ -58,6 +60,9 @@ Legacy directories become symlinks pointing to `.ddl/`:
 .espectacular/   -> .ddl/ah/             # symlink to .ddl/
 .pretender.toml  -> .ddl/pretender.toml  # symlink to .ddl/
 .testaruda/      -> .ddl/testaruda/      # symlink to .ddl/
+.vampiro/        -> .ddl/vampiro/        # symlink to .ddl/
+.fabbro/         -> .ddl/fabbro/         # symlink to .ddl/
+```
 
 ## Data flow for `ddl status`
 

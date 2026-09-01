@@ -90,6 +90,7 @@ See `docs/design.md#10-open-questions` for the full list. The most important one
 - [espectacular](https://github.com/charly-vibes/espectacular) — behavioral verification
 - [pretender](https://github.com/charly-vibes/pretender) — code quality
 - [testaruda](https://github.com/charly-vibes/testaruda) — test selection
+- [vampiro](https://github.com/charly-vibes/vampiro) — composition checking
 - [fotos](https://github.com/charly-vibes/fotos) — screenshot tool
 <!-- WAI:REFLECT:REF:START -->
 ## Accumulated Project Patterns

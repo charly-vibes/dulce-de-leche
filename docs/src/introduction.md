@@ -11,8 +11,8 @@ dulce-de-leche (`ddl`) is a thin orchestrator that bootstraps the entire
 
 ## The problem
 
-The charly-vibes ecosystem has **6 active Rust CLI tools** (wai, dont, ah,
-pretender, testaruda, fotos-mcp) plus fabbro (Go) and vampiro on the way.
+The charly-vibes ecosystem has **7 active Rust CLI tools** (wai, dont, ah,
+pretender, testaruda, vampiro, fotos-mcp) plus fabbro (Go).
 Each tool has:
 
 - Its own config file or directory
