@@ -39,9 +39,20 @@ pub fn global_skills_dir() -> Option<PathBuf> {
     dirs::home_dir().map(|h| h.join(".agents").join("skills"))
 }
 
-/// The local skills directory: `.agents/skills/` (relative to CWD).
-pub fn local_skills_dir() -> PathBuf {
-    PathBuf::from(".agents").join("skills")
+/// The local skills directory: `.agents/skills/`, resolved by walking up
+/// from CWD (mirrors `find_ddl_dir`) so running ddl from a subdirectory
+/// still finds a repo-root install.
+pub fn local_skills_dir() -> Option<PathBuf> {
+    let mut cwd = std::env::current_dir().ok()?;
+    loop {
+        let candidate = cwd.join(".agents").join("skills");
+        if candidate.is_dir() {
+            return Some(candidate);
+        }
+        if !cwd.pop() {
+            return None;
+        }
+    }
 }
 
 /// Scan a skills directory for incitaciones-installed skills and return the
@@ -81,10 +92,8 @@ fn extract_version(frontmatter: &str) -> Option<String> {
 /// Detect where incitaciones skills are installed (global and/or local).
 pub fn skill_status() -> SkillStatus {
     SkillStatus {
-        global_version: global_skills_dir()
-            .as_deref()
-            .and_then(detect_in_dir),
-        local_version: detect_in_dir(&local_skills_dir()),
+        global_version: global_skills_dir().as_deref().and_then(detect_in_dir),
+        local_version: local_skills_dir().and_then(|d| detect_in_dir(&d)),
     }
 }
 
@@ -130,10 +139,7 @@ fn which_incitaciones() -> Option<PathBuf> {
     std::env::var_os("PATH").and_then(|paths| {
         for dir in std::env::split_paths(&paths) {
             #[cfg(windows)]
-            let candidates = [
-                dir.join("incitaciones.exe"),
-                dir.join("incitaciones.cmd"),
-            ];
+            let candidates = [dir.join("incitaciones.exe"), dir.join("incitaciones.cmd")];
             #[cfg(not(windows))]
             let candidates = [dir.join("incitaciones")];
             for full in candidates {

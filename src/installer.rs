@@ -88,7 +88,10 @@ impl InstallMethod {
                 }
             }
             Self::Npm => {
-                if which("npm").is_none() && which("npx").is_none() {
+                // `npm install -g` is the only install path for npm tools —
+                // npx alone can't fulfill it. npm ships with npx, so requiring
+                // npm here matches the implementation exactly.
+                if which("npm").is_none() {
                     return Err(DdlError::PrerequisiteMissing(
                         "npm is not installed. Install Node.js via https://nodejs.org".to_string(),
                     ));
@@ -104,7 +107,7 @@ impl InstallMethod {
 pub fn best_install_method(tool: &Tool, platform: &Platform) -> InstallMethod {
     // npm-distributed tools install via npm on every platform — they have no
     // brew formula, cargo crate, or GitHub release binary.
-    if tool.name == "incitaciones" {
+    if tool.npm_package.is_some() {
         return InstallMethod::Npm;
     }
     match platform.os {
@@ -142,7 +145,7 @@ pub fn is_tool_installed(name: &str) -> bool {
 /// Get the version of an installed tool.
 pub fn get_installed_version(name: &str) -> Option<String> {
     // npm packages don't support `--version` uniformly — ask npm instead.
-    if name == "incitaciones" {
+    if crate::platform::find_tool(name).is_some_and(|t| t.npm_package.is_some()) {
         return get_npm_global_version(name);
     }
     let output = Command::new(name).arg("--version").output().ok()?;
@@ -911,9 +914,13 @@ fn which(cmd: &str) -> Option<PathBuf> {
 /// Check the latest available version of a tool from its GitHub releases.
 pub fn check_latest_version(tool: &Tool) -> Option<String> {
     // npm packages: query the npm registry via the npm CLI.
-    if tool.name == "incitaciones" {
+    if tool.npm_package.is_some() {
         let output = npm_command("npm")
-            .args(["view", tool.crate_name, "version"])
+            .args([
+                "view",
+                tool.npm_package.unwrap_or(tool.crate_name),
+                "version",
+            ])
             .output()
             .ok()?;
         if !output.status.success() {
