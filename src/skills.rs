@@ -7,7 +7,6 @@
 //! npm version. Detection scans for that marker — no subprocess needed.
 
 use std::path::PathBuf;
-use std::process::Command;
 
 use crate::error::{DdlError, Result};
 
@@ -106,7 +105,7 @@ pub fn install_skills(global: bool, verbose: bool) -> Result<()> {
         eprintln!("  · running: {cmd} {}", base_args.join(" "));
     }
 
-    let status = Command::new(cmd)
+    let status = crate::installer::npm_command(cmd)
         .args(&base_args)
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
@@ -124,15 +123,23 @@ pub fn install_skills(global: bool, verbose: bool) -> Result<()> {
 }
 
 /// Check whether the incitaciones CLI is on PATH.
+///
+/// On Windows the npm-installed binary is an `incitaciones.cmd` shim —
+/// probe the shim too so detection works there.
 fn which_incitaciones() -> Option<PathBuf> {
     std::env::var_os("PATH").and_then(|paths| {
         for dir in std::env::split_paths(&paths) {
             #[cfg(windows)]
-            let full = dir.join("incitaciones.exe");
+            let candidates = [
+                dir.join("incitaciones.exe"),
+                dir.join("incitaciones.cmd"),
+            ];
             #[cfg(not(windows))]
-            let full = dir.join("incitaciones");
-            if full.is_file() {
-                return Some(full);
+            let candidates = [dir.join("incitaciones")];
+            for full in candidates {
+                if full.is_file() {
+                    return Some(full);
+                }
             }
         }
         None

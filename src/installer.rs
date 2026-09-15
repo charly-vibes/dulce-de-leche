@@ -171,7 +171,7 @@ pub fn get_installed_version(name: &str) -> Option<String> {
 
 /// Get the globally installed npm version of a package via `npm list -g`.
 fn get_npm_global_version(package: &str) -> Option<String> {
-    let output = Command::new("npm")
+    let output = npm_command("npm")
         .args(["list", "-g", package, "--depth=0"])
         .output()
         .ok()?;
@@ -512,7 +512,7 @@ fn install_npm(tool: &Tool, verbose: bool) -> Result<()> {
         verbose,
         &format!("running: npm install -g {}", tool.crate_name),
     );
-    let status = Command::new("npm")
+    let status = npm_command("npm")
         .args(["install", "-g", tool.crate_name])
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
@@ -781,7 +781,7 @@ fn upgrade_npm(tool: &Tool, verbose: bool) -> Result<()> {
         verbose,
         &format!("running: npm install -g {}@latest", tool.crate_name),
     );
-    let status = Command::new("npm")
+    let status = npm_command("npm")
         .args(["install", "-g", &format!("{}@latest", tool.crate_name)])
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
@@ -862,6 +862,25 @@ pub fn upgrade_selected_tools(
         .collect()
 }
 
+/// Build a Command for an npm-ecosystem executable (npm, npx, or a
+/// package-installed binary like `incitaciones`).
+///
+/// On Windows these are `.cmd` shims, which Rust's std deliberately does not
+/// execute via CreateProcess (BatBadBut mitigation, CVE-2024-24576) — so we
+/// route through `cmd /C` there. On other platforms, exec directly.
+pub(crate) fn npm_command(program: &str) -> Command {
+    #[cfg(windows)]
+    {
+        let mut cmd = Command::new("cmd");
+        cmd.args(["/C", program]);
+        cmd
+    }
+    #[cfg(not(windows))]
+    {
+        Command::new(program)
+    }
+}
+
 fn which(cmd: &str) -> Option<PathBuf> {
     std::env::var_os("PATH").and_then(|paths| {
         for dir in std::env::split_paths(&paths) {
@@ -875,6 +894,14 @@ fn which(cmd: &str) -> Option<PathBuf> {
                 if full_exe.is_file() {
                     return Some(full_exe);
                 }
+                // npm-ecosystem tools are .cmd shims on Windows — probe them
+                // so check_prerequisites doesn't fail on a working npm.
+                for ext in ["cmd", "bat"] {
+                    let shim = dir.join(format!("{cmd}.{ext}"));
+                    if shim.is_file() {
+                        return Some(shim);
+                    }
+                }
             }
         }
         None
@@ -885,7 +912,7 @@ fn which(cmd: &str) -> Option<PathBuf> {
 pub fn check_latest_version(tool: &Tool) -> Option<String> {
     // npm packages: query the npm registry via the npm CLI.
     if tool.name == "incitaciones" {
-        let output = Command::new("npm")
+        let output = npm_command("npm")
             .args(["view", tool.crate_name, "version"])
             .output()
             .ok()?;
