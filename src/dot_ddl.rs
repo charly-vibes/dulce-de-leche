@@ -25,19 +25,21 @@ fn is_sharing_violation(e: &DdlError) -> bool {
 }
 
 /// Run a manifest write operation, retrying transient Windows file locks
-/// (DDL-71i). Freshly-written files are commonly locked for a few hundred
-/// milliseconds by Defender/AV scanning; 4 attempts with a short backoff
-/// ride those out without slowing down real failures.
+/// (DDL-71i). Freshly-written files are commonly locked by Defender/AV
+/// scanning for several seconds; exponential backoff (6 attempts, ~6s
+/// worst case) rides those out without slowing down real failures.
 fn with_sharing_retry<F>(mut op: F) -> Result<()>
 where
     F: FnMut() -> Result<()>,
 {
-    const MAX_ATTEMPTS: u32 = 4;
+    const MAX_ATTEMPTS: u32 = 6;
     for attempt in 1..=MAX_ATTEMPTS {
         match op() {
             Ok(()) => return Ok(()),
             Err(e) if is_sharing_violation(&e) && attempt < MAX_ATTEMPTS => {
-                std::thread::sleep(std::time::Duration::from_millis(100 * u64::from(attempt)));
+                std::thread::sleep(std::time::Duration::from_millis(
+                    100 * 2u64.pow(attempt - 1),
+                ));
             }
             Err(e) => return Err(e),
         }
