@@ -23,7 +23,7 @@ on:
     types: [published]
 
 env:
-  DDL_VERSION: ${{ inputs.ddl_version || github.event.release.tag_name || 'v0.3.0' }}
+  DDL_VERSION: ${{ inputs.ddl_version || github.event.release.tag_name || 'v0.4.0' }}
 
 jobs:
   smoke:
@@ -49,10 +49,12 @@ jobs:
           url="https://github.com/charly-vibes/dulce-de-leche/releases/download/${DDL_VERSION}/${asset}"
           echo "Downloading ${url}"
           curl -fL --retry 3 -o ddl-pkg "${url}"
+          # Expand-Archive requires a .zip extension — normalize the name
+          [ "$ASSET_EXT" = "zip" ] && mv ddl-pkg ddl-pkg.zip && ddl_pkg=ddl-pkg.zip || ddl_pkg=ddl-pkg
           mkdir ddl-bin
           if [ "$ASSET_EXT" = "zip" ]; then
             # Git Bash's GNU tar cannot read zip — use PowerShell instead
-            powershell.exe -NoProfile -Command "Expand-Archive -Path ddl-pkg -DestinationPath ddl-bin -Force"
+            powershell.exe -NoProfile -Command "Expand-Archive -Path ${ddl_pkg} -DestinationPath ddl-bin -Force"
           else
             tar -xzf ddl-pkg -C ddl-bin
             chmod +x ddl-bin/ddl*
