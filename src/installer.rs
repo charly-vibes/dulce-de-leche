@@ -162,6 +162,34 @@ fn get_npm_global_version(package: &str) -> Option<String> {
         .filter(|v| !v.is_empty())
 }
 
+/// GitHub access token for API requests, if available.
+///
+/// Reads `GITHUB_TOKEN` then `GH_TOKEN` (both conventions are common).
+/// Unauthenticated api.github.com requests are limited to 60/hour per IP;
+/// shared CI runners routinely exhaust that quota, so ddl attaches the
+/// token whenever the environment provides one (Actions runners always do).
+fn github_token() -> Option<String> {
+    ["GITHUB_TOKEN", "GH_TOKEN"]
+        .iter()
+        .find_map(|var| std::env::var(var).ok().filter(|t| !t.is_empty()))
+}
+
+/// Build an HTTP client for GitHub API calls: ddl user-agent plus a Bearer
+/// token when one is available (see `github_token`).
+fn github_client() -> Result<reqwest::blocking::Client> {
+    let mut headers = reqwest::header::HeaderMap::new();
+    if let Some(token) = github_token() {
+        let value = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}"))
+            .map_err(|e| DdlError::Other(format!("Invalid GitHub token: {e}")))?;
+        headers.insert(reqwest::header::AUTHORIZATION, value);
+    }
+    reqwest::blocking::Client::builder()
+        .user_agent(format!("ddl/{}", env!("CARGO_PKG_VERSION")))
+        .default_headers(headers)
+        .build()
+        .map_err(|e| DdlError::Other(format!("Failed to create HTTP client: {e}")))
+}
+
 /// Install a tool using the best available method.
 pub fn install_tool(
     tool: &Tool,
@@ -310,10 +338,7 @@ fn install_binary(tool: &Tool, platform: &Platform, verbose: bool) -> Result<()>
         _ => return Err(DdlError::UnsupportedPlatform(platform.as_str())),
     };
 
-    let client = reqwest::blocking::Client::builder()
-        .user_agent(format!("ddl/{}", env!("CARGO_PKG_VERSION")))
-        .build()
-        .map_err(|e| DdlError::Other(format!("Failed to create HTTP client: {e}")))?;
+    let client = github_client()?;
 
     let releases_url = format!("https://api.github.com/repos/{}/releases/latest", tool.repo);
     let resp = client
@@ -326,6 +351,12 @@ fn install_binary(tool: &Tool, platform: &Platform, verbose: bool) -> Result<()>
             tool: tool.name.to_string(),
             url: releases_url,
         });
+    }
+    if resp.status() == reqwest::StatusCode::FORBIDDEN {
+        return Err(DdlError::InstallFailed(format!(
+            "GitHub API rate limit reached for {releases_url}. \
+             Set GITHUB_TOKEN (a PAT with public repo read access) to raise the limit."
+        )));
     }
     if !resp.status().is_success() {
         return Err(DdlError::InstallFailed(format!(
@@ -882,10 +913,7 @@ pub fn check_latest_version(tool: &Tool) -> Option<String> {
         };
     }
 
-    let client = reqwest::blocking::Client::builder()
-        .user_agent(format!("ddl/{}", env!("CARGO_PKG_VERSION")))
-        .build()
-        .ok()?;
+    let client = github_client().ok()?;
 
     let releases_url = format!("https://api.github.com/repos/{}/releases/latest", tool.repo);
     let resp = client.get(&releases_url).send().ok()?;
@@ -951,5 +979,39 @@ mod tests {
         // Must not panic for either value
         verbose_print(true, "trace message");
         verbose_print(false, "trace message");
+    }
+
+    /// github_token reads GITHUB_TOKEN, then GH_TOKEN, and ignores empty
+    /// values. Env vars are process-global, so the test serializes access
+    /// itself and restores prior values afterwards.
+    #[test]
+    fn test_github_token_reads_env() {
+        // SAFETY: env var manipulation in a single-threaded test; values are
+        // saved and restored so other tests see the original environment.
+        unsafe {
+            let saved_gh = std::env::var("GITHUB_TOKEN").ok();
+            let saved_github = std::env::var("GH_TOKEN").ok();
+
+            std::env::remove_var("GITHUB_TOKEN");
+            std::env::remove_var("GH_TOKEN");
+            assert_eq!(github_token(), None);
+
+            std::env::set_var("GITHUB_TOKEN", "tok-1");
+            assert_eq!(github_token(), Some("tok-1".to_string()));
+
+            // Empty GITHUB_TOKEN is ignored, falls through to GH_TOKEN
+            std::env::set_var("GITHUB_TOKEN", "");
+            std::env::set_var("GH_TOKEN", "tok-2");
+            assert_eq!(github_token(), Some("tok-2".to_string()));
+
+            match saved_gh {
+                Some(v) => std::env::set_var("GITHUB_TOKEN", v),
+                None => std::env::remove_var("GITHUB_TOKEN"),
+            }
+            match saved_github {
+                Some(v) => std::env::set_var("GH_TOKEN", v),
+                None => std::env::remove_var("GH_TOKEN"),
+            }
+        }
     }
 }
