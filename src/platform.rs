@@ -196,6 +196,13 @@ pub const MANAGED_TOOLS: &[Tool] = &[
         formula_name: "fabbro",
         repo: "charly-vibes/fabbro",
     },
+    Tool {
+        name: "incitaciones",
+        description: "Reusable prompts and skills for CLI LLM tools",
+        crate_name: "incitaciones",
+        formula_name: "incitaciones",
+        repo: "charly-vibes/incitaciones",
+    },
 ];
 
 /// Find a tool by name (case-insensitive).

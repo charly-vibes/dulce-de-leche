@@ -12,6 +12,7 @@ pub mod installer;
 pub mod manifest;
 pub mod output;
 pub mod platform;
+pub mod skills;
 
 // Re-export DdlConfig for use in tests and by downstream consumers.
 pub use dot_ddl::DdlConfig;

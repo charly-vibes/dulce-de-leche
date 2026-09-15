@@ -25,7 +25,7 @@
 Repo root stays clean — everything lives under `.ddl/`.
 
 <!-- MANAGED-TOOLS:START -->
-Managed tools (8): wai, dont, ah, pretender, testaruda, vampiro, fotos-mcp, fabbro.
+Managed tools (9): wai, dont, ah, pretender, testaruda, vampiro, fotos-mcp, fabbro, incitaciones.
 Run `ddl version` for the full picture. Additions and removals must update this block
 (enforced by `tests/tool_registry_drift.rs`).
 <!-- MANAGED-TOOLS:END -->

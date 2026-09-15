@@ -14,7 +14,7 @@ const README: &str = include_str!("../README.md");
 const ECOSYSTEM_MAP: &str = include_str!("../docs/ecosystem-map.md");
 
 /// Tools that are install-only (no legacy config to migrate).
-const INSTALL_ONLY: &[&str] = &["fotos-mcp"];
+const INSTALL_ONLY: &[&str] = &["fotos-mcp", "incitaciones"];
 
 fn registry_names() -> Vec<&'static str> {
     MANAGED_TOOLS.iter().map(|t| t.name).collect()

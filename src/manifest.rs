@@ -86,5 +86,6 @@ pub const EMBEDDED_COMPATIBILITY: &str = r#"{
     "testaruda": ">=0.2.0",
     "vampiro": ">=0.4.0",
     "fotos-mcp": ">=0.3.0",
-    "fabbro": ">=0.0.0"
+    "fabbro": ">=0.0.0",
+    "incitaciones": ">=0.8.0"
 }"#;

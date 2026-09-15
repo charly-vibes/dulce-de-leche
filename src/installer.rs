@@ -1,9 +1,10 @@
-//! Installation chain — binary download, cargo install, brew install, scoop install.
+//! Installation chain — binary download, cargo install, brew install, scoop install, npm install.
 //!
 //! Fallback order: binary download → cargo install → brew/scoop install.
 //! Binary download is the preferred path — no prerequisites beyond curl/wget.
 //! On 404 (binary not published), ddl reports the error rather than falling
 //! back to cargo (per spec — avoids unexpected behavior).
+//! npm-distributed tools (incitaciones) always install via npm.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -37,6 +38,7 @@ pub enum InstallMethod {
     Cargo,
     Brew,
     Scoop,
+    Npm,
     Skipped,
 }
 
@@ -47,6 +49,7 @@ impl std::fmt::Display for InstallMethod {
             Self::Cargo => write!(f, "cargo install"),
             Self::Brew => write!(f, "brew install"),
             Self::Scoop => write!(f, "scoop install"),
+            Self::Npm => write!(f, "npm install"),
             Self::Skipped => write!(f, "skipped"),
         }
     }
@@ -84,6 +87,13 @@ impl InstallMethod {
                     ));
                 }
             }
+            Self::Npm => {
+                if which("npm").is_none() && which("npx").is_none() {
+                    return Err(DdlError::PrerequisiteMissing(
+                        "npm is not installed. Install Node.js via https://nodejs.org".to_string(),
+                    ));
+                }
+            }
             Self::Skipped => {}
         }
         Ok(())
@@ -92,6 +102,11 @@ impl InstallMethod {
 
 /// Determine the best installation method for a tool on the current platform.
 pub fn best_install_method(tool: &Tool, platform: &Platform) -> InstallMethod {
+    // npm-distributed tools install via npm on every platform — they have no
+    // brew formula, cargo crate, or GitHub release binary.
+    if tool.name == "incitaciones" {
+        return InstallMethod::Npm;
+    }
     match platform.os {
         Os::Macos => {
             if PackageManager::Brew.is_available() && !is_placeholder_formula(tool) {
@@ -126,6 +141,10 @@ pub fn is_tool_installed(name: &str) -> bool {
 
 /// Get the version of an installed tool.
 pub fn get_installed_version(name: &str) -> Option<String> {
+    // npm packages don't support `--version` uniformly — ask npm instead.
+    if name == "incitaciones" {
+        return get_npm_global_version(name);
+    }
     let output = Command::new(name).arg("--version").output().ok()?;
     if !output.status.success() {
         return None;
@@ -148,6 +167,24 @@ pub fn get_installed_version(name: &str) -> Option<String> {
     } else {
         Some(first_line.to_string())
     }
+}
+
+/// Get the globally installed npm version of a package via `npm list -g`.
+fn get_npm_global_version(package: &str) -> Option<String> {
+    let output = Command::new("npm")
+        .args(["list", "-g", package, "--depth=0"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout
+        .lines()
+        .find(|l| l.contains(&format!("{package}@")))
+        .and_then(|l| l.rsplit('@').next())
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
 }
 
 /// Check if a Homebrew formula is a placeholder (version 0.0.0).
@@ -189,6 +226,7 @@ pub fn install_tool(
         InstallMethod::Cargo => install_cargo(tool, verbose),
         InstallMethod::Brew => install_brew(tool, verbose),
         InstallMethod::Scoop => install_scoop(tool, verbose),
+        InstallMethod::Npm => install_npm(tool, verbose),
         InstallMethod::Skipped => unreachable!(),
     };
 
@@ -468,6 +506,30 @@ fn install_brew(tool: &Tool, verbose: bool) -> Result<()> {
     }
 }
 
+/// Install a tool via npm (global).
+fn install_npm(tool: &Tool, verbose: bool) -> Result<()> {
+    verbose_print(
+        verbose,
+        &format!("running: npm install -g {}", tool.crate_name),
+    );
+    let status = Command::new("npm")
+        .args(["install", "-g", tool.crate_name])
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .status()
+        .map_err(|e| DdlError::InstallFailed(format!("Failed to run npm: {e}")))?;
+
+    if status.success() {
+        Ok(())
+    } else {
+        Err(DdlError::InstallFailed(format!(
+            "npm install -g {} exited with code {}",
+            tool.crate_name,
+            status.code().unwrap_or(-1)
+        )))
+    }
+}
+
 fn install_scoop(tool: &Tool, verbose: bool) -> Result<()> {
     verbose_print(
         verbose,
@@ -586,6 +648,7 @@ pub fn upgrade_tool(
             "cargo install" => InstallMethod::Cargo,
             "binary download" => InstallMethod::Binary,
             "scoop install" => InstallMethod::Scoop,
+            "npm install" => InstallMethod::Npm,
             // Fall back to best method for unknown sources
             _ => best_install_method(tool, platform),
         },
@@ -600,6 +663,7 @@ pub fn upgrade_tool(
         InstallMethod::Cargo => upgrade_cargo(tool, verbose),
         InstallMethod::Binary => upgrade_binary(tool, platform, verbose),
         InstallMethod::Scoop => upgrade_scoop(tool, verbose),
+        InstallMethod::Npm => upgrade_npm(tool, verbose),
         InstallMethod::Skipped => unreachable!(),
     };
 
@@ -711,6 +775,30 @@ fn upgrade_cargo(tool: &Tool, verbose: bool) -> Result<()> {
     }
 }
 
+/// Upgrade a tool installed via npm (reinstall at latest).
+fn upgrade_npm(tool: &Tool, verbose: bool) -> Result<()> {
+    verbose_print(
+        verbose,
+        &format!("running: npm install -g {}@latest", tool.crate_name),
+    );
+    let status = Command::new("npm")
+        .args(["install", "-g", &format!("{}@latest", tool.crate_name)])
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .status()
+        .map_err(|e| DdlError::InstallFailed(format!("Failed to run npm: {e}")))?;
+
+    if status.success() {
+        Ok(())
+    } else {
+        Err(DdlError::InstallFailed(format!(
+            "npm install -g {}@latest exited with code {}",
+            tool.crate_name,
+            status.code().unwrap_or(-1)
+        )))
+    }
+}
+
 /// Upgrade a tool installed via binary download (re-download).
 fn upgrade_binary(tool: &Tool, platform: &Platform, verbose: bool) -> Result<()> {
     // Re-download the binary — same as install_binary but without the
@@ -795,6 +883,24 @@ fn which(cmd: &str) -> Option<PathBuf> {
 
 /// Check the latest available version of a tool from its GitHub releases.
 pub fn check_latest_version(tool: &Tool) -> Option<String> {
+    // npm packages: query the npm registry via the npm CLI.
+    if tool.name == "incitaciones" {
+        let output = Command::new("npm")
+            .args(["view", tool.crate_name, "version"])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let version = stdout.trim();
+        return if version.is_empty() {
+            None
+        } else {
+            Some(version.to_string())
+        };
+    }
+
     let client = reqwest::blocking::Client::builder()
         .user_agent(format!("ddl/{}", env!("CARGO_PKG_VERSION")))
         .build()
