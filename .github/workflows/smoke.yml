@@ -45,6 +45,10 @@ jobs:
             asset_os: windows_amd64
     env:
       ASSET_EXT: ${{ matrix.os == 'windows-latest' && 'zip' || 'tar.gz' }}
+      # ddl attaches this token to GitHub API calls (DDL-2rb) — without it,
+      # shared-runner IPs exhaust the anonymous 60 req/hr quota and installs
+      # fail intermittently with 403. Also verifies the token code path.
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout
         if: ${{ inputs.build_from_source }}
