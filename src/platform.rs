@@ -217,6 +217,14 @@ pub const MANAGED_TOOLS: &[Tool] = &[
         repo: "charly-vibes/incitaciones",
         npm_package: Some("incitaciones"),
     },
+    Tool {
+        name: "turu",
+        description: "Deterministic knowledge workspace management (whisper-vibes)",
+        crate_name: "whisper-vibes",
+        formula_name: "turu",
+        repo: "charly-vibes/whisper",
+        npm_package: None,
+    },
 ];
 
 /// Find a tool by name (case-insensitive).
