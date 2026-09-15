@@ -152,22 +152,22 @@ fn cmd_init(
             // so the tail work (forced wai init, skill checks) still runs.
             Vec::new()
         } else {
+            let selected: Vec<&str> =
+                cliclack::multiselect("Which tools would you like to install?")
+                    .items(&items)
+                    .interact()
+                    .map_err(|e| DdlError::Other(format!("Selection cancelled: {e}")))?;
 
-        let selected: Vec<&str> = cliclack::multiselect("Which tools would you like to install?")
-            .items(&items)
-            .interact()
-            .map_err(|e| DdlError::Other(format!("Selection cancelled: {e}")))?;
+            let confirmed = cliclack::confirm("Proceed with installation?")
+                .interact()
+                .map_err(|e| DdlError::Other(format!("Confirmation cancelled: {e}")))?;
 
-        let confirmed = cliclack::confirm("Proceed with installation?")
-            .interact()
-            .map_err(|e| DdlError::Other(format!("Confirmation cancelled: {e}")))?;
+            if !confirmed {
+                output::print_success("Installation cancelled.", args.is_json());
+                return Ok(());
+            }
 
-        if !confirmed {
-            output::print_success("Installation cancelled.", args.is_json());
-            return Ok(());
-        }
-
-        selected.into_iter().map(|s| s.to_string()).collect()
+            selected.into_iter().map(|s| s.to_string()).collect()
         }
     };
 
@@ -314,9 +314,7 @@ fn ensure_incitaciones_skills(
     let status = dulce_de_leche::skills::skill_status();
     if status.has_global() {
         if !args.is_json() {
-            let ver = status
-                .global_version
-                .unwrap_or_else(|| "?".to_string());
+            let ver = status.global_version.unwrap_or_else(|| "?".to_string());
             println!("  ✓ incitaciones skills installed globally (npm:{ver})");
         }
         return Ok(());
@@ -345,24 +343,19 @@ fn ensure_incitaciones_skills(
     } else {
         ""
     };
-    let choice: String =
-        cliclack::select(format!(
-            "incitaciones skills are not installed globally.{local_note} Install them?"
-        ))
-        .item(
-            "global",
-            "Global",
-            "~/.agents/skills/ — available in all projects (recommended)",
-        )
-        .item(
-            "local",
-            "Local",
-            ".agents/skills/ — this project only",
-        )
-        .item("skip", "Skip", "Don't install skills now")
-        .interact()
-        .map_err(|e| DdlError::Other(format!("Selection cancelled: {e}")))?
-        .to_string();
+    let choice: String = cliclack::select(format!(
+        "incitaciones skills are not installed globally.{local_note} Install them?"
+    ))
+    .item(
+        "global",
+        "Global",
+        "~/.agents/skills/ — available in all projects (recommended)",
+    )
+    .item("local", "Local", ".agents/skills/ — this project only")
+    .item("skip", "Skip", "Don't install skills now")
+    .interact()
+    .map_err(|e| DdlError::Other(format!("Selection cancelled: {e}")))?
+    .to_string();
 
     match choice.as_str() {
         "global" => install_skills_scope(true, args),
