@@ -1,10 +1,11 @@
-//! Installation chain — binary download, cargo install, brew install, scoop install, npm install.
+//! Installation chain — binary download (primary), cargo install (fallback), npm install.
 //!
-//! Fallback order: binary download → cargo install → brew/scoop install.
-//! Binary download is the preferred path — no prerequisites beyond curl/wget.
-//! On 404 (binary not published), ddl reports the error rather than falling
-//! back to cargo (per spec — avoids unexpected behavior).
-//! npm-distributed tools (incitaciones) always install via npm.
+//! Policy (DDL-ei3): prebuilt binary first on every platform — no prerequisites
+//! beyond curl/wget. When the release has no binary for the platform (404),
+//! fall back to `cargo install` if cargo is available; otherwise fail with an
+//! error naming both remedies. npm-distributed tools (incitaciones) always
+//! install via npm. Homebrew and Scoop are not part of ddl's install decisions;
+//! their formulas/manifests remain published for manual installs.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -36,8 +37,6 @@ pub struct InstallResult {
 pub enum InstallMethod {
     Binary,
     Cargo,
-    Brew,
-    Scoop,
     Npm,
     Skipped,
 }
@@ -47,8 +46,6 @@ impl std::fmt::Display for InstallMethod {
         match self {
             Self::Binary => write!(f, "binary download"),
             Self::Cargo => write!(f, "cargo install"),
-            Self::Brew => write!(f, "brew install"),
-            Self::Scoop => write!(f, "scoop install"),
             Self::Npm => write!(f, "npm install"),
             Self::Skipped => write!(f, "skipped"),
         }
@@ -63,20 +60,6 @@ impl InstallMethod {
                 if which("cargo").is_none() {
                     return Err(DdlError::PrerequisiteMissing(
                         "cargo is not installed. Install Rust via https://rustup.rs".to_string(),
-                    ));
-                }
-            }
-            Self::Brew => {
-                if which("brew").is_none() {
-                    return Err(DdlError::PrerequisiteMissing(
-                        "Homebrew is not installed. Install via https://brew.sh".to_string(),
-                    ));
-                }
-            }
-            Self::Scoop => {
-                if which("scoop").is_none() {
-                    return Err(DdlError::PrerequisiteMissing(
-                        "Scoop is not installed. Install via https://scoop.sh".to_string(),
                     ));
                 }
             }
@@ -103,38 +86,27 @@ impl InstallMethod {
     }
 }
 
-/// Determine the best installation method for a tool on the current platform.
-pub fn best_install_method(tool: &Tool, platform: &Platform) -> InstallMethod {
-    // npm-distributed tools install via npm on every platform — they have no
-    // brew formula, cargo crate, or GitHub release binary.
+/// Determine the installation method for a tool on the current platform.
+///
+/// Policy (DDL-ei3): prebuilt binary first on every platform; cargo is a
+/// runtime fallback applied when the binary download fails because no release
+/// binary was published (see `fallback_after_binary_failure`). npm-distributed
+/// tools (incitaciones) always install via npm.
+pub fn best_install_method(tool: &Tool, _platform: &Platform) -> InstallMethod {
     if tool.npm_package.is_some() {
-        return InstallMethod::Npm;
+        InstallMethod::Npm
+    } else {
+        InstallMethod::Binary
     }
-    match platform.os {
-        Os::Macos => {
-            if PackageManager::Brew.is_available() && !is_placeholder_formula(tool) {
-                InstallMethod::Brew
-            } else if PackageManager::Cargo.is_available() {
-                InstallMethod::Cargo
-            } else {
-                InstallMethod::Binary
-            }
-        }
-        Os::Linux => {
-            if PackageManager::Cargo.is_available() {
-                InstallMethod::Cargo
-            } else {
-                InstallMethod::Binary
-            }
-        }
-        Os::Windows => {
-            if PackageManager::Scoop.is_available() {
-                InstallMethod::Scoop
-            } else {
-                InstallMethod::Binary
-            }
-        }
-    }
+}
+
+/// Decide the follow-up method when the binary download path fails because no
+/// release binary was published for this platform.
+///
+/// Cargo is the only fallback (DDL-ei3). Returns `None` when cargo is not
+/// available — the caller then fails with an error naming both remedies.
+pub fn fallback_after_binary_failure(cargo_available: bool) -> Option<InstallMethod> {
+    cargo_available.then_some(InstallMethod::Cargo)
 }
 
 /// Check if a tool is already installed on PATH.
@@ -190,20 +162,6 @@ fn get_npm_global_version(package: &str) -> Option<String> {
         .filter(|v| !v.is_empty())
 }
 
-/// Check if a Homebrew formula is a placeholder (version 0.0.0).
-pub fn is_placeholder_formula(tool: &Tool) -> bool {
-    let output = Command::new("brew")
-        .args(["info", "--json=v2", tool.formula_name])
-        .output();
-    match output {
-        Ok(out) if out.status.success() => {
-            let stdout = String::from_utf8_lossy(&out.stdout);
-            stdout.contains("\"version\":\"0.0.0\"") || stdout.contains("\"version\": \"0.0.0\"")
-        }
-        _ => true,
-    }
-}
-
 /// Install a tool using the best available method.
 pub fn install_tool(
     tool: &Tool,
@@ -224,13 +182,40 @@ pub fn install_tool(
         };
     }
 
-    let result = match method {
-        InstallMethod::Binary => install_binary(tool, platform, verbose),
-        InstallMethod::Cargo => install_cargo(tool, verbose),
-        InstallMethod::Brew => install_brew(tool, verbose),
-        InstallMethod::Scoop => install_scoop(tool, verbose),
-        InstallMethod::Npm => install_npm(tool, verbose),
-        InstallMethod::Skipped => unreachable!(),
+    let (method, result) = match method {
+        InstallMethod::Binary => match install_binary(tool, platform, verbose) {
+            Ok(()) => (InstallMethod::Binary, Ok(())),
+            // Definitive miss (no release asset for this platform): fall back
+            // to cargo when available. Transient failures do NOT fall back.
+            Err(DdlError::NoReleaseBinary { .. }) => {
+                match fallback_after_binary_failure(PackageManager::Cargo.is_available()) {
+                    Some(InstallMethod::Cargo) => {
+                        verbose_print(
+                            verbose,
+                            &format!(
+                                "⚠ {} binary not yet available for this platform — using cargo install instead",
+                                tool.name
+                            ),
+                        );
+                        (InstallMethod::Cargo, install_cargo(tool, verbose))
+                    }
+                    _ => (
+                        InstallMethod::Binary,
+                        Err(DdlError::InstallFailed(format!(
+                            "⚠ {} binary not yet available for this platform, and cargo is not installed. \
+                             Install Rust (https://rustup.rs) or download the binary manually from \
+                             https://github.com/{}/releases",
+                            tool.name, tool.repo
+                        ))),
+                    ),
+                }
+            }
+            Err(e) => (InstallMethod::Binary, Err(e)),
+        },
+        other => {
+            let result = execute_install(&other, tool, platform, verbose);
+            (other, result)
+        }
     };
 
     let detected = get_installed_version(tool.name).unwrap_or_else(|| "unknown".to_string());
@@ -275,6 +260,36 @@ pub fn install_tool(
     }
 }
 
+/// Dispatch a single install attempt for the given method.
+fn execute_install(
+    method: &InstallMethod,
+    tool: &Tool,
+    platform: &Platform,
+    verbose: bool,
+) -> Result<()> {
+    match method {
+        InstallMethod::Binary => install_binary(tool, platform, verbose),
+        InstallMethod::Cargo => install_cargo(tool, verbose),
+        InstallMethod::Npm => install_npm(tool, verbose),
+        InstallMethod::Skipped => unreachable!(),
+    }
+}
+
+/// Dispatch a single upgrade attempt for the given method.
+fn execute_upgrade(
+    method: &InstallMethod,
+    tool: &Tool,
+    platform: &Platform,
+    verbose: bool,
+) -> Result<()> {
+    match method {
+        InstallMethod::Binary => upgrade_binary(tool, platform, verbose),
+        InstallMethod::Cargo => upgrade_cargo(tool, verbose),
+        InstallMethod::Npm => upgrade_npm(tool, verbose),
+        InstallMethod::Skipped => unreachable!(),
+    }
+}
+
 /// Install a tool via binary download from GitHub releases.
 fn install_binary(tool: &Tool, platform: &Platform, verbose: bool) -> Result<()> {
     let binary_name = if platform.os == Os::Windows {
@@ -307,10 +322,10 @@ fn install_binary(tool: &Tool, platform: &Platform, verbose: bool) -> Result<()>
         .map_err(DdlError::Network)?;
 
     if resp.status() == reqwest::StatusCode::NOT_FOUND {
-        return Err(DdlError::InstallFailed(format!(
-            "No releases found for {} — the first release may not be published yet. Try `cargo install {}` manually.",
-            tool.repo, tool.crate_name
-        )));
+        return Err(DdlError::NoReleaseBinary {
+            tool: tool.name.to_string(),
+            url: releases_url,
+        });
     }
     if !resp.status().is_success() {
         return Err(DdlError::InstallFailed(format!(
@@ -364,7 +379,7 @@ fn install_binary(tool: &Tool, platform: &Platform, verbose: bool) -> Result<()>
     let dest_path = dest_dir.join(&binary_name);
 
     if ext == "zip" {
-        download_and_extract_zip(&download_url, &dest_path)?;
+        download_and_extract_zip(&download_url, &dest_path, tool.name)?;
     } else {
         download_and_extract_tar_gz(&download_url, &dest_path, tool.name)?;
     }
@@ -382,13 +397,14 @@ fn install_binary(tool: &Tool, platform: &Platform, verbose: bool) -> Result<()>
     Ok(())
 }
 
-fn download_and_extract_tar_gz(url: &str, dest: &Path, binary_name: &str) -> Result<()> {
+fn download_and_extract_tar_gz(url: &str, dest: &Path, tool_name: &str) -> Result<()> {
     let response = reqwest::blocking::get(url).map_err(DdlError::Network)?;
 
     if response.status() == reqwest::StatusCode::NOT_FOUND {
-        return Err(DdlError::InstallFailed(format!(
-            "Binary not found at {url} — the release may not include this platform yet."
-        )));
+        return Err(DdlError::NoReleaseBinary {
+            tool: tool_name.to_string(),
+            url: url.to_string(),
+        });
     }
     if !response.status().is_success() {
         return Err(DdlError::InstallFailed(format!(
@@ -408,7 +424,7 @@ fn download_and_extract_tar_gz(url: &str, dest: &Path, binary_name: &str) -> Res
     {
         let mut entry = entry.map_err(|e| DdlError::Other(e.to_string()))?;
         let path = entry.path().map_err(|e| DdlError::Other(e.to_string()))?;
-        if path.file_name().is_some_and(|f| f == binary_name) {
+        if path.file_name().is_some_and(|f| f == tool_name) {
             entry.unpack(dest).map_err(DdlError::Io)?;
             return Ok(());
         }
@@ -416,17 +432,18 @@ fn download_and_extract_tar_gz(url: &str, dest: &Path, binary_name: &str) -> Res
 
     Err(DdlError::InstallFailed(format!(
         "Binary '{}' not found in archive from {url}",
-        binary_name
+        tool_name
     )))
 }
 
-fn download_and_extract_zip(url: &str, dest: &Path) -> Result<()> {
+fn download_and_extract_zip(url: &str, dest: &Path, tool_name: &str) -> Result<()> {
     let response = reqwest::blocking::get(url).map_err(DdlError::Network)?;
 
     if response.status() == reqwest::StatusCode::NOT_FOUND {
-        return Err(DdlError::InstallFailed(format!(
-            "Binary not found at {url} — the release may not include Windows yet."
-        )));
+        return Err(DdlError::NoReleaseBinary {
+            tool: tool_name.to_string(),
+            url: url.to_string(),
+        });
     }
     if !response.status().is_success() {
         return Err(DdlError::InstallFailed(format!(
@@ -486,29 +503,6 @@ fn install_cargo(tool: &Tool, verbose: bool) -> Result<()> {
     }
 }
 
-fn install_brew(tool: &Tool, verbose: bool) -> Result<()> {
-    verbose_print(
-        verbose,
-        &format!("running: brew install {}", tool.formula_name),
-    );
-    let status = Command::new("brew")
-        .args(["install", tool.formula_name])
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .status()
-        .map_err(|e| DdlError::InstallFailed(format!("Failed to run brew: {e}")))?;
-
-    if status.success() {
-        Ok(())
-    } else {
-        Err(DdlError::InstallFailed(format!(
-            "brew install {} exited with code {}",
-            tool.formula_name,
-            status.code().unwrap_or(-1)
-        )))
-    }
-}
-
 /// Install a tool via npm (global).
 fn install_npm(tool: &Tool, verbose: bool) -> Result<()> {
     verbose_print(
@@ -528,29 +522,6 @@ fn install_npm(tool: &Tool, verbose: bool) -> Result<()> {
         Err(DdlError::InstallFailed(format!(
             "npm install -g {} exited with code {}",
             tool.crate_name,
-            status.code().unwrap_or(-1)
-        )))
-    }
-}
-
-fn install_scoop(tool: &Tool, verbose: bool) -> Result<()> {
-    verbose_print(
-        verbose,
-        &format!("running: scoop install {}", tool.formula_name),
-    );
-    let status = Command::new("scoop")
-        .args(["install", tool.formula_name])
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .status()
-        .map_err(|e| DdlError::InstallFailed(format!("Failed to run scoop: {e}")))?;
-
-    if status.success() {
-        Ok(())
-    } else {
-        Err(DdlError::InstallFailed(format!(
-            "scoop install {} exited with code {}",
-            tool.formula_name,
             status.code().unwrap_or(-1)
         )))
     }
@@ -644,30 +615,54 @@ pub fn upgrade_tool(
     manifest: &mut Manifest,
     verbose: bool,
 ) -> InstallResult {
-    // Determine the upgrade method based on the manifest's recorded source
+    // Determine the upgrade method based on the manifest's recorded source.
+    // Keeping the recorded channel avoids PATH shadowing (e.g. re-routing a
+    // cargo-installed tool to a binary download would leave two copies on
+    // PATH). Legacy brew/scoop records upgrade via the binary-first chain.
     let method = match manifest.get_tool(tool.name) {
         Some(entry) => match entry.source.as_str() {
-            "brew install" => InstallMethod::Brew,
             "cargo install" => InstallMethod::Cargo,
-            "binary download" => InstallMethod::Binary,
-            "scoop install" => InstallMethod::Scoop,
             "npm install" => InstallMethod::Npm,
-            // Fall back to best method for unknown sources
-            _ => best_install_method(tool, platform),
+            _ => InstallMethod::Binary,
         },
-        // Not in manifest — use best method
+        // Not in manifest — use the standard policy
         None => best_install_method(tool, platform),
     };
 
     let old_version = get_installed_version(tool.name);
 
-    let result = match method {
-        InstallMethod::Brew => upgrade_brew(tool, verbose),
-        InstallMethod::Cargo => upgrade_cargo(tool, verbose),
-        InstallMethod::Binary => upgrade_binary(tool, platform, verbose),
-        InstallMethod::Scoop => upgrade_scoop(tool, verbose),
-        InstallMethod::Npm => upgrade_npm(tool, verbose),
-        InstallMethod::Skipped => unreachable!(),
+    let (method, result) = match method {
+        InstallMethod::Binary => match upgrade_binary(tool, platform, verbose) {
+            Ok(()) => (InstallMethod::Binary, Ok(())),
+            Err(DdlError::NoReleaseBinary { .. }) => {
+                match fallback_after_binary_failure(PackageManager::Cargo.is_available()) {
+                    Some(InstallMethod::Cargo) => {
+                        verbose_print(
+                            verbose,
+                            &format!(
+                                "⚠ {} binary not yet available for this platform — using cargo install instead",
+                                tool.name
+                            ),
+                        );
+                        (InstallMethod::Cargo, upgrade_cargo(tool, verbose))
+                    }
+                    _ => (
+                        InstallMethod::Binary,
+                        Err(DdlError::InstallFailed(format!(
+                            "⚠ {} binary not yet available for this platform, and cargo is not installed. \
+                             Install Rust (https://rustup.rs) or download the binary manually from \
+                             https://github.com/{}/releases",
+                            tool.name, tool.repo
+                        ))),
+                    ),
+                }
+            }
+            Err(e) => (InstallMethod::Binary, Err(e)),
+        },
+        other => {
+            let result = execute_upgrade(&other, tool, platform, verbose);
+            (other, result)
+        }
     };
 
     let new_version = get_installed_version(tool.name);
@@ -729,30 +724,6 @@ pub fn upgrade_tool(
     }
 }
 
-/// Upgrade a tool installed via Homebrew.
-fn upgrade_brew(tool: &Tool, verbose: bool) -> Result<()> {
-    verbose_print(
-        verbose,
-        &format!("running: brew upgrade {}", tool.formula_name),
-    );
-    let status = Command::new("brew")
-        .args(["upgrade", tool.formula_name])
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .status()
-        .map_err(|e| DdlError::InstallFailed(format!("Failed to run brew upgrade: {e}")))?;
-
-    if status.success() {
-        Ok(())
-    } else {
-        Err(DdlError::InstallFailed(format!(
-            "brew upgrade {} exited with code {}",
-            tool.formula_name,
-            status.code().unwrap_or(-1)
-        )))
-    }
-}
-
 /// Upgrade a tool installed via cargo.
 fn upgrade_cargo(tool: &Tool, verbose: bool) -> Result<()> {
     verbose_print(
@@ -807,30 +778,6 @@ fn upgrade_binary(tool: &Tool, platform: &Platform, verbose: bool) -> Result<()>
     // Re-download the binary — same as install_binary but without the
     // is_tool_installed check (which is handled by the caller)
     install_binary(tool, platform, verbose)
-}
-
-/// Upgrade a tool installed via Scoop.
-fn upgrade_scoop(tool: &Tool, verbose: bool) -> Result<()> {
-    verbose_print(
-        verbose,
-        &format!("running: scoop update {}", tool.formula_name),
-    );
-    let status = Command::new("scoop")
-        .args(["update", tool.formula_name])
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .status()
-        .map_err(|e| DdlError::InstallFailed(format!("Failed to run scoop update: {e}")))?;
-
-    if status.success() {
-        Ok(())
-    } else {
-        Err(DdlError::InstallFailed(format!(
-            "scoop update {} exited with code {}",
-            tool.formula_name,
-            status.code().unwrap_or(-1)
-        )))
-    }
 }
 
 /// Upgrade all tools recorded in the manifest.

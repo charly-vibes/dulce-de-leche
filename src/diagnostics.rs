@@ -106,7 +106,7 @@ impl DoctorCheck for PrerequisitesCheck {
         _repo_root: &Path,
     ) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
         let mut results = Vec::new();
-        for prereq in &["curl", "git", "cargo", "brew", "scoop"] {
+        for prereq in &["curl", "git", "cargo"] {
             if which(prereq).is_some() {
                 results.push(LintResult::new(
                     format!("{prereq} found on PATH"),

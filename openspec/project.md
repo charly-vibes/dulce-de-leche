@@ -20,7 +20,7 @@ The core value proposition is: **one binary, one command, any platform.** Downlo
 
 - **Subprocess protocol**: ddl communicates with each tool via subprocess calls (e.g., `wai status --json`). No shared library linking. This decouples release cycles.
 - **Platform detection**: ddl detects the OS and architecture at runtime and selects the appropriate installation strategy.
-- **Fallback chain**: binary download → cargo install → brew/scoop install. The most reliable path is tried first.
+- **Fallback chain**: binary download → cargo install (when no release binary is published and cargo is available). npm for incitaciones. Homebrew/Scoop are not part of ddl's install decisions — their formulas/manifests remain published for manual installs.
 - **Idempotent operations**: every command can be re-run safely. No destructive side effects without confirmation.
 
 ### Directory Structure

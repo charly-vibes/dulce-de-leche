@@ -29,6 +29,12 @@ pub enum DdlError {
     #[diagnostic(help("Check network connectivity and try again"))]
     InstallFailed(String),
 
+    // Note: no #[diagnostic(help)] on this variant — miette's derive mis-lints
+    // named-field variants (unused_assignments false positive); the remedy text
+    // is carried by the InstallFailed message built at the fallback site.
+    #[error("No release binary for {tool}: {url}")]
+    NoReleaseBinary { tool: String, url: String },
+
     #[error("Prerequisite missing: {0}")]
     #[diagnostic(help("Install the prerequisite and try again"))]
     PrerequisiteMissing(String),

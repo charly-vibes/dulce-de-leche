@@ -119,4 +119,4 @@ From `homebrew-charly/`:
 
 Scoop mirrors the same versions for Windows. All formula hashes were computed from downloaded release assets and cross-verified against each release's published `checksums.txt`.
 
-Only **dont** and **fabbro** remain blocked on upstream releases. ddl automatically falls back to `cargo install` for tools whose formulas are placeholders (`is_placeholder_formula` in `src/installer.rs`), so `ddl init` works either way.
+Only **dont** and **fabbro** remain blocked on upstream releases. ddl automatically falls back to `cargo install` for tools whose release binaries are not yet published, so `ddl init` works either way. (Since DDL-ei3, brew/scoop are not part of ddl's install decisions — the tap and bucket below serve manual installs.)

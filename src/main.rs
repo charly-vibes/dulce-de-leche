@@ -4,8 +4,8 @@ use std::process;
 
 use dulce_de_leche::dot_ddl::DdlDir;
 use dulce_de_leche::error::{DdlError, Result};
-use dulce_de_leche::installer::InstallMethod;
 use dulce_de_leche::output;
+use dulce_de_leche::platform::PackageManager;
 use genesis::cli::maybe_print_version_json;
 use genesis::envelope::EnvelopeKind;
 
@@ -77,25 +77,12 @@ fn cmd_init(
     output::print_banner(args.is_json());
     if !args.is_json() {
         println!("Detected platform: {} ({})", platform.os, platform.arch);
-        match platform.os {
-            dulce_de_leche::platform::Os::Macos => {
-                if InstallMethod::Brew.check_prerequisites().is_ok() {
-                    println!("Available package manager: brew");
-                } else {
-                    println!("Available package manager: cargo / binary download");
-                }
-            }
-            dulce_de_leche::platform::Os::Linux => {
-                println!("Available package manager: cargo / binary download");
-            }
-            dulce_de_leche::platform::Os::Windows => {
-                if InstallMethod::Scoop.check_prerequisites().is_ok() {
-                    println!("Available package manager: scoop");
-                } else {
-                    println!("Available package manager: binary download");
-                }
-            }
-        }
+        let cargo_fallback = if PackageManager::Cargo.is_available() {
+            "available"
+        } else {
+            "not installed"
+        };
+        println!("Install method: binary download (primary); cargo fallback: {cargo_fallback}");
     }
 
     let mut ddl_dir = DdlDir::find_or_create()?;

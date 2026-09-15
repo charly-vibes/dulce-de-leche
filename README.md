@@ -79,7 +79,7 @@ Result: a new user runs **5+ install commands** and **5+ init commands** before 
 
 **dulce-de-leche** (`ddl`) is a thin orchestrator that:
 
-1. **Installs** all tools via the platform-native package manager (brew on macOS, cargo on Linux, scoop on Windows)
+1. **Installs** all tools as prebuilt binaries from GitHub releases (primary path on every platform), falling back to `cargo install` when no release binary exists and cargo is available; incitaciones installs via npm
 2. **Configures** them under a single `.ddl/` directory — no root pollution
 3. **Migrates** existing configs from `.wai/`, `.dont/`, etc. into `.ddl/` (via symlinks in Phase 1)
 4. **Reports** status across the whole toolset in one command
