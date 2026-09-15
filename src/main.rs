@@ -148,12 +148,10 @@ fn cmd_init(
         };
 
         if items.is_empty() {
-            output::print_success(
-                "All tools are already installed and configured.",
-                args.is_json(),
-            );
-            return Ok(());
-        }
+            // Everything is installed — fall through with an empty selection
+            // so the tail work (forced wai init, skill checks) still runs.
+            Vec::new()
+        } else {
 
         let selected: Vec<&str> = cliclack::multiselect("Which tools would you like to install?")
             .items(&items)
@@ -170,6 +168,7 @@ fn cmd_init(
         }
 
         selected.into_iter().map(|s| s.to_string()).collect()
+        }
     };
 
     if no_install {
@@ -226,9 +225,12 @@ fn cmd_init(
             );
         }
 
-        // Run init commands for successfully installed tools
+        // Run init commands for successfully installed tools.
+        // wai is skipped here — it's force-initialized below so that
+        // `ddl init` always guarantees the .wai/ structure, even when
+        // wai was already installed before this run.
         for result in &results {
-            if result.success {
+            if result.success && result.tool != "wai" {
                 let tool = dulce_de_leche::platform::find_tool(result.tool);
                 if let Some(t) = tool {
                     let _ = dulce_de_leche::installer::run_tool_init(
@@ -267,12 +269,134 @@ fn cmd_init(
 
     ddl_dir.add_gitignore_entries(args.yes)?;
 
+    // Force the wai way — every `ddl init` ensures the .wai/ PARA structure
+    // exists, even when wai was already installed (wai init is idempotent).
+    // This runs regardless of the install phase above. Init failures are
+    // advisory — they never abort the whole run (same policy as the
+    // per-tool init loop above).
+    if dulce_de_leche::installer::is_tool_installed("wai") {
+        if let Some(wai_tool) = dulce_de_leche::platform::find_tool("wai") {
+            let _ = dulce_de_leche::installer::run_tool_init(
+                wai_tool,
+                args.verbose_quiet.raw_count() >= 1,
+            );
+        }
+    } else if !args.is_json() {
+        println!("  ⚠ wai not found on PATH — run `ddl install wai` to enable the wai workflow");
+    }
+
+    // Only prompt when incitaciones is actually part of this init's scope —
+    // freshly selected, already tracked in the manifest, or non-interactive
+    // (which installs everything). Otherwise just hint.
+    let incit_selected = selected_tools.iter().any(|t| t == "incitaciones");
+    let incit_tracked = ddl_dir.manifest.get_tool("incitaciones").is_some();
+    ensure_incitaciones_skills(args, args.yes || incit_selected || incit_tracked)?;
+
     if !args.is_json() {
         println!();
         println!("Done! Run `ddl status` to verify everything.");
     }
 
     Ok(())
+}
+
+/// Check that incitaciones skills are installed globally.
+///
+/// Global skills (~/.agents/skills/) are the ddl-preferred scope. When
+/// missing and `prompt_eligible` (incitaciones is in scope for this init):
+/// interactive sessions prompt for global, local, or skip; `--yes` installs
+/// globally; JSON mode is check-only. When not eligible, only a hint is
+/// printed so users who deselected the tool aren't re-prompted.
+fn ensure_incitaciones_skills(
+    args: &dulce_de_leche::cli::Args,
+    prompt_eligible: bool,
+) -> Result<()> {
+    let status = dulce_de_leche::skills::skill_status();
+    if status.has_global() {
+        if !args.is_json() {
+            let ver = status
+                .global_version
+                .unwrap_or_else(|| "?".to_string());
+            println!("  ✓ incitaciones skills installed globally (npm:{ver})");
+        }
+        return Ok(());
+    }
+
+    if args.is_json() {
+        // Check-only in JSON mode — no prompts, no state changes.
+        return Ok(());
+    }
+
+    if args.yes {
+        // Non-interactive: default to the global scope.
+        install_skills_scope(true, args)?;
+        return Ok(());
+    }
+
+    if !prompt_eligible {
+        println!(
+            "  ℹ  incitaciones skills not installed globally — install with: npx incitaciones install --global"
+        );
+        return Ok(());
+    }
+
+    let local_note = if status.local_version.is_some() {
+        " A local install exists in this project."
+    } else {
+        ""
+    };
+    let choice: String =
+        cliclack::select(format!(
+            "incitaciones skills are not installed globally.{local_note} Install them?"
+        ))
+        .item(
+            "global",
+            "Global",
+            "~/.agents/skills/ — available in all projects (recommended)",
+        )
+        .item(
+            "local",
+            "Local",
+            ".agents/skills/ — this project only",
+        )
+        .item("skip", "Skip", "Don't install skills now")
+        .interact()
+        .map_err(|e| DdlError::Other(format!("Selection cancelled: {e}")))?
+        .to_string();
+
+    match choice.as_str() {
+        "global" => install_skills_scope(true, args),
+        "local" => install_skills_scope(false, args),
+        _ => {
+            println!("  ℹ  Skipped. Install later with: npx incitaciones install --global");
+            Ok(())
+        }
+    }
+}
+
+/// Install incitaciones skills in the given scope, reporting the outcome.
+/// Failures are advisory — they don't fail the whole init.
+fn install_skills_scope(global: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
+    let scope = if global { "global" } else { "local" };
+    if !args.is_json() {
+        println!("  Installing incitaciones skills ({scope})...");
+    }
+    match dulce_de_leche::skills::install_skills(global, args.verbose_quiet.raw_count() >= 1) {
+        Ok(()) => {
+            if !args.is_json() {
+                println!("  ✓ incitaciones skills installed ({scope})");
+            }
+            Ok(())
+        }
+        Err(e) => {
+            if !args.is_json() {
+                println!(
+                    "  ⚠ incitaciones skill install failed: {e} — install later with: npx incitaciones install --{scope}"
+                );
+            }
+            Ok(())
+        }
+    }
 }
 
 fn cmd_install(tool_name: &str, args: &dulce_de_leche::cli::Args) -> Result<()> {

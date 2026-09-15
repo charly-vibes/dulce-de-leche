@@ -136,6 +136,11 @@ pub struct Tool {
     pub crate_name: &'static str,
     pub formula_name: &'static str,
     pub repo: &'static str,
+    /// npm package name when the tool is npm-distributed; `None` for
+    /// brew/cargo/scoop/binary tools. Drives install method, version
+    /// detection, and upgrade behavior.
+    #[serde(default)]
+    pub npm_package: Option<&'static str>,
 }
 
 /// All managed tools.
@@ -146,6 +151,7 @@ pub const MANAGED_TOOLS: &[Tool] = &[
         crate_name: "wai-cli",
         formula_name: "wai",
         repo: "charly-vibes/wai",
+        npm_package: None,
     },
     Tool {
         name: "dont",
@@ -153,6 +159,7 @@ pub const MANAGED_TOOLS: &[Tool] = &[
         crate_name: "dont-cli",
         formula_name: "dont",
         repo: "charly-vibes/dont",
+        npm_package: None,
     },
     Tool {
         name: "ah",
@@ -160,6 +167,7 @@ pub const MANAGED_TOOLS: &[Tool] = &[
         crate_name: "espectacular",
         formula_name: "ah",
         repo: "charly-vibes/espectacular",
+        npm_package: None,
     },
     Tool {
         name: "pretender",
@@ -167,6 +175,7 @@ pub const MANAGED_TOOLS: &[Tool] = &[
         crate_name: "pretender",
         formula_name: "pretender",
         repo: "charly-vibes/pretender",
+        npm_package: None,
     },
     Tool {
         name: "testaruda",
@@ -174,6 +183,7 @@ pub const MANAGED_TOOLS: &[Tool] = &[
         crate_name: "testaruda",
         formula_name: "testaruda",
         repo: "charly-vibes/testaruda",
+        npm_package: None,
     },
     Tool {
         name: "vampiro",
@@ -181,6 +191,7 @@ pub const MANAGED_TOOLS: &[Tool] = &[
         crate_name: "vampiro",
         formula_name: "vampiro",
         repo: "charly-vibes/vampiro",
+        npm_package: None,
     },
     Tool {
         name: "fotos-mcp",
@@ -188,6 +199,7 @@ pub const MANAGED_TOOLS: &[Tool] = &[
         crate_name: "fotos-mcp",
         formula_name: "fotos-mcp",
         repo: "charly-vibes/fotos",
+        npm_package: None,
     },
     Tool {
         name: "fabbro",
@@ -195,6 +207,15 @@ pub const MANAGED_TOOLS: &[Tool] = &[
         crate_name: "fabbro",
         formula_name: "fabbro",
         repo: "charly-vibes/fabbro",
+        npm_package: None,
+    },
+    Tool {
+        name: "incitaciones",
+        description: "Reusable prompts and skills for CLI LLM tools",
+        crate_name: "incitaciones",
+        formula_name: "incitaciones",
+        repo: "charly-vibes/incitaciones",
+        npm_package: Some("incitaciones"),
     },
 ];
 

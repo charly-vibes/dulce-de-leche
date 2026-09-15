@@ -405,6 +405,43 @@ pub fn status_summary(sections: &[StatusSection]) -> String {
     }
 }
 
+/// Check that incitaciones skills are installed globally.
+pub struct IncitacionesSkillsCheck;
+
+impl DoctorCheck for IncitacionesSkillsCheck {
+    fn name(&self) -> &'static str {
+        "ddl.incitaciones-skills"
+    }
+    fn description(&self) -> &'static str {
+        "Check that incitaciones skills are installed globally"
+    }
+    fn run(
+        &self,
+        _repo_root: &Path,
+    ) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
+        let status = crate::skills::skill_status();
+        if let Some(ver) = status.global_version {
+            Ok(vec![LintResult::new(
+                format!("incitaciones skills installed globally (npm:{ver})"),
+                Severity::Advisory,
+            )])
+        } else if let Some(ver) = status.local_version {
+            Ok(vec![LintResult::new(
+                format!(
+                    "incitaciones skills only local (npm:{ver}) — run `npx incitaciones install --global` for all projects",
+                    ver = ver
+                ),
+                Severity::Warning,
+            )])
+        } else {
+            Ok(vec![LintResult::new(
+                "incitaciones skills not installed — run `npx incitaciones install --global`",
+                Severity::Warning,
+            )])
+        }
+    }
+}
+
 /// Run a comprehensive diagnostic using genesis DoctorRunner.
 ///
 /// When `fix` is true, also calls `DdlDir::doctor(true)` to apply fixes
@@ -422,6 +459,7 @@ pub fn run_full_diagnostic(ddl_dir: Option<&DdlDir>, fix: bool) -> Result<Vec<St
     for tool in crate::platform::MANAGED_TOOLS {
         runner.register(Box::new(ToolCheck::new(tool, ddl_dir.cloned())));
     }
+    runner.register(Box::new(IncitacionesSkillsCheck));
 
     // Build report
     let report = runner

@@ -16,7 +16,6 @@ Explicitly excluded sibling repos, and why:
 |------|--------------|
 | genesis | Library crate — shared infrastructure, not user-facing |
 | fotos (cask) | Desktop Tauri app; fotos-mcp is the CLI-managed part |
-| incitaciones | Prompt/skill collection — no installable binary |
 | bichos | Bio-mimetic QA framework — no CLI yet |
 | atril | Static web viewer |
 | paranoid | Android app |
@@ -42,6 +41,7 @@ Explicitly excluded sibling repos, and why:
 |------|----------|-------------|-------|
 | **fabbro** | Go | ✓ (`fabbro`) | Local-first code review annotation with TUI. |
 | **fotos** | Rust/Tauri | ✓ (cask `fotos`) | Desktop screenshot app with AI analysis. Not a CLI tool. |
+| **incitaciones** | TypeScript/npm | npm (`incitaciones`) | Prompt/skill collection for CLI LLM tools. Install-only — skills land in `~/.agents/skills/` or `.agents/skills/`; `ddl init` checks for global skills and prompts if missing. |
 
 ## Config file locations
 
