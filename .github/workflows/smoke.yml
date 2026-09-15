@@ -1,0 +1,85 @@
+# Cross-platform smoke tests for the binary-first install chain (DDL-ei3)
+# and managed-tool detection (DDL-9c2). Unit CI runs linux-only, so the
+# 3-platform verification rule is satisfied here: a real `ddl install turu`
+# (binary fast-path from GitHub releases) end-to-end on macOS and Windows,
+# followed by PATH and status/doctor detection checks.
+#
+# Known limitation: ddl's ensure_on_path persists PATH for future shells;
+# GitHub Actions steps inherit the runner's env instead, so the install
+# destination is re-added to $GITHUB_PATH before the detection assertions.
+#
+# Runs on demand (workflow_dispatch) and on published releases.
+
+name: Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      ddl_version:
+        description: 'ddl release tag to test (e.g. v0.3.0)'
+        required: false
+        type: string
+  release:
+    types: [published]
+
+env:
+  DDL_VERSION: ${{ inputs.ddl_version || github.event.release.tag_name || 'v0.3.0' }}
+
+jobs:
+  smoke:
+    name: Smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            asset_os: darwin_arm64
+          - os: windows-latest
+            asset_os: windows_amd64
+    env:
+      ASSET_EXT: ${{ matrix.os == 'windows-latest' && 'zip' || 'tar.gz' }}
+    steps:
+      - name: Download ddl release binary
+        shell: bash
+        run: |
+          ver="${DDL_VERSION#v}"
+          asset="ddl_${ver}_${{ matrix.asset_os }}.${ASSET_EXT}"
+          url="https://github.com/charly-vibes/dulce-de-leche/releases/download/${DDL_VERSION}/${asset}"
+          echo "Downloading ${url}"
+          curl -fL --retry 3 -o ddl-pkg "${url}"
+          mkdir ddl-bin
+          # bsdtar handles both tar.gz and zip
+          tar -xf ddl-pkg -C ddl-bin
+          echo "$PWD/ddl-bin" >> "$GITHUB_PATH"
+
+      - name: Doctor baseline (pre-install)
+        shell: bash
+        run: ddl doctor --human
+
+      - name: Install turu via ddl (binary fast-path)
+        shell: bash
+        run: ddl --human install turu
+
+      - name: Add install destination to PATH
+        shell: bash
+        run: |
+          case "${{ matrix.os }}" in
+            macos-*)  echo "$HOME/.ddl/bin" >> "$GITHUB_PATH" ;;
+            windows-*) echo "$LOCALAPPDATA/ddl/bin" >> "$GITHUB_PATH" ;;
+          esac
+
+      - name: Verify turu on PATH
+        shell: bash
+        run: |
+          command -v turu
+          turu --version
+
+      - name: Verify ddl detects turu
+        shell: bash
+        run: |
+          ddl --human status | tee status.txt
+          grep -i turu status.txt
+          ddl --human doctor | tee doctor.txt
+          ! grep -iE "turu.*(missing|not (found|installed))" doctor.txt
