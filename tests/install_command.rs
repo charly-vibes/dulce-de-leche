@@ -125,12 +125,14 @@ fn test_install_on_path_returns_success() {
 
 #[test]
 fn test_install_json_parses() {
-    let mut cmd = Command::cargo_bin("ddl").unwrap();
-    cmd.arg("install").arg("wai").arg("--json");
-    cmd.timeout(CMD_TIMEOUT);
-    // --json should always produce valid JSON output, even on error
+    let (mut cmd, _temp) = ddl_cmd();
+    // Exercise the error path, not a real install: an unknown tool fails
+    // before any subprocess/network work (and before .ddl/ is touched),
+    // yet --json must still emit a valid envelope.
+    // (A known-but-missing tool like `wai` would attempt a real install.)
+    cmd.arg("install").arg("nonexistent-tool").arg("--json");
     cmd.assert()
-        .stdout(predicate::str::contains("envelope_kind"));
+        .stderr(predicate::str::contains("envelope_kind"));
 }
 
 // ===================== Argument interaction tests =====================
