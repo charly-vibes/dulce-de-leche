@@ -24,6 +24,27 @@ fn is_sharing_violation(e: &DdlError) -> bool {
     matches!(e, DdlError::Io(io) if matches!(io.raw_os_error(), Some(32) | Some(33)))
 }
 
+/// Run a manifest write operation, retrying transient Windows file locks
+/// (DDL-71i). Freshly-written files are commonly locked for a few hundred
+/// milliseconds by Defender/AV scanning; 4 attempts with a short backoff
+/// ride those out without slowing down real failures.
+fn with_sharing_retry<F>(mut op: F) -> Result<()>
+where
+    F: FnMut() -> Result<()>,
+{
+    const MAX_ATTEMPTS: u32 = 4;
+    for attempt in 1..=MAX_ATTEMPTS {
+        match op() {
+            Ok(()) => return Ok(()),
+            Err(e) if is_sharing_violation(&e) && attempt < MAX_ATTEMPTS => {
+                std::thread::sleep(std::time::Duration::from_millis(100 * u64::from(attempt)));
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    unreachable!("retry loop always returns")
+}
+
 /// ddl's own configuration, written to `.ddl/config.toml`.
 ///
 /// Implements `genesis::config::ConfigFile` for standard read/write/validate.
@@ -220,17 +241,7 @@ impl DdlDir {
     /// the cross-platform smoke run on windows-latest).
     pub fn save_manifest(&self) -> Result<()> {
         let manifest_path = self.manifest_path();
-        const MAX_ATTEMPTS: u32 = 4;
-        for attempt in 1..=MAX_ATTEMPTS {
-            match self.try_save_manifest(&manifest_path) {
-                Ok(()) => return Ok(()),
-                Err(e) if is_sharing_violation(&e) && attempt < MAX_ATTEMPTS => {
-                    std::thread::sleep(std::time::Duration::from_millis(100 * u64::from(attempt)));
-                }
-                Err(e) => return Err(e),
-            }
-        }
-        unreachable!("retry loop always returns")
+        with_sharing_retry(|| self.try_save_manifest(&manifest_path))
     }
 
     fn try_save_manifest(&self, manifest_path: &Path) -> Result<()> {
@@ -254,30 +265,31 @@ impl DdlDir {
     /// from different processes from losing entries. Re-reads the manifest
     /// from disk inside the lock to get the latest state.
     pub fn record_tool(&mut self, name: &str, entry: ToolEntry) -> Result<()> {
-        let manifest_path = self.manifest_path();
+        let manifest_path = self.manifest_path().clone();
+        with_sharing_retry(|| {
+            // Open for read+write+create (no truncate) to get a handle for locking.
+            // Reading the file before truncating preserves existing content.
+            let file = OpenOptions::new()
+                .create(true)
+                .truncate(false)
+                .read(true)
+                .write(true)
+                .open(&manifest_path)
+                .map_err(DdlError::Io)?;
+            file.lock_exclusive().map_err(DdlError::Io)?;
 
-        // Open for read+write+create (no truncate) to get a handle for locking.
-        // Reading the file before truncating preserves existing content.
-        let file = OpenOptions::new()
-            .create(true)
-            .truncate(false)
-            .read(true)
-            .write(true)
-            .open(&manifest_path)
-            .map_err(DdlError::Io)?;
-        file.lock_exclusive().map_err(DdlError::Io)?;
+            // Re-read manifest from disk inside the lock to get the latest
+            // state (catches any concurrent modifications).
+            let mut manifest = Manifest::load(&manifest_path)?;
+            manifest.set_tool(name, entry.clone());
+            manifest.save(&manifest_path)?;
 
-        // Re-read manifest from disk inside the lock to get the latest
-        // state (catches any concurrent modifications).
-        let mut manifest = Manifest::load(&manifest_path)?;
-        manifest.set_tool(name, entry);
-        manifest.save(&manifest_path)?;
+            // Update in-memory state to match disk
+            self.manifest = manifest;
 
-        // Update in-memory state to match disk
-        self.manifest = manifest;
-
-        // File is dropped, releasing the lock
-        Ok(())
+            // File is dropped, releasing the lock
+            Ok(())
+        })
     }
 
     /// Record a tool as installed, with version and source.
