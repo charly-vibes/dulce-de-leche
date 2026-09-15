@@ -29,5 +29,5 @@
 ## 5. Verification & close-out
 
 - [x] 5.1 Manual smoke on Linux: `ddl init --yes --tools turu` in temp dir — banner wording correct, fast-path detection intact
-- [ ] 5.2 Flag macOS/Windows verification in DDL-ei3 before close (3-platform rule; CI is linux-only)
-- [ ] 5.3 Mark all tasks complete; request review; archive change after approval
+- [x] 5.2 Flag macOS/Windows verification in DDL-ei3 before close (3-platform rule) — done via smoke workflow; run 35028164994 green on macOS + Windows
+- [x] 5.3 Mark all tasks complete; request review; archive change after approval — archived 2026-09-15

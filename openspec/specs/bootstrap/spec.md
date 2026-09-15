@@ -64,24 +64,24 @@ If a tool installation fails (network error, 404, timeout), ddl records the tool
 - Installing tools outside the charly-vibes ecosystem
 - Resolving version conflicts between tools (each tool manages its own dependencies)
 - Installing the Rust toolchain (cargo install is a fallback, not a primary path — ddl does not install rustc)
-
 ## Requirements
-
 ### Requirement: Platform Detection
 
 The CLI SHALL detect the operating system and CPU architecture at runtime.
+
+On every supported platform, the preferred installation method is binary download; cargo install is the fallback when a release binary is unavailable and cargo is on PATH. No package manager (brew, scoop) participates in method selection.
 
 #### Scenario: macOS (ARM)
 
 - **WHEN** ddl runs on macOS with Apple Silicon
 - **THEN** the system detects `macos-arm64` as the platform
-- **AND** prefers Homebrew for installation when available
+- **AND** prefers binary download (primary path) or cargo install (fallback)
 
 #### Scenario: macOS (Intel)
 
 - **WHEN** ddl runs on macOS with Intel processor
 - **THEN** the system detects `macos-amd64` as the platform
-- **AND** prefers Homebrew for installation when available
+- **AND** prefers binary download (primary path) or cargo install (fallback)
 
 #### Scenario: Linux (ARM)
 
@@ -99,8 +99,7 @@ The CLI SHALL detect the operating system and CPU architecture at runtime.
 
 - **WHEN** ddl runs on Windows
 - **THEN** the system detects `windows-amd64` as the platform
-- **AND** prefers Scoop for installation when available
-- **AND** falls back to binary download when Scoop is not available
+- **AND** prefers binary download (primary path) or cargo install (fallback)
 - **AND** binary downloads use `.exe` extension and are placed in `%LOCALAPPDATA%\ddl\bin\`
 
 #### Scenario: Unsupported platform
@@ -133,10 +132,10 @@ The CLI SHALL provide `ddl init` as the primary bootstrap command.
 
 - **WHEN** user runs `ddl init` without flags
 - **THEN** the system detects the platform
-- **AND** checks prerequisites (curl/wget, brew, cargo, scoop as applicable)
+- **AND** checks prerequisites (curl/wget for binary download; cargo for the fallback path)
 - **AND** presents an interactive checklist of available tools with descriptions
 - **AND** prompts the user to select which tools to install (default: all)
-- **AND** installs each selected tool via the platform-appropriate method
+- **AND** installs each selected tool via binary download, falling back to cargo install when no release binary is available
 - **AND** runs each installed tool's init command (e.g., `wai init`, `dont prime`)
 - **AND** creates `.ddl/` directory structure
 - **AND** writes `.ddl/manifest.json` with installed versions (status: `"installed"` or `"failed"`)
@@ -163,19 +162,20 @@ The CLI SHALL provide `ddl init` as the primary bootstrap command.
 - **AND** retries any tools with `"status": "failed"` in the manifest
 - **AND** skips tools that are already installed and configured
 
-#### Scenario: Platform-appropriate installer
+#### Scenario: Binary-first install with cargo fallback
 
-- **WHEN** ddl needs to install a tool on macOS
-- **THEN** it prefers `brew install <formula>` when the formula has a real release
-- **AND** falls back to `cargo install <crate>` when the formula is a placeholder
-- **AND** falls back to binary download when neither brew nor cargo is available
+- **WHEN** ddl needs to install a tool on any platform
+- **THEN** it downloads the release binary from the tool's GitHub releases
+- **AND** when the release has no binary for the current platform (404 or asset missing)
+- **AND** cargo is available on PATH
+- **THEN** it falls back to `cargo install <crate>` and records `source: "cargo"` in the manifest
 
-#### Scenario: Placeholder formula detection
+#### Scenario: No release binary and no cargo
 
-- **WHEN** ddl detects that a Homebrew formula has version `0.0.0` or fake SHA256
-- **THEN** it skips brew install for that tool
-- **AND** displays a message: "⚠ <tool> Homebrew formula not yet published — using cargo install instead"
-- **AND** falls back to cargo install or binary download
+- **WHEN** a tool has no release binary for the current platform
+- **AND** cargo is not installed
+- **THEN** ddl reports an error naming both remedies: installing Rust (https://rustup.rs) to enable cargo install, or downloading the binary manually from the tool's GitHub releases
+- **AND** records `"status": "failed"` for that tool
 
 #### Scenario: Prerequisites check
 
@@ -183,7 +183,7 @@ The CLI SHALL provide `ddl init` as the primary bootstrap command.
 - **THEN** the system checks which prerequisites are needed based on the installation plan
 - **AND** reports which prerequisites are missing with install guidance
 - **AND** does not proceed with installation until prerequisites are met (unless `--yes` is set)
-- **AND** prerequisite checks include: `curl` or `wget` (for binary download), `rustc` (for cargo install), `brew` (for brew install), `scoop` (for scoop install)
+- **AND** prerequisite checks include: `curl` or `wget` (for binary download) and `cargo` (for the fallback path)
 
 #### Scenario: Network failure during install
 
@@ -197,8 +197,16 @@ The CLI SHALL provide `ddl init` as the primary bootstrap command.
 #### Scenario: Binary download returns 404
 
 - **WHEN** a binary download URL returns 404 (release not published yet)
-- **THEN** ddl does NOT fall back to cargo install
-- **AND** reports: "⚠ <tool> binary not yet available for this platform. Try `cargo install <crate>` manually."
+- **AND** cargo is available on PATH
+- **THEN** ddl falls back to `cargo install <crate>`
+- **AND** reports: "⚠ <tool> binary not yet available for this platform — using cargo install instead"
+
+#### Scenario: Binary download returns 404 without cargo
+
+- **WHEN** a binary download URL returns 404 (release not published yet)
+- **AND** cargo is not available on PATH
+- **THEN** ddl does NOT attempt any further install method
+- **AND** reports: "⚠ <tool> binary not yet available for this platform, and cargo is not installed. Install Rust (https://rustup.rs) or download the binary manually from <repo>/releases."
 - **AND** exits with code 1
 
 ### Requirement: Install Command
@@ -209,8 +217,8 @@ The CLI SHALL provide `ddl install <tool>` to install a single tool.
 
 - **WHEN** user runs `ddl install wai`
 - **THEN** the system detects the platform
-- **AND** looks up the tool in the name mapping table (crate name, formula name)
-- **AND** installs via the platform-appropriate method
+- **AND** looks up the tool in the name mapping table (crate name)
+- **AND** installs via binary download, falling back to cargo install when no release binary is available
 - **AND** updates `.ddl/manifest.json`
 
 #### Scenario: Install unknown tool
@@ -226,12 +234,11 @@ The CLI SHALL provide `ddl install <tool>` to install a single tool.
 - **AND** if up to date, reports "wai is already up to date"
 - **AND** if outdated, suggests `ddl upgrade` or offers to reinstall
 
-#### Scenario: Windows without Scoop
+#### Scenario: Windows binary placement
 
-- **WHEN** user runs `ddl install wai` on Windows and Scoop is not installed
-- **THEN** ddl reports: "⚠ Scoop not found. Use binary download or install Scoop."
-- **AND** downloads the binary directly from GitHub releases
-- **AND** places the `.exe` in `%LOCALAPPDATA%\ddl\bin\`
+- **WHEN** user runs `ddl install wai` on Windows
+- **THEN** the release binary (`.exe`) is downloaded from GitHub releases
+- **AND** placed in `%LOCALAPPDATA%\ddl\bin\`
 - **AND** suggests adding that path to `%PATH%` if not already present
 
 ### Requirement: Init Subcommand
@@ -262,3 +269,4 @@ The CLI SHALL run each managed tool's init command after installation.
 - **THEN** ddl reports the failure with the tool's error output
 - **AND** continues with remaining tools
 - **AND** exits with code 1 (partial failure)
+
