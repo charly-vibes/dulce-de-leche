@@ -108,6 +108,9 @@ jobs:
         shell: bash
         run: |
           ddl --human status | tee status.txt
-          grep -i turu status.txt
+          # status must list turu with a version (installed + on PATH)
+          grep -E "turu[[:space:]]+v[0-9]" status.txt
           ddl --human doctor | tee doctor.txt
-          ! grep -iE "turu.*(missing|not (found|installed))" doctor.txt
+          # doctor must not flag turu as missing (✗ = fail; ⚠ warnings about
+          # turu's own doctor checks are expected on a fresh runner)
+          ! grep "✗ turu" doctor.txt
