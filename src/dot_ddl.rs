@@ -24,10 +24,32 @@ fn is_sharing_violation(e: &DdlError) -> bool {
     matches!(e, DdlError::Io(io) if matches!(io.raw_os_error(), Some(32) | Some(33)))
 }
 
+/// Read the manifest through the given (locked) handle.
+fn read_manifest_from(file: &mut std::fs::File) -> Result<Manifest> {
+    use std::io::{Read, Seek, SeekFrom};
+    file.seek(SeekFrom::Start(0)).map_err(DdlError::Io)?;
+    let mut contents = String::new();
+    file.read_to_string(&mut contents).map_err(DdlError::Io)?;
+    Manifest::parse(&contents)
+}
+
+/// Write the manifest through the given (locked) handle. Writing through
+/// the owning handle is the whole point: on Windows the LockFileEx lock
+/// blocks every other handle, so this handle must do the write itself.
+fn write_manifest_to(file: &mut std::fs::File, manifest: &Manifest) -> Result<()> {
+    use std::io::{Seek, SeekFrom, Write};
+    let contents = serde_json::to_string_pretty(manifest).map_err(DdlError::Serde)?;
+    file.seek(SeekFrom::Start(0)).map_err(DdlError::Io)?;
+    file.set_len(0).map_err(DdlError::Io)?;
+    file.write_all(contents.as_bytes()).map_err(DdlError::Io)?;
+    file.flush().map_err(DdlError::Io)?;
+    Ok(())
+}
+
 /// Run a manifest write operation, retrying transient Windows file locks
-/// (DDL-71i). Freshly-written files are commonly locked by Defender/AV
-/// scanning for several seconds; exponential backoff (6 attempts, ~6s
-/// worst case) rides those out without slowing down real failures.
+/// (DDL-71i). Windows LockFileEx locks held by antivirus scanners or other
+/// processes block our open/lock step; exponential backoff (6 attempts,
+/// ~6.3s worst case) rides those out without slowing down real failures.
 fn with_sharing_retry<F>(mut op: F) -> Result<()>
 where
     F: FnMut() -> Result<()>,
@@ -237,20 +259,19 @@ impl DdlDir {
     /// The lock prevents concurrent manifest writes from different processes
     /// from losing entries. Lock is released when the opened file is dropped.
     ///
-    /// On Windows, freshly-written files are transiently locked by antivirus
-    /// scanners (ERROR_LOCK_VIOLATION / ERROR_SHARING_VIOLATION), so the save
-    /// is retried with a short backoff before giving up (DDL-71i, found by
-    /// the cross-platform smoke run on windows-latest).
+    /// All I/O goes through the locking handle: on Windows a LockFileEx
+    /// byte-range lock blocks every OTHER handle — including a second open
+    /// of the same file in this process — so reopening for the write would
+    /// self-deadlock with os error 33 (DDL-71i, found by the cross-platform
+    /// smoke run on windows-latest). The with_sharing_retry wrapper remains
+    /// for genuine transient locks (e.g. antivirus scanning) on open/lock.
     pub fn save_manifest(&self) -> Result<()> {
         let manifest_path = self.manifest_path();
         with_sharing_retry(|| self.try_save_manifest(&manifest_path))
     }
 
     fn try_save_manifest(&self, manifest_path: &Path) -> Result<()> {
-        // Open for read+write+create (no truncate) to get a handle for locking.
-        // The actual write happens via Manifest::save which opens separately,
-        // but the advisory lock on the inode prevents concurrent writers.
-        let file = OpenOptions::new()
+        let mut file = OpenOptions::new()
             .create(true)
             .truncate(false)
             .read(true)
@@ -258,7 +279,7 @@ impl DdlDir {
             .open(manifest_path)
             .map_err(DdlError::Io)?;
         file.lock_exclusive().map_err(DdlError::Io)?;
-        self.manifest.save(manifest_path)
+        write_manifest_to(&mut file, &self.manifest)
     }
 
     /// Update a tool entry in the manifest and save atomically.
@@ -267,11 +288,12 @@ impl DdlDir {
     /// from different processes from losing entries. Re-reads the manifest
     /// from disk inside the lock to get the latest state.
     pub fn record_tool(&mut self, name: &str, entry: ToolEntry) -> Result<()> {
-        let manifest_path = self.manifest_path().clone();
+        let manifest_path = self.manifest_path();
         with_sharing_retry(|| {
-            // Open for read+write+create (no truncate) to get a handle for locking.
-            // Reading the file before truncating preserves existing content.
-            let file = OpenOptions::new()
+            // Single-handle read-modify-write: the LockFileEx byte-range lock
+            // held by this handle blocks every other handle on Windows (see
+            // save_manifest), so re-reading and writing must use this handle.
+            let mut file = OpenOptions::new()
                 .create(true)
                 .truncate(false)
                 .read(true)
@@ -282,14 +304,13 @@ impl DdlDir {
 
             // Re-read manifest from disk inside the lock to get the latest
             // state (catches any concurrent modifications).
-            let mut manifest = Manifest::load(&manifest_path)?;
+            let mut manifest = read_manifest_from(&mut file)?;
             manifest.set_tool(name, entry.clone());
-            manifest.save(&manifest_path)?;
+            write_manifest_to(&mut file, &manifest)?;
 
             // Update in-memory state to match disk
             self.manifest = manifest;
 
-            // File is dropped, releasing the lock
             Ok(())
         })
     }

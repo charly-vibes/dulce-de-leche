@@ -39,7 +39,16 @@ impl Manifest {
             return Ok(Self::new());
         }
         let contents = std::fs::read_to_string(path).map_err(DdlError::Io)?;
-        let manifest: Manifest = serde_json::from_str(&contents).map_err(DdlError::Serde)?;
+        Self::parse(&contents)
+    }
+
+    /// Parse a manifest from a JSON string. An empty string (freshly created
+    /// file) yields a new empty manifest.
+    pub fn parse(contents: &str) -> Result<Self> {
+        if contents.trim().is_empty() {
+            return Ok(Self::new());
+        }
+        let manifest: Manifest = serde_json::from_str(contents).map_err(DdlError::Serde)?;
         Ok(manifest)
     }
 
