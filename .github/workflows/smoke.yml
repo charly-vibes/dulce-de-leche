@@ -16,9 +16,14 @@ on:
   workflow_dispatch:
     inputs:
       ddl_version:
-        description: 'ddl release tag to test (e.g. v0.3.0)'
+        description: 'ddl release tag to test (e.g. v0.4.0)'
         required: false
         type: string
+      build_from_source:
+        description: 'Build ddl from this ref instead of downloading a release (for pre-release iteration)'
+        required: false
+        type: boolean
+        default: false
   release:
     types: [published]
 
@@ -41,7 +46,23 @@ jobs:
     env:
       ASSET_EXT: ${{ matrix.os == 'windows-latest' && 'zip' || 'tar.gz' }}
     steps:
+      - name: Checkout
+        if: ${{ inputs.build_from_source }}
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        if: ${{ inputs.build_from_source }}
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build ddl from source
+        if: ${{ inputs.build_from_source }}
+        shell: bash
+        run: |
+          cargo build --release
+          echo "$PWD/target/release" >> "$GITHUB_PATH"
+
       - name: Download ddl release binary
+        if: ${{ !inputs.build_from_source }}
         shell: bash
         run: |
           ver="${DDL_VERSION#v}"
