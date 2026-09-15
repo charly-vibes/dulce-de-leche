@@ -16,6 +16,14 @@ use fs2::FileExt;
 use crate::error::{DdlError, Result};
 use crate::manifest::{Manifest, ToolEntry};
 
+/// True for Windows sharing/lock violations (os errors 32/33) — transient
+/// locks held by antivirus scanners or other processes on freshly-written
+/// files. Always false elsewhere: those raw codes don't occur on Unix
+/// (Linux 32 is EPIPE, which a plain file write cannot produce).
+fn is_sharing_violation(e: &DdlError) -> bool {
+    matches!(e, DdlError::Io(io) if matches!(io.raw_os_error(), Some(32) | Some(33)))
+}
+
 /// ddl's own configuration, written to `.ddl/config.toml`.
 ///
 /// Implements `genesis::config::ConfigFile` for standard read/write/validate.
@@ -205,8 +213,27 @@ impl DdlDir {
     ///
     /// The lock prevents concurrent manifest writes from different processes
     /// from losing entries. Lock is released when the opened file is dropped.
+    ///
+    /// On Windows, freshly-written files are transiently locked by antivirus
+    /// scanners (ERROR_LOCK_VIOLATION / ERROR_SHARING_VIOLATION), so the save
+    /// is retried with a short backoff before giving up (DDL-71i, found by
+    /// the cross-platform smoke run on windows-latest).
     pub fn save_manifest(&self) -> Result<()> {
         let manifest_path = self.manifest_path();
+        const MAX_ATTEMPTS: u32 = 4;
+        for attempt in 1..=MAX_ATTEMPTS {
+            match self.try_save_manifest(&manifest_path) {
+                Ok(()) => return Ok(()),
+                Err(e) if is_sharing_violation(&e) && attempt < MAX_ATTEMPTS => {
+                    std::thread::sleep(std::time::Duration::from_millis(100 * u64::from(attempt)));
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        unreachable!("retry loop always returns")
+    }
+
+    fn try_save_manifest(&self, manifest_path: &Path) -> Result<()> {
         // Open for read+write+create (no truncate) to get a handle for locking.
         // The actual write happens via Manifest::save which opens separately,
         // but the advisory lock on the inode prevents concurrent writers.
@@ -215,10 +242,10 @@ impl DdlDir {
             .truncate(false)
             .read(true)
             .write(true)
-            .open(&manifest_path)
+            .open(manifest_path)
             .map_err(DdlError::Io)?;
         file.lock_exclusive().map_err(DdlError::Io)?;
-        self.manifest.save(&manifest_path)
+        self.manifest.save(manifest_path)
     }
 
     /// Update a tool entry in the manifest and save atomically.
