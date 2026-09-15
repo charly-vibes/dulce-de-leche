@@ -50,8 +50,13 @@ jobs:
           echo "Downloading ${url}"
           curl -fL --retry 3 -o ddl-pkg "${url}"
           mkdir ddl-bin
-          # bsdtar handles both tar.gz and zip
-          tar -xf ddl-pkg -C ddl-bin
+          if [ "$ASSET_EXT" = "zip" ]; then
+            # Git Bash's GNU tar cannot read zip — use PowerShell instead
+            powershell.exe -NoProfile -Command "Expand-Archive -Path ddl-pkg -DestinationPath ddl-bin -Force"
+          else
+            tar -xzf ddl-pkg -C ddl-bin
+            chmod +x ddl-bin/ddl*
+          fi
           echo "$PWD/ddl-bin" >> "$GITHUB_PATH"
 
       - name: Doctor baseline (pre-install)
