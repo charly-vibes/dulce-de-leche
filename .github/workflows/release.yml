@@ -57,7 +57,7 @@ jobs:
           cp target/x86_64-unknown-linux-gnu/release/ddl bins/linux_amd64/ddl
           cp target/aarch64-unknown-linux-gnu/release/ddl bins/linux_arm64/ddl
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: bins-linux
           path: bins/
@@ -89,7 +89,7 @@ jobs:
           cp target/x86_64-apple-darwin/release/ddl bins/darwin_amd64/ddl
           cp target/aarch64-apple-darwin/release/ddl bins/darwin_arm64/ddl
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: bins-darwin
           path: bins/
@@ -118,7 +118,7 @@ jobs:
           mkdir -p bins/windows_amd64
           cp target/x86_64-pc-windows-msvc/release/ddl.exe bins/windows_amd64/ddl.exe
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: bins-windows
           path: bins/
