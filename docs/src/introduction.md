@@ -11,8 +11,9 @@ dulce-de-leche (`ddl`) is a thin orchestrator that bootstraps the entire
 
 ## The problem
 
-The charly-vibes ecosystem has **7 active Rust CLI tools** (wai, dont, ah,
-pretender, testaruda, vampiro, fotos-mcp) plus fabbro (Go).
+The charly-vibes ecosystem has **8 active Rust CLI tools** (wai, dont, ah,
+pretender, testaruda, vampiro, fotos-mcp, turu/whisper) plus fabbro (Go) and
+incitaciones (npm) — **10 managed tools** in total.
 Each tool has:
 
 - Its own config file or directory
@@ -27,7 +28,8 @@ standard convention.
 
 `ddl` provides a single binary that:
 
-1. **Installs** all tools via the platform-native package manager
+1. **Installs** all tools from prebuilt GitHub release binaries — `cargo
+   install` as fallback when no release binary exists, npm for incitaciones
 2. **Configures** them under a single `.ddl/` directory — no root pollution
 3. **Migrates** existing configs into `.ddl/` (via symlinks in Phase 1)
 4. **Reports** status across the whole toolset in one command
@@ -40,8 +42,10 @@ charly-vibes.
 
 ## Status
 
-**Pre-release / design phase.** See [Implementation Status](./status.md) for
-the current state of each component.
+**v0.5.0 — shipped.** ddl is published on crates.io and GitHub releases, and
+the full toolset boots on macOS, Linux, and Windows (verified end-to-end by
+the 3-platform smoke gate). See [Implementation Status](./status.md) for
+current state.
 
 ## License
 

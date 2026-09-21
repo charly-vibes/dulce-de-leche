@@ -67,7 +67,10 @@ ddl --help
 
 ## The problem
 
-The charly-vibes ecosystem has **7 active Rust CLI tools** (wai, dont, ah/espectacular, pretender, testaruda, vampiro, fotos-mcp) plus fabbro (Go). Each tool has:
+The charly-vibes ecosystem has **8 active Rust CLI tools** (wai, dont,
+ah/espectacular, pretender, testaruda, vampiro, fotos-mcp, turu/whisper) plus
+fabbro (Go) and incitaciones (npm) — **10 managed tools** in total. Each tool
+has:
 
 - Its own config file or directory: `.wai/`, `.dont/`, `.espectacular/`, `.pretender.toml`, `.testaruda/`
 - Its own init command: `wai init`, `dont prime`, `ah init`, `pretender init`, `testaruda init`
@@ -102,7 +105,9 @@ It is **not** a package manager, a reimplementation of any tool, or a CLI launch
   fabbro/                # fabbro config files
 ```
 
-`fotos-mcp` is install-only — its MCP client config lives outside `.ddl/`.
+Three tools are **install-only** — their state lives outside `.ddl/`, so there
+is nothing to migrate: `fotos-mcp` (MCP client config), `incitaciones`
+(skills land in `~/.agents/skills/`), and `turu` (state in `~/.whisper/`).
 
 Legacy directories (`.wai/`, `.dont/`, etc.) become symlinks pointing to `.ddl/`:
 
@@ -114,6 +119,7 @@ Legacy directories (`.wai/`, `.dont/`, etc.) become symlinks pointing to `.ddl/`
 .testaruda/      -> .ddl/testaruda/      # symlink to .ddl/
 .vampiro/        -> .ddl/vampiro/        # symlink to .ddl/
 .fabbro/         -> .ddl/fabbro/         # symlink to .ddl/
+```
 
 ## Documentation
 
@@ -128,10 +134,14 @@ Full documentation is available at [charly-vibes.github.io/dulce-de-leche](https
 
 ## Status
 
-**v0.3.0** — orchestrator shipped and published (crates.io, brew, scoop).
+**v0.5.0** — orchestrator shipped and published (crates.io, GitHub releases).
+Installs are binary-first on every platform with `cargo install` fallback;
+the homebrew tap and scoop bucket remain as ecosystem infrastructure for
+manual installs but no longer influence ddl's install decisions ([DDL-ei3]).
 Upstream release coverage is tracked in [`docs/ecosystem-map.md`](docs/ecosystem-map.md);
-currently wai and fotos-mcp have published tap formulas — for tools whose formulas are
-still placeholders, ddl automatically falls back to `cargo install`. See
+real tap formulas exist for wai, fotos-mcp, testaruda, vampiro, and turu —
+dont and fabbro are still placeholders, and ddl automatically falls back to
+`cargo install` for tools without published release binaries. See
 [`docs/design.md`](docs/design.md) for the full design doc.
 
 ## Commands
@@ -187,3 +197,5 @@ openspec/
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE).
+
+[DDL-ei3]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-ei3

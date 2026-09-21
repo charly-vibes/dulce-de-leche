@@ -7,8 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-15
+
+### Changed
+
+- Simplified install chain to **binary-first on every platform** with `cargo
+  install` as the runtime fallback (when a release binary is unavailable and
+  cargo is present); Homebrew and Scoop leave ddl's install decision path
+  entirely — the tap and bucket remain published for manual installs
+  ([DDL-ei3], openspec `simplify-install-chain`)
+- Removed `InstallMethod::Brew`/`InstallMethod::Scoop`, placeholder-formula
+  detection, and brew/scoop install paths (dead code after the decision change)
+
+## [0.4.0] - 2026-09-15
+
 ### Added
 
+- `whisper` joins the managed toolset as `turu` (`whisper-vibes` crate) —
+  install-only; its state is home-dir global (`~/.whisper/`), not repo-local
+  config ([DDL-9c2])
 - `incitaciones` joins the managed toolset — npm-distributed (`InstallMethod::Npm`),
   install-only like fotos-mcp ([DDL-b33])
 - `ddl init` checks for globally installed incitaciones skills (`~/.agents/skills/`,
@@ -17,11 +34,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   globally, `--json` is check-only ([DDL-b33])
 - `ddl doctor` reports incitaciones skill installation state (global, local-only,
   or missing) ([DDL-b33])
+- 3-platform smoke gate (macOS, Linux, Windows) validating real release binaries
+  end-to-end ([DDL-ei3])
 
 ### Changed
 
 - `ddl init` now always runs `wai init` — even when wai was already installed —
   so every init guarantees the `.wai/` PARA structure exists ([DDL-b33])
+
+### Fixed
+
+- Windows: manifest writes now retry through AV file-lock contention with
+  exponential backoff, and a single writer handle eliminates the `LockFileEx`
+  self-deadlock ([DDL-71i])
+- GitHub API calls now send `GITHUB_TOKEN` and surface a distinct rate-limit
+  error ([DDL-2rb])
 
 ## [0.3.0] - 2026-08-05
 
@@ -115,3 +142,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [DDL-el9]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-el9
 [DDL-iqv]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-iqv
 [DDL-b33]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-b33
+[DDL-9c2]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-9c2
+[DDL-2rb]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-2rb
+[DDL-71i]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-71i
+[DDL-ei3]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-ei3
