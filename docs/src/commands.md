@@ -28,8 +28,11 @@ ddl install dont
 ddl install ah
 ddl install pretender
 ddl install testaruda
+ddl install vampiro
 ddl install fotos-mcp
 ddl install fabbro
+ddl install incitaciones
+ddl install turu
 ```
 
 ## `ddl status`

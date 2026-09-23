@@ -12,14 +12,18 @@ database management.
 
 ddl communicates with each tool via subprocess calls (`wai status --json`,
 `dont status --json`). This decouples release cycles — a genesis breaking
-change doesn't require coordinated releases of ddl + all 6 tools.
+change doesn't require coordinated releases of ddl + all 9 other tools.
 
 ### Fallback installation chain
 
-Binary download → cargo install → brew/scoop install
+Binary download → cargo install (only when a release binary is unavailable
+and cargo is present; npm for incitaciones). Homebrew and Scoop are no
+longer part of ddl's install decisions — the tap and bucket remain
+published for manual installs only.
 
 Binary downloads are the most reliable path (no dependencies). Cargo install
-is the fallback when no binary is available. Brew/scoop are the last resort.
+is the fallback when no release binary is available and cargo is installed.
+Brew/scoop are not used by ddl for installs (see DDL-ei3).
 
 ### Phase 1: Symlink farm
 
@@ -81,11 +85,14 @@ ddl status
 
 | Platform | Primary installer | Fallback |
 |----------|-------------------|----------|
-| macOS (ARM) | Homebrew | Binary download |
-| macOS (Intel) | Homebrew | Binary download |
+| macOS (ARM) | Binary download | Cargo install |
+| macOS (Intel) | Binary download | Cargo install |
 | Linux (ARM) | Binary download | Cargo install |
 | Linux (Intel) | Binary download | Cargo install |
-| Windows | Scoop | Binary download |
+| Windows | Binary download | Cargo install |
+
+`incitaciones` always installs via npm. Tools without published release
+binaries require cargo on the machine.
 
 ## See also
 

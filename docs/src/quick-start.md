@@ -14,11 +14,16 @@ ddl init
 ## What just happened?
 
 ```
-✓ brew install wai ah dont pretender testaruda fotos-mcp
-✓ created .ddl/ with configs for all tools
-✓ ran wai init, dont prime, ah init, pretender init, testaruda init
+✓ detected platform (macOS arm64 / Linux x86_64 / Windows)
+✓ installed 10 managed tools — prebuilt release binaries (incitaciones via npm)
+✓ created .ddl/ with configs for the config-managed tools
+✓ ran each tool's init (wai init, dont prime, ah init, pretender init, …)
+✓ checked for incitaciones skills and offered a global install
 ✓ created .gitignore entries for .ddl/ data files
 ```
+
+`fotos-mcp`, `incitaciones`, and `turu` are install-only — they don't keep
+config under `.ddl/`.
 
 ## Check the ecosystem
 

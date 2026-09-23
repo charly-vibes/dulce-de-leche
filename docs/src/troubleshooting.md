@@ -7,8 +7,10 @@ install it and try again:
 
 - **Binary download:** needs `curl` or `wget` (pre-installed on most systems)
 - **Cargo install:** needs `rustc` + `cargo` — install via [rustup](https://rustup.rs)
-- **Brew install:** needs `brew` — install via [brew.sh](https://brew.sh)
-- **Scoop install:** needs `scoop` — install via [scoop.sh](https://scoop.sh)
+- **incitaciones (npm):** needs `npm` — install via [nodejs.org](https://nodejs.org)
+
+Homebrew and Scoop are not used by ddl for installs — the tap and bucket
+exist only for manual installs of the tools themselves.
 
 ## `ddl install` fails with "Tool not found"
 
@@ -18,8 +20,11 @@ Check available tools:
 - `ah` — Behavioral specification testing
 - `pretender` — Code quality
 - `testaruda` — Test selection
+- `vampiro` — Composition checking
 - `fotos-mcp` — Screenshot MCP server
 - `fabbro` — Code review annotations
+- `incitaciones` — Prompts and skills for CLI LLM tools (npm)
+- `turu` — Knowledge workspace management (whisper-vibes)
 
 ## `ddl status` shows no tools
 
