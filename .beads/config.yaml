@@ -10,6 +10,8 @@
 
 # Use no-db mode: JSONL-only, no Dolt database
 # When true, bd will use .beads/issues.jsonl as the source of truth
+# NOTE: on bd 1.x this only means "run without opening the database" per
+# invocation — Dolt is the only storage backend; issues.jsonl is an export.
 # no-db: false
 
 # Enable JSON output by default
