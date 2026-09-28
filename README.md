@@ -25,7 +25,7 @@
 Repo root stays clean — everything lives under `.ddl/`.
 
 <!-- MANAGED-TOOLS:START -->
-Managed tools (11): wai, dont, ah, pretender, testaruda, vampiro, fotos-mcp, fabbro, incitaciones, turu, specodelic.
+Managed tools (11): wai, dont, ah, pretender, testaruda, vampiro, bd, openspec, incitaciones, turu, specodelic.
 Run `ddl version` for the full picture. Additions and removals must update this block
 (enforced by `tests/tool_registry_drift.rs`).
 <!-- MANAGED-TOOLS:END -->
@@ -68,8 +68,9 @@ ddl --help
 ## The problem
 
 The charly-vibes ecosystem has **8 active Rust CLI tools** (wai, dont,
-ah/espectacular, pretender, testaruda, vampiro, fotos-mcp, turu/whisper) plus
-fabbro (Go) and incitaciones (npm) — **10 managed tools** in total. Each tool
+ah/espectacular, pretender, testaruda, vampiro, specodelic, turu/whisper),
+plus bd and openspec (workflow/issue tooling) and incitaciones (npm) —
+**11 managed tools** in total. Each tool
 has:
 
 - Its own config file or directory: `.wai/`, `.dont/`, `.espectacular/`, `.pretender.toml`, `.testaruda/`
@@ -102,12 +103,13 @@ It is **not** a package manager, a reimplementation of any tool, or a CLI launch
   pretender.toml         # pretender config file
   testaruda/             # testaruda config files
   vampiro/               # vampiro config files
-  fabbro/                # fabbro config files
+  specodelic/            # specodelic config files
 ```
 
-Three tools are **install-only** — their state lives outside `.ddl/`, so there
-is nothing to migrate: `fotos-mcp` (MCP client config), `incitaciones`
-(skills land in `~/.agents/skills/`), and `turu` (state in `~/.whisper/`).
+Four tools are **install-only** — their state lives outside `.ddl/`, so there
+is nothing to migrate: `bd` (manages repo-local `.beads/` itself), `openspec`
+(manages `openspec/` itself), `incitaciones` (skills land in
+`~/.agents/skills/`), and `turu` (state in `~/.whisper/`).
 
 Legacy directories (`.wai/`, `.dont/`, etc.) become symlinks pointing to `.ddl/`:
 
@@ -116,9 +118,9 @@ Legacy directories (`.wai/`, `.dont/`, etc.) become symlinks pointing to `.ddl/`
 .dont/           -> .ddl/dont/           # symlink to .ddl/
 .espectacular/   -> .ddl/ah/             # symlink to .ddl/
 .pretender.toml  -> .ddl/pretender.toml  # symlink to .ddl/
-.testaruda/      -> .ddl/testaruda/      # symlink to .ddl/
+.testaruda/      -> .ddl/testaruda/     # symlink to .ddl/
 .vampiro/        -> .ddl/vampiro/        # symlink to .ddl/
-.fabbro/         -> .ddl/fabbro/         # symlink to .ddl/
+.specs/          -> .ddl/specodelic/     # symlink to .ddl/
 ```
 
 ## Documentation
@@ -140,9 +142,10 @@ the homebrew tap and scoop bucket remain as ecosystem infrastructure for
 manual installs but no longer influence ddl's install decisions ([DDL-ei3]).
 Upstream release coverage is tracked in [`docs/ecosystem-map.md`](docs/ecosystem-map.md);
 real tap formulas exist for wai, fotos-mcp, testaruda, vampiro, and turu —
-dont and fabbro are still placeholders, and ddl automatically falls back to
-`cargo install` for tools without published release binaries. See
-[`docs/design.md`](docs/design.md) for the full design doc.
+dont is still a placeholder, and ddl automatically falls back to
+`cargo install` for tools without published release binaries. Note: `bd`
+has no cargo fallback (the `beads` crate on crates.io is an unrelated
+package) — it installs strictly from gastownhall/beads release binaries.
 
 ## Commands
 

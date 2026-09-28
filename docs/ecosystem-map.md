@@ -8,14 +8,13 @@ ddl manages a tool when all of the following hold:
 
 1. It is an installable CLI — users run it in a terminal (not a desktop app, library, static site, or content repo).
 2. It has (or is about to get) a distribution channel in the charly-vibes tap/bucket.
-3. It has a config convention ddl can manage (or is explicitly install-only, like fotos-mcp).
+3. It has a config convention ddl can manage (or is explicitly install-only, like bd, openspec, and incitaciones).
 
 Explicitly excluded sibling repos, and why:
 
 | Repo | Why excluded |
 |------|--------------|
 | genesis | Library crate — shared infrastructure, not user-facing |
-| fotos (cask) | Desktop Tauri app; fotos-mcp is the CLI-managed part |
 | bichos | Bio-mimetic QA framework — no CLI yet |
 | atril | Static web viewer |
 | paranoid | Android app |
@@ -33,18 +32,16 @@ Explicitly excluded sibling repos, and why:
 | **pretender** | `pretender` | `pretender` | ✓ | Multi-language structural code quality. Tree-sitter-based complexity, duplication, mutation testing. |
 | **testaruda** | `testaruda`, `testaruda-adapter-rust`, `testaruda-adapter-python` | `testaruda` | ✓ | Test selection engine. Ascent Datalog + provenance semiring. SQLite store. |
 | **vampiro** | `vampiro` | `vampiro` | ✓ | Cross-language composition checking at call, module, effect, law, retry, resource, and trust boundaries. Crate workspace with per-language tracers. |
-| **fotos-mcp** | `fotos-mcp` | `fotos-mcp` | ✗ | MCP server for Fotos screenshot tool. IPC bridge. Separate from main Tauri app. Install-only under ddl (see config tables below). |
 | **whisper** | `turu` (aliases: `turututu`, `whisper`) | `whisper-vibes` | ✓ | Deterministic knowledge workspace management. Repo-local `.whisper/` + global `~/.whisper/` routing. Install-only under ddl — its state is home-dir global, not repo-local legacy config. |
-| **specodelic** | `specodelic`, `spk` | `specodelic` | ✓ | Markdown spec format (Intent / Constraints / Model / Properties) with the CLI that lints, compiles, verifies, and refactors it. Repo-local `.beads/` (no-db JSONL) + `specs/` corpus. |
+| **specodelic** | `specodelic`, `spk` | `specodelic` | ✓ | Markdown spec format (Intent / Constraints / Model / Properties) with the CLI that lints, compiles, verifies, and refactors it. Repo-local `.specs/` corpus. |
 
 ### Non-Rust tools
 
 | Tool | Language | In homebrew? | Notes |
 |------|----------|-------------|-------|
-| **fabbro** | Go | ✓ (`fabbro`) | Local-first code review annotation with TUI. |
-| **fotos** | Rust/Tauri | ✓ (cask `fotos`) | Desktop screenshot app with AI analysis. Not a CLI tool. |
+| **beads** | Go | ✓ (`beads`, homebrew-core + `gastownhall/beads` tap) | Issue tracker with first-class dependency support (`bd` binary). Release assets are named `beads_*` but ship the `bd` binary. No cargo fallback — the `beads` crate on crates.io is an unrelated package. Install-only — manages repo-local `.beads/` itself. |
+| **openspec** | TypeScript/npm | homebrew-core (`openspec`) | Spec-driven development workflow for AI coding agents. npm package `@fission-ai/openspec`; GitHub releases at `fission-ai/openspec`. Install-only — manages the repo-local `openspec/` directory itself. |
 | **incitaciones** | TypeScript/npm | npm (`incitaciones`) | Prompt/skill collection for CLI LLM tools. Install-only — skills land in `~/.agents/skills/` or `.agents/skills/`; `ddl init` checks for global skills and prompts if missing. |
-| **whisper** | Rust | ✓ (`turu`) | Knowledge-workspace CLI (`turu` on crates.io as `whisper-vibes`). Install-only — state lives in `~/.whisper/`, not a repo-local legacy config. |
 
 ## Config file locations
 
@@ -58,7 +55,7 @@ Before ddl:
 | pretender | `.pretender.toml` | TOML | Single file |
 | testaruda | `.testaruda/` | SQLite + TOML | Dependency graph store |
 | vampiro | `.vampiro/` | TOML | Composition config (`config.toml`) |
-| fabbro | `.fabbro/` | Directory | Session storage (`sessions/`) |
+| specodelic | `.specs/` | Markdown corpus | Spec files |
 
 After ddl migration (Phase 1):
 
@@ -70,13 +67,13 @@ After ddl migration (Phase 1):
 | pretender | `.ddl/pretender.toml` → `.pretender.toml` | ✓ symlink |
 | testaruda | `.ddl/testaruda/` → `.testaruda/` | ✓ symlink |
 | vampiro | `.ddl/vampiro/` → `.vampiro/` | ✓ symlink |
-| fabbro | `.ddl/fabbro/` → `.fabbro/` | ✓ symlink |
+| specodelic | `.ddl/specodelic/` → `.specs/` | ✓ symlink |
 
-`fotos-mcp` is install-only — its MCP client config lives outside `.ddl/`, so there is nothing to migrate.
+`bd`, `openspec`, `incitaciones`, and `turu` are install-only — their state lives outside `.ddl/` (bd manages repo-local `.beads/` itself; openspec manages `openspec/` itself), so there is nothing to migrate.
 
 ## Shared infrastructure (genesis-vibes)
 
-All Rust tools (except fotos-mcp) depend on `genesis-vibes = "0.6"`. Genesis provides:
+All Rust tools depend on `genesis-vibes = "0.6"`. Genesis provides:
 
 | Module | Used by | Purpose |
 |--------|---------|---------|
@@ -96,9 +93,10 @@ All Rust tools (except fotos-mcp) depend on `genesis-vibes = "0.6"`. Genesis pro
 | Channel | Tools | Maintainer |
 |---------|-------|------------|
 | crates.io | All Rust tools | Individual repos |
-| Homebrew | wai, ah, dont, pretender, testaruda, vampiro, fotos-mcp, fabbro, turu, dulce-de-leche, fotos (cask) — dont & fabbro formulas still placeholder stubs | `homebrew-charly` tap |
-| Scoop | wai, ah, dont, pretender, testaruda, vampiro, fotos-mcp, fotos, fabbro, turu, dulce-de-leche | `scoop-charly` bucket |
-| GitHub Releases | All Rust tools | Individual repos |
+| Homebrew | wai, ah, dont, pretender, testaruda, vampiro, fotos-mcp, turu, dulce-de-leche, fotos (cask) — dont formula still a placeholder stub; bd and openspec ship in homebrew-core | `homebrew-charly` tap |
+| Scoop | wai, ah, dont, pretender, testaruda, vampiro, fotos-mcp, fotos, turu, dulce-de-leche | `scoop-charly` bucket |
+| GitHub Releases | All Rust tools; bd (`gastownhall/beads`); openspec (`fission-ai/openspec`) | Individual repos |
+| npm | incitaciones; openspec (`@fission-ai/openspec`) | Individual repos |
 
 ## Homebrew formulas (current state)
 
@@ -115,9 +113,8 @@ From `homebrew-charly/`:
 | `pretender.rb` | 0.5.0 | ✓ | Real release |
 | `dulce-de-leche.rb` | 0.3.0 | ✓ | Real release |
 | `dont.rb` | 0.0.0 | ✗ placeholder | Blocked: no GitHub release for dont yet (tag v0.3.0 exists locally) |
-| `fabbro.rb` | 0.0.0 | ✗ placeholder | Blocked: fabbro has no tagged releases |
 | `fotos.rb` (cask) | — | ✓ | Real release |
 
 Scoop mirrors the same versions for Windows. All formula hashes were computed from downloaded release assets and cross-verified against each release's published `checksums.txt`.
 
-Only **dont** and **fabbro** remain blocked on upstream releases. ddl automatically falls back to `cargo install` for tools whose release binaries are not yet published, so `ddl init` works either way. (Since DDL-ei3, brew/scoop are not part of ddl's install decisions — the tap and bucket below serve manual installs.)
+Only **dont** remains blocked on an upstream release. ddl automatically falls back to `cargo install` for tools whose release binaries are not yet published (except `bd`, which has no crates.io package — the `beads` crate is unrelated), so `ddl init` works either way. (Since DDL-ei3, brew/scoop are not part of ddl's install decisions — the tap and bucket below serve manual installs.)

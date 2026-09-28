@@ -41,7 +41,8 @@ impl CompatibilityMatrix {
         Ok(matrix)
     }
 
-    /// Load the embedded fallback matrix.
+    /// Load the embedded fallback matrix. Mirrors
+    /// `manifest::EMBEDDED_COMPATIBILITY` exactly — keep in sync.
     pub fn embedded() -> Self {
         let tools: HashMap<String, String> = [
             ("wai", ">=2026.3.0"),
@@ -49,8 +50,12 @@ impl CompatibilityMatrix {
             ("ah", ">=0.2.0"),
             ("pretender", ">=0.3.0"),
             ("testaruda", ">=0.2.0"),
-            ("fotos-mcp", ">=0.3.0"),
-            ("fabbro", ">=0.0.0"),
+            ("vampiro", ">=0.4.0"),
+            ("incitaciones", ">=0.8.0"),
+            ("turu", ">=0.3.0"),
+            ("specodelic", ">=0.1.0"),
+            ("bd", ">=0.0.0"),
+            ("openspec", ">=0.0.0"),
         ]
         .into_iter()
         .map(|(k, v)| (k.to_string(), v.to_string()))

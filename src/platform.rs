@@ -143,6 +143,27 @@ pub struct Tool {
     pub npm_package: Option<&'static str>,
 }
 
+impl Tool {
+    /// Release-asset prefix used by binary downloads. Defaults to the tool
+    /// name; overridden when a project publishes assets under a different
+    /// prefix (e.g. beads ships `beads_<ver>_<target>` archives containing
+    /// the `bd` binary).
+    pub fn binary_asset_prefix(&self) -> &'static str {
+        match self.name {
+            "bd" => "beads",
+            _ => self.name,
+        }
+    }
+
+    /// Whether this tool can be installed with `cargo install <crate_name>`.
+    /// False when `crate_name` is not a crates.io package (Go tools, npm
+    /// tools) — the cargo fallback must never run for these, or it would
+    /// install an unrelated crate.
+    pub fn cargo_installable(&self) -> bool {
+        !self.crate_name.is_empty()
+    }
+}
+
 /// All managed tools.
 pub const MANAGED_TOOLS: &[Tool] = &[
     Tool {
@@ -194,20 +215,20 @@ pub const MANAGED_TOOLS: &[Tool] = &[
         npm_package: None,
     },
     Tool {
-        name: "fotos-mcp",
-        description: "Screenshot and image analysis MCP server",
-        crate_name: "fotos-mcp",
-        formula_name: "fotos-mcp",
-        repo: "charly-vibes/fotos",
+        name: "bd",
+        description: "Issue tracker with first-class dependency support (beads)",
+        crate_name: "",
+        formula_name: "beads",
+        repo: "gastownhall/beads",
         npm_package: None,
     },
     Tool {
-        name: "fabbro",
-        description: "Local-first code review annotation tool",
-        crate_name: "fabbro",
-        formula_name: "fabbro",
-        repo: "charly-vibes/fabbro",
-        npm_package: None,
+        name: "openspec",
+        description: "Spec-driven development workflow for AI coding agents",
+        crate_name: "@fission-ai/openspec",
+        formula_name: "openspec",
+        repo: "fission-ai/openspec",
+        npm_package: Some("@fission-ai/openspec"),
     },
     Tool {
         name: "incitaciones",

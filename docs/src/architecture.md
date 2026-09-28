@@ -53,7 +53,7 @@ coordinated releases of each tool.
   pretender.toml         # pretender config file
   testaruda/             # testaruda config files
   vampiro/               # vampiro config files
-  fabbro/                # fabbro config files
+  specodelic/            # specodelic config files
 ```
 
 Legacy directories become symlinks pointing to `.ddl/`:
@@ -65,7 +65,7 @@ Legacy directories become symlinks pointing to `.ddl/`:
 .pretender.toml  -> .ddl/pretender.toml  # symlink to .ddl/
 .testaruda/      -> .ddl/testaruda/      # symlink to .ddl/
 .vampiro/        -> .ddl/vampiro/        # symlink to .ddl/
-.fabbro/         -> .ddl/fabbro/         # symlink to .ddl/
+.specs/          -> .ddl/specodelic/     # symlink to .ddl/
 ```
 
 ## Data flow for `ddl status`

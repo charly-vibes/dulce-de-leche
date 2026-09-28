@@ -157,15 +157,15 @@ const LEGACY_CONFIGS: &[(&str, &str)] = &[
     ("pretender", ".pretender.toml"),
     ("testaruda", ".testaruda"),
     ("vampiro", ".vampiro"),
-    ("fabbro", ".fabbro"),
-    ("specodelic", ".beads"),
-    // Note: `fotos-mcp` is intentionally excluded — it has no known legacy
-    // config file/directory to migrate; its MCP server config lives elsewhere
-    // (it is install-only, see docs/ecosystem-map.md inclusion criteria).
+    ("specodelic", ".specs"),
+    // Note: bd, openspec, incitaciones, and turu are intentionally absent —
+    // they are install-only (bd manages repo-local `.beads/` itself, openspec
+    // manages `openspec/` itself, skills land in `~/.agents/skills/`, and
+    // turu's state is home-dir global). See docs/ecosystem-map.md.
 ];
 
 /// The legacy tool config directories, as `(binary name, legacy path)` pairs.
-/// Tools without a legacy config (e.g. `fotos-mcp`) are absent.
+/// Tools without a legacy config (e.g. `bd`, `openspec`) are absent.
 pub fn legacy_configs() -> &'static [(&'static str, &'static str)] {
     LEGACY_CONFIGS
 }
