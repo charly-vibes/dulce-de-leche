@@ -54,7 +54,7 @@ pub enum Commands {
     /// Install a single tool by name
     Install {
         /// Name of the tool to install (e.g., wai, dont, ah, pretender,
-        /// testaruda, fotos-mcp, fabbro, incitaciones, turu)
+        /// testaruda, bd, openspec, incitaciones, turu)
         tool: String,
     },
 

@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Removed `fotos-mcp` and `fabbro` from the managed toolset** — the fotos
+  desktop app repo and the fabbro Go CLI are out of scope for ddl's
+  registry, compat matrix, legacy-config migration, and post-install init.
+  Their tap formulas remain published for manual installs.
+
+### Added
+
+- **`bd` (beads) joins the managed toolset** — binary download from
+  `gastownhall/beads` releases (assets named `beads_*` shipping the `bd`
+  binary, via the new `binary_asset_prefix` override). No cargo fallback:
+  the `beads` crate on crates.io is an unrelated package, so the cargo
+  fallback is now gated on the tool actually having a crates.io package
+  (`cargo_installable`). Install-only — bd manages repo-local `.beads/`
+  itself; post-install init runs `bd init --non-interactive`.
+- **`openspec` joins the managed toolset** — npm-distributed
+  (`@fission-ai/openspec`); npm install/version/upgrade paths now use
+  `npm_package` so scoped packages work. GitHub releases at
+  `fission-ai/openspec` serve the binary-first path. Install-only —
+  openspec manages the repo-local `openspec/` directory itself;
+  post-install init runs `openspec init --tools none`.
+- Corrected specodelic's legacy config mapping: `.specs/` (its spec
+  corpus), not `.beads/` (which belongs to bd).
+
 ## [0.5.0] - 2026-09-15
 
 ### Changed

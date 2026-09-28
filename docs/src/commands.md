@@ -29,8 +29,8 @@ ddl install ah
 ddl install pretender
 ddl install testaruda
 ddl install vampiro
-ddl install fotos-mcp
-ddl install fabbro
+ddl install bd
+ddl install openspec
 ddl install incitaciones
 ddl install turu
 ```

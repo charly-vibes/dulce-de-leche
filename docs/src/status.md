@@ -27,8 +27,10 @@ published; macOS, Linux, and Windows are verified end-to-end by the
 - Since v0.5.0 ([DDL-ei3](https://github.com/charly-vibes/dulce-de-leche/issues/DDL-ei3)),
   brew/scoop are **not** part of ddl's install decisions — installs are
   binary-first with cargo fallback; the tap and bucket serve manual installs.
-- Upstream coverage gaps: dont and fabbro have placeholder tap formulas, so
-  they require a Rust toolchain on machines without release binaries.
+- Upstream coverage gaps: dont has a placeholder tap formula, so it
+  requires a Rust toolchain on machines without release binaries. `bd` has
+  no cargo fallback at all (the `beads` crate on crates.io is unrelated) —
+  it installs strictly from release binaries.
 
 ## Legend
 

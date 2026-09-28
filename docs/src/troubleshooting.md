@@ -21,8 +21,8 @@ Check available tools:
 - `pretender` — Code quality
 - `testaruda` — Test selection
 - `vampiro` — Composition checking
-- `fotos-mcp` — Screenshot MCP server
-- `fabbro` — Code review annotations
+- `bd` — Issue tracking (beads)
+- `openspec` — Spec-driven development
 - `incitaciones` — Prompts and skills for CLI LLM tools (npm)
 - `turu` — Knowledge workspace management (whisper-vibes)
 

@@ -117,8 +117,12 @@ pub fn is_tool_installed(name: &str) -> bool {
 /// Get the version of an installed tool.
 pub fn get_installed_version(name: &str) -> Option<String> {
     // npm packages don't support `--version` uniformly — ask npm instead.
-    if crate::platform::find_tool(name).is_some_and(|t| t.npm_package.is_some()) {
-        return get_npm_global_version(name);
+    // Use the npm package name, which may be scoped and differ from the
+    // binary name (e.g. binary `openspec`, package `@fission-ai/openspec`).
+    if let Some(tool) = crate::platform::find_tool(name)
+        && tool.npm_package.is_some()
+    {
+        return get_npm_global_version(tool.npm_package.unwrap_or(name));
     }
     let output = Command::new(name).arg("--version").output().ok()?;
     if !output.status.success() {
@@ -214,9 +218,13 @@ pub fn install_tool(
         InstallMethod::Binary => match install_binary(tool, platform, verbose) {
             Ok(()) => (InstallMethod::Binary, Ok(())),
             // Definitive miss (no release asset for this platform): fall back
-            // to cargo when available. Transient failures do NOT fall back.
+            // to cargo when available — but only for tools with a real
+            // crates.io package (Go/npm tools have none, and installing the
+            // wrong crate would be actively harmful).
             Err(DdlError::NoReleaseBinary { .. }) => {
-                match fallback_after_binary_failure(PackageManager::Cargo.is_available()) {
+                match fallback_after_binary_failure(
+                    tool.cargo_installable() && PackageManager::Cargo.is_available(),
+                ) {
                     Some(InstallMethod::Cargo) => {
                         verbose_print(
                             verbose,
@@ -230,8 +238,8 @@ pub fn install_tool(
                     _ => (
                         InstallMethod::Binary,
                         Err(DdlError::InstallFailed(format!(
-                            "⚠ {} binary not yet available for this platform, and cargo is not installed. \
-                             Install Rust (https://rustup.rs) or download the binary manually from \
+                            "⚠ {} binary not yet available for this platform, and no cargo fallback is available. \
+                             Download the binary manually from \
                              https://github.com/{}/releases",
                             tool.name, tool.repo
                         ))),
@@ -378,7 +386,10 @@ fn install_binary(tool: &Tool, platform: &Platform, verbose: bool) -> Result<()>
     } else {
         "tar.gz"
     };
-    let archive_name = format!("{}_{}_{}", tool.name, version, target);
+    // Asset prefix may differ from the binary name (e.g. beads ships
+    // `beads_<ver>_<target>` archives containing the `bd` binary).
+    let asset_prefix = tool.binary_asset_prefix();
+    let archive_name = format!("{asset_prefix}_{version}_{target}");
     let download_url = format!(
         "https://github.com/{}/releases/download/{}/{}.{}",
         tool.repo, tag, archive_name, ext
@@ -536,12 +547,12 @@ fn install_cargo(tool: &Tool, verbose: bool) -> Result<()> {
 
 /// Install a tool via npm (global).
 fn install_npm(tool: &Tool, verbose: bool) -> Result<()> {
-    verbose_print(
-        verbose,
-        &format!("running: npm install -g {}", tool.crate_name),
-    );
+    // The npm package may be scoped (e.g. @fission-ai/openspec) — always use
+    // npm_package, falling back to crate_name for registry-style entries.
+    let package = tool.npm_package.unwrap_or(tool.crate_name);
+    verbose_print(verbose, &format!("running: npm install -g {package}"));
     let status = npm_command("npm")
-        .args(["install", "-g", tool.crate_name])
+        .args(["install", "-g", package])
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
         .status()
@@ -551,8 +562,7 @@ fn install_npm(tool: &Tool, verbose: bool) -> Result<()> {
         Ok(())
     } else {
         Err(DdlError::InstallFailed(format!(
-            "npm install -g {} exited with code {}",
-            tool.crate_name,
+            "npm install -g {package} exited with code {}",
             status.code().unwrap_or(-1)
         )))
     }
@@ -567,8 +577,12 @@ pub fn run_tool_init(tool: &Tool, verbose: bool) -> Result<()> {
         "pretender" => ("pretender", &["init"]),
         "testaruda" => ("testaruda", &["init"]),
         "vampiro" => ("vampiro", &["init"]),
-        "fotos-mcp" => ("fotos-mcp", &["init"]),
-        "fabbro" => ("fabbro", &["init"]),
+        // bd init is interactive by default; --non-interactive skips prompts
+        // (auto-skips Claude hooks when stdout is not a TTY).
+        "bd" => ("bd", &["init", "--non-interactive"]),
+        // openspec init scaffolds openspec/ and prompts for AI-tool config;
+        // --tools none skips that prompt.
+        "openspec" => ("openspec", &["init", "--tools", "none"]),
         "specodelic" => ("specodelic", &["doctor"]),
         _ => return Ok(()),
     };
@@ -667,7 +681,9 @@ pub fn upgrade_tool(
         InstallMethod::Binary => match upgrade_binary(tool, platform, verbose) {
             Ok(()) => (InstallMethod::Binary, Ok(())),
             Err(DdlError::NoReleaseBinary { .. }) => {
-                match fallback_after_binary_failure(PackageManager::Cargo.is_available()) {
+                match fallback_after_binary_failure(
+                    tool.cargo_installable() && PackageManager::Cargo.is_available(),
+                ) {
                     Some(InstallMethod::Cargo) => {
                         verbose_print(
                             verbose,
@@ -681,8 +697,8 @@ pub fn upgrade_tool(
                     _ => (
                         InstallMethod::Binary,
                         Err(DdlError::InstallFailed(format!(
-                            "⚠ {} binary not yet available for this platform, and cargo is not installed. \
-                             Install Rust (https://rustup.rs) or download the binary manually from \
+                            "⚠ {} binary not yet available for this platform, and no cargo fallback is available. \
+                             Download the binary manually from \
                              https://github.com/{}/releases",
                             tool.name, tool.repo
                         ))),
@@ -783,12 +799,14 @@ fn upgrade_cargo(tool: &Tool, verbose: bool) -> Result<()> {
 
 /// Upgrade a tool installed via npm (reinstall at latest).
 fn upgrade_npm(tool: &Tool, verbose: bool) -> Result<()> {
+    // Scoped packages (e.g. @fission-ai/openspec) — use npm_package.
+    let package = tool.npm_package.unwrap_or(tool.crate_name);
     verbose_print(
         verbose,
-        &format!("running: npm install -g {}@latest", tool.crate_name),
+        &format!("running: npm install -g {package}@latest"),
     );
     let status = npm_command("npm")
-        .args(["install", "-g", &format!("{}@latest", tool.crate_name)])
+        .args(["install", "-g", &format!("{package}@latest")])
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
         .status()
@@ -798,8 +816,7 @@ fn upgrade_npm(tool: &Tool, verbose: bool) -> Result<()> {
         Ok(())
     } else {
         Err(DdlError::InstallFailed(format!(
-            "npm install -g {}@latest exited with code {}",
-            tool.crate_name,
+            "npm install -g {package}@latest exited with code {}",
             status.code().unwrap_or(-1)
         )))
     }

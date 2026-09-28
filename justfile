@@ -104,9 +104,9 @@ ecosystem:
 
 # List all managed tools
 tools:
-    @echo "Active Rust tools: wai, dont, ah, pretender, testaruda, fotos-mcp"
-    @echo "Non-Rust tools:    fabbro, fotos"
-    @echo "In spec:           vampiro"
+    @echo "Rust tools:        wai, dont, ah, pretender, testaruda, vampiro, specodelic"
+    @echo "Non-Rust tools:    bd (Go), openspec, incitaciones (npm)"
+    @echo "Install-only:      bd, openspec, incitaciones, turu"
     @echo ""
     @echo "See docs/ecosystem-map.md for details"
 
