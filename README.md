@@ -136,11 +136,13 @@ Full documentation is available at [charly-vibes.github.io/dulce-de-leche](https
 
 ## Status
 
-**v0.5.0** — orchestrator shipped and published (crates.io, GitHub releases).
+**v0.6.0** — orchestrator shipped and published (crates.io, GitHub releases).
 Installs are binary-first on every platform with `cargo install` fallback;
 the homebrew tap and scoop bucket remain as ecosystem infrastructure for
 manual installs but no longer influence ddl's install decisions ([DDL-ei3]).
-Upstream release coverage is tracked in [`docs/ecosystem-map.md`](docs/ecosystem-map.md);
+Registry as of this release: 11 managed tools — bd and openspec joined,
+fotos-mcp and fabbro removed. Upstream release coverage is tracked in
+[`docs/ecosystem-map.md`](docs/ecosystem-map.md);
 real tap formulas exist for wai, fotos-mcp, testaruda, vampiro, and turu —
 dont is still a placeholder, and ddl automatically falls back to
 `cargo install` for tools without published release binaries. Note: `bd`
