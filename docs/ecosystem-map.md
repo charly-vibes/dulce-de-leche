@@ -35,6 +35,7 @@ Explicitly excluded sibling repos, and why:
 | **vampiro** | `vampiro` | `vampiro` | ✓ | Cross-language composition checking at call, module, effect, law, retry, resource, and trust boundaries. Crate workspace with per-language tracers. |
 | **fotos-mcp** | `fotos-mcp` | `fotos-mcp` | ✗ | MCP server for Fotos screenshot tool. IPC bridge. Separate from main Tauri app. Install-only under ddl (see config tables below). |
 | **whisper** | `turu` (aliases: `turututu`, `whisper`) | `whisper-vibes` | ✓ | Deterministic knowledge workspace management. Repo-local `.whisper/` + global `~/.whisper/` routing. Install-only under ddl — its state is home-dir global, not repo-local legacy config. |
+| **specodelic** | `specodelic`, `spk` | `specodelic` | ✓ | Markdown spec format (Intent / Constraints / Model / Properties) with the CLI that lints, compiles, verifies, and refactors it. Repo-local `.beads/` (no-db JSONL) + `specs/` corpus. |
 
 ### Non-Rust tools
 

@@ -225,6 +225,14 @@ pub const MANAGED_TOOLS: &[Tool] = &[
         repo: "charly-vibes/whisper",
         npm_package: None,
     },
+    Tool {
+        name: "specodelic",
+        description: "Markdown spec format (Intent/Constraints/Model/Properties) and the CLI that lints, compiles, verifies, and refactors it",
+        crate_name: "specodelic",
+        formula_name: "specodelic",
+        repo: "charly-vibes/specodelic",
+        npm_package: None,
+    },
 ];
 
 /// Find a tool by name (case-insensitive).

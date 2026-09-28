@@ -97,5 +97,6 @@ pub const EMBEDDED_COMPATIBILITY: &str = r#"{
     "fotos-mcp": ">=0.3.0",
     "fabbro": ">=0.0.0",
     "incitaciones": ">=0.8.0",
-    "turu": ">=0.3.0"
+    "turu": ">=0.3.0",
+    "specodelic": ">=0.1.0"
 }"#;

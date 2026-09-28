@@ -569,6 +569,7 @@ pub fn run_tool_init(tool: &Tool, verbose: bool) -> Result<()> {
         "vampiro" => ("vampiro", &["init"]),
         "fotos-mcp" => ("fotos-mcp", &["init"]),
         "fabbro" => ("fabbro", &["init"]),
+        "specodelic" => ("specodelic", &["doctor"]),
         _ => return Ok(()),
     };
 

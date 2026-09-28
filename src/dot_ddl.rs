@@ -158,6 +158,7 @@ const LEGACY_CONFIGS: &[(&str, &str)] = &[
     ("testaruda", ".testaruda"),
     ("vampiro", ".vampiro"),
     ("fabbro", ".fabbro"),
+    ("specodelic", ".beads"),
     // Note: `fotos-mcp` is intentionally excluded — it has no known legacy
     // config file/directory to migrate; its MCP server config lives elsewhere
     // (it is install-only, see docs/ecosystem-map.md inclusion criteria).
