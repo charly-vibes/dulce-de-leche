@@ -133,6 +133,14 @@ pub fn get_installed_version(name: &str) -> Option<String> {
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
     let first_line = stdout.lines().next()?;
+    parse_version_line(name, first_line)
+}
+
+/// Parse a `--version` first line into a version string.
+///
+/// `name` is the binary name; when the first whitespace token equals it
+/// (e.g. `bd version 1.3.0`), the version is taken from the second token.
+fn parse_version_line(name: &str, first_line: &str) -> Option<String> {
     let parts: Vec<&str> = first_line.split_whitespace().collect();
     if parts.len() >= 2 {
         let candidate = if parts[0].to_lowercase() == name {
@@ -143,12 +151,69 @@ pub fn get_installed_version(name: &str) -> Option<String> {
         let version = if candidate.to_lowercase() == "version" && parts.len() >= 3 {
             parts[2]
         } else {
-            candidate.trim_start_matches('v')
+            candidate
         };
-        Some(version.to_string())
+        Some(version.trim_start_matches('v').to_string())
     } else {
-        Some(first_line.to_string())
+        Some(first_line.trim_start_matches('v').to_string())
     }
+}
+
+/// Probe a binary directly at `path` (e.g. a just-downloaded `.ddl/bin`
+/// binary that is not yet on PATH) and parse its `--version` output.
+/// Fixes DDL-x0m: installs recorded `unknown` when `.ddl/bin` was not on
+/// the current process's PATH at probe time.
+pub(crate) fn probe_version_at(path: &Path, name: &str) -> Option<String> {
+    if !path.exists() {
+        return None;
+    }
+    let output = Command::new(path).arg("--version").output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let first_line = stdout.lines().next()?;
+    parse_version_line(name, first_line)
+}
+
+/// Destination directory for binary installs. Pure so tests can inject the
+/// home / LOCALAPPDATA roots.
+fn binary_dest_dir(os: &Os, home: Option<&Path>, local_app_data: Option<&Path>) -> PathBuf {
+    match os {
+        Os::Windows => local_app_data
+            .map(PathBuf::from)
+            .unwrap_or_default()
+            .join("ddl")
+            .join("bin"),
+        _ => home.map(|h| h.join(".ddl").join("bin")).unwrap_or_default(),
+    }
+}
+
+/// Absolute path of the binary that `install_binary` would write for `tool`.
+fn binary_dest_path(tool: &Tool, platform: &Platform) -> PathBuf {
+    let binary_name = if platform.os == Os::Windows {
+        std::path::PathBuf::from(tool.name)
+            .with_extension("exe")
+            .to_string_lossy()
+            .to_string()
+    } else {
+        tool.name.to_string()
+    };
+    let dest_dir = if platform.os == Os::Windows {
+        let local_app_data = std::env::var("LOCALAPPDATA").ok().map(PathBuf::from);
+        binary_dest_dir(&platform.os, None, local_app_data.as_deref())
+    } else {
+        binary_dest_dir(&platform.os, dirs::home_dir().as_deref(), None)
+    };
+    dest_dir.join(binary_name)
+}
+
+/// Resolve the installed version of a binary tool: PATH probe first, then a
+/// direct probe at the `.ddl/bin` destination (covers the window between
+/// download and the next shell picking up the PATH entry — DDL-x0m).
+fn resolve_with_dest(binary_name: &str, dest_dir: Option<&Path>) -> Option<String> {
+    get_installed_version(binary_name)
+        .or_else(|| dest_dir.and_then(|d| probe_version_at(&d.join(binary_name), binary_name)))
 }
 
 /// Get the globally installed npm version of a package via `npm list -g`.
@@ -257,7 +322,8 @@ pub fn install_tool(
         }
     };
 
-    let detected = get_installed_version(tool.name).unwrap_or_else(|| "unknown".to_string());
+    let detected = resolve_with_dest(tool.name, Some(&binary_dest_path(tool, platform)))
+        .unwrap_or_else(|| "unknown".to_string());
 
     match result {
         Ok(()) => {
@@ -411,12 +477,13 @@ fn install_binary(tool: &Tool, platform: &Platform, verbose: bool) -> Result<()>
                     .to_string(),
             )
         })?;
-        PathBuf::from(local_app_data).join("ddl").join("bin")
+        binary_dest_dir(
+            &platform.os,
+            None,
+            Some(PathBuf::from(local_app_data).as_path()),
+        )
     } else {
-        dirs::home_dir()
-            .ok_or_else(|| DdlError::Other("Cannot find home directory".to_string()))?
-            .join(".ddl")
-            .join("bin")
+        binary_dest_dir(&platform.os, dirs::home_dir().as_deref(), None)
     };
 
     std::fs::create_dir_all(&dest_dir).map_err(DdlError::Io)?;
@@ -843,7 +910,7 @@ pub fn upgrade_tool(
         }
     };
 
-    let new_version = get_installed_version(tool.name);
+    let new_version = resolve_with_dest(tool.name, Some(&binary_dest_path(tool, platform)));
 
     match result {
         Ok(()) => {
@@ -1118,6 +1185,89 @@ pub fn install_selected_tools(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_parse_version_line_variants() {
+        assert_eq!(parse_version_line("ddl", "ddl 0.6.0"), Some("0.6.0".into()));
+        assert_eq!(
+            parse_version_line("bd", "bd version 1.3.0"),
+            Some("1.3.0".into())
+        );
+        assert_eq!(parse_version_line("wai", "v1.2.3"), Some("1.2.3".into()));
+        assert_eq!(
+            parse_version_line("x", "single-token"),
+            Some("single-token".into())
+        );
+    }
+
+    #[test]
+    fn test_probe_version_at_finds_version_in_ddl_bin() {
+        // DDL-x0m: after a binary download to .ddl/bin (not yet on PATH),
+        // the probe must run the binary at its destination directly.
+        let dir = tempfile::tempdir().unwrap();
+        let script = dir.path().join("fake-tool");
+        std::fs::write(&script, "#!/bin/sh\necho \"fake-tool version 9.9.9\"\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        assert_eq!(
+            probe_version_at(&script, "fake-tool"),
+            Some("9.9.9".to_string())
+        );
+        assert_eq!(
+            probe_version_at(dir.path().join("nope").as_path(), "fake-tool"),
+            None
+        );
+    }
+
+    #[test]
+    fn test_binary_dest_dir_pure() {
+        use crate::platform::Os;
+        let home = std::path::PathBuf::from("/home/tester");
+        assert_eq!(
+            binary_dest_dir(&Os::Linux, Some(home.as_path()), None),
+            std::path::PathBuf::from("/home/tester/.ddl/bin")
+        );
+        assert_eq!(
+            binary_dest_dir(&Os::Macos, Some(home.as_path()), None),
+            std::path::PathBuf::from("/home/tester/.ddl/bin")
+        );
+        let lad = std::path::PathBuf::from("C:\\Users\\u\\AppData\\Local");
+        assert_eq!(
+            binary_dest_dir(&Os::Windows, None, Some(lad.as_path())),
+            lad.join("ddl").join("bin")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_resolve_version_falls_back_to_dest_when_not_on_path() {
+        use std::os::unix::fs::PermissionsExt;
+        let temp = tempfile::tempdir().unwrap();
+        let dest_dir = temp.path().join(".ddl").join("bin");
+        std::fs::create_dir_all(&dest_dir).unwrap();
+        let script = dest_dir.join("faketool");
+        std::fs::write(&script, "#!/bin/sh\necho \"faketool version 1.2.3\"\n").unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        // The binary is not on PATH — the dest fallback must still find it.
+        assert_eq!(
+            resolve_with_dest("faketool", Some(&dest_dir)),
+            Some("1.2.3".to_string())
+        );
+    }
+
+    #[test]
+    fn test_resolve_with_dest_none_when_nothing_installed() {
+        // A name that exists nowhere on PATH and in a dest dir without it.
+        let empty = tempfile::tempdir().unwrap();
+        assert_eq!(
+            resolve_with_dest("definitely-not-real-xyz", Some(empty.path())),
+            None
+        );
+    }
 
     /// Verify verbose_print exists and accepts both values without panicking.
     /// The actual stderr output is verified by integration tests that run
