@@ -124,6 +124,55 @@ fn test_install_on_path_returns_success() {
 }
 
 #[test]
+#[cfg(unix)] // PATH stub is a POSIX shell script (see init_noninteractive.rs)
+fn test_install_on_path_untracked_records_in_manifest() {
+    // DDL-zw4: `ddl install TOOL` on a managed tool that is already on PATH
+    // but absent from the manifest must record it (source "skipped"), so
+    // manifest-driven paths (ddl status, ddl version --json) see the tool.
+    let temp = tempfile::tempdir().unwrap();
+
+    // Stub a managed, binary-probe tool (turu) on PATH answering --version.
+    let bin_dir = temp.path().join("stub-bin");
+    std::fs::create_dir_all(&bin_dir).unwrap();
+    let stub = bin_dir.join("turu");
+    std::fs::write(&stub, "#!/bin/sh\nprintf 'turu 0.3.0'\n").unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let inherited = std::env::var_os("PATH").unwrap_or_default();
+    let mut paths = vec![bin_dir];
+    paths.extend(std::env::split_paths(&inherited));
+
+    let manifest_dir = temp.path().join(".ddl");
+    std::fs::create_dir_all(&manifest_dir).unwrap();
+    std::fs::write(
+        manifest_dir.join("manifest.json"),
+        serde_json::to_string_pretty(&serde_json::json!({
+            "ddl_version": "0.6.0",
+            "migration_state": "none",
+            "tools": {}
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    let mut cmd = Command::cargo_bin("ddl").unwrap();
+    cmd.current_dir(temp.path());
+    cmd.env("PATH", std::env::join_paths(paths).unwrap());
+    cmd.arg("install").arg("turu");
+    cmd.timeout(CMD_TIMEOUT);
+    cmd.assert().success();
+
+    let manifest: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(manifest_dir.join("manifest.json")).unwrap())
+            .unwrap();
+    let entry = &manifest["tools"]["turu"];
+    assert!(entry.is_object(), "turu must be recorded in the manifest");
+    assert_eq!(entry["source"], "skipped");
+    assert_eq!(entry["status"], "installed");
+    assert_eq!(entry["installed"], "0.3.0");
+}
+
+#[test]
 fn test_install_json_parses() {
     let (mut cmd, _temp) = ddl_cmd();
     // Exercise the error path, not a real install: an unknown tool fails
