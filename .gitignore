@@ -44,3 +44,4 @@ docs/book/
 
 # macOS
 .DS_Store
+.beads.gate.lock
