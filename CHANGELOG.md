@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-29
+
+### Added
+
+- **`ddl catalog` command** — one command answering "what tools exist, what
+  does each do, how to invoke" from the tool registry. Human table grouped
+  by adoption category; `--json` emits a genesis `List` envelope. Generated
+  `docs/capability-matrix.md` is drift-checked against the registry in CI
+  ([DDL-91a])
+- **`ddl feedback` subcommand** — files an issue to
+  `charly-vibes/dulce-de-leche` via `gh` (`bug|feature|question|chore`);
+  piped stdin (multi-line input promotes the first line to the title),
+  `--title` override, `--dry-run`, and `--from-last-error`. Failed ddl
+  commands are now recorded to the genesis scratch store so
+  `--from-last-error` auto-reports the last failure ([DDL-isi])
+- **Checksum verification for binary installs** — downloaded release
+  binaries are sha256-verified against the release's published
+  `checksums.txt` (per-asset `.sha256` fallback) before extraction; a
+  mismatch aborts naming the tool, an absent checksums file warns and
+  proceeds ([DDL-5ph])
+- **Registry partition surfaces adoption tiers** — every managed tool is
+  tagged `core`/`recommended`/`extension` plus a maturity level
+  (stable/working/tracer-bullet/spec-stage), rendered in `ddl status` and
+  version JSON ([DDL-3i4])
+
+### Fixed
+
+- Binary installs no longer record `unknown` (or `vunknown`) as the
+  installed version: the just-downloaded binary in `.ddl/bin` is probed
+  directly when it is not yet on the current process's PATH ([DDL-x0m])
+- `ddl install` on a PATH-but-untracked tool now records a manifest entry
+  instead of silently skipping the record ([DDL-zw4])
+- CI flake: init tests no longer hit the network for real `npx` skill
+  installs — `incitaciones` is stubbed on PATH in tests
+
+### Docs
+
+- `docs/capability-matrix.md` — generated intent → tool table, drift-
+  checked against the registry ([DDL-91a])
+- openspec specs and project.md synced to the current 11-tool registry;
+  stale `fotos-mcp`/`fabbro` references removed ([DDL-gap])
+
 ## [0.6.0] - 2026-09-28
 
 ### Changed
@@ -172,4 +214,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [DDL-9c2]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-9c2
 [DDL-2rb]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-2rb
 [DDL-71i]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-71i
-[DDL-ei3]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-ei3
+[DDL-ei3]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-ei3[DDL-91a]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-91a
+[DDL-isi]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-isi
+[DDL-5ph]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-5ph
+[DDL-3i4]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-3i4
+[DDL-x0m]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-x0m
+[DDL-zw4]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-zw4
+[DDL-gap]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-gap

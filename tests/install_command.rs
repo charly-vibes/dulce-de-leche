@@ -147,7 +147,7 @@ fn test_install_on_path_untracked_records_in_manifest() {
     std::fs::write(
         manifest_dir.join("manifest.json"),
         serde_json::to_string_pretty(&serde_json::json!({
-            "ddl_version": "0.6.0",
+            "ddl_version": "0.7.0",
             "migration_state": "none",
             "tools": {}
         }))
