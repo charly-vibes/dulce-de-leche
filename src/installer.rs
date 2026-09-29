@@ -1,7 +1,10 @@
-//! Installation chain — binary download (primary), cargo install (fallback), npm install.
+//! Installation chain — binary download (primary, sha256-verified), cargo
+//! install (fallback), npm install.
 //!
 //! Policy (DDL-ei3): prebuilt binary first on every platform — no prerequisites
-//! beyond curl/wget. When the release has no binary for the platform (404),
+//! beyond curl/wget. Binary downloads are verified against the release's
+//! published checksums (DDL-5ph) before extraction; mismatch aborts the
+//! install. When the release has no binary for the platform (404),
 //! fall back to `cargo install` if cargo is available; otherwise fail with an
 //! error naming both remedies. npm-distributed tools (incitaciones) always
 //! install via npm. Homebrew and Scoop are not part of ddl's install decisions;
@@ -476,7 +479,8 @@ fn parse_checksums(content: &str) -> Option<std::collections::HashMap<String, St
             let Some((digest, rest)) = line.split_once(char::is_whitespace) else {
                 continue;
             };
-            (digest, rest.trim_start())
+            // sha256sum binary mode prefixes the filename with `*`
+            (digest, rest.trim_start().trim_start_matches('*'))
         };
         let digest = digest.to_lowercase();
         if digest.len() != 64 || !digest.chars().all(|c| c.is_ascii_hexdigit()) {
@@ -506,18 +510,19 @@ fn verify_checksum(bytes: &[u8], expected: &str, tool: &str, url: &str) -> Resul
     }
 }
 
-/// Look up the published sha256 for the asset at `archive_url`.
+/// Look up the published sha256 for the asset at `archive_url`, printing an
+/// accurate skip-reason (verbose) whenever `None` is returned.
 ///
 /// Conventions checked in order:
 /// 1. `checksums.txt` next to the asset (shasum format — ddl's own release
 ///    workflow publishes this), with the archive looked up by filename
 /// 2. a per-asset `<archive>.sha256` file containing a bare digest
 ///
-/// Returns `None` when the release publishes no usable checksum source —
-/// verification is then skipped with a warning rather than failing, since
-/// aborting would break installs for family tools that don't publish
-/// checksums yet. When a checksum IS published, mismatch is fatal (see
-/// `verify_checksum`).
+/// Returns `None` when the release publishes no usable checksum source or the
+/// asset is absent from the manifest — verification is then skipped rather
+/// than failing, since aborting would break installs for family tools that
+/// don't publish checksums yet. When a checksum IS published, mismatch is
+/// fatal (see `verify_checksum`).
 fn fetch_expected_checksum(archive_url: &str, verbose: bool) -> Option<String> {
     let (base, archive_name) = archive_url.rsplit_once('/')?;
 
@@ -525,14 +530,15 @@ fn fetch_expected_checksum(archive_url: &str, verbose: bool) -> Option<String> {
     if let Ok(resp) = reqwest::blocking::get(&checksums_url)
         && resp.status().is_success()
         && let Ok(body) = resp.text()
-        && let Some(map) = parse_checksums(&body)
     {
-        if let Some(expected) = map.get(archive_name) {
-            return Some(expected.clone());
+        if let Some(expected) = parse_checksums(&body).and_then(|m| m.get(archive_name).cloned()) {
+            return Some(expected);
         }
         verbose_print(
             verbose,
-            &format!("{archive_name} is not listed in checksums.txt"),
+            &format!(
+                "⚠ {archive_name} is not listed in this release's checksums.txt — skipping verification"
+            ),
         );
         return None;
     }
@@ -548,12 +554,15 @@ fn fetch_expected_checksum(archive_url: &str, verbose: bool) -> Option<String> {
         }
     }
 
+    verbose_print(
+        verbose,
+        &format!("⚠ release publishes no checksum for {archive_name} — skipping verification"),
+    );
     None
 }
 
 /// Verify a downloaded release archive against the checksum published for the
-/// same release. Warns (and proceeds) only when the release publishes no
-/// checksum at all — see `fetch_expected_checksum`.
+/// same release. Skip-warning is owned by `fetch_expected_checksum`.
 fn verify_download(
     archive_url: &str,
     archive_bytes: &[u8],
@@ -569,20 +578,11 @@ fn verify_download(
             );
             Ok(())
         }
-        None => {
-            verbose_print(
-                verbose,
-                &format!(
-                    "⚠ {} release publishes no checksum for this asset — skipping verification",
-                    tool.name
-                ),
-            );
-            Ok(())
-        }
+        None => Ok(()),
     }
 }
 
-/// Fetch a release asset (archive or checksums file), mapping the release-404
+/// Fetch a release archive, mapping the release-404
 /// case to `NoReleaseBinary` and any other non-success to `InstallFailed`.
 fn fetch_release_asset(url: &str, tool_name: &str) -> Result<bytes::Bytes> {
     let response = reqwest::blocking::get(url).map_err(DdlError::Network)?;
@@ -1163,6 +1163,18 @@ mod tests {
         let content =
             "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9 wai.tar.gz\n";
         let map = parse_checksums(content).expect("single-space lines parse");
+        assert_eq!(
+            map.get("wai.tar.gz").unwrap(),
+            "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+        );
+    }
+
+    #[test]
+    fn test_parse_checksums_binary_mode_star_prefix() {
+        // `sha256sum -b` emits `hex *filename` (single space, asterisk prefix)
+        let content =
+            "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9 *wai.tar.gz\n";
+        let map = parse_checksums(content).expect("binary-mode line parses");
         assert_eq!(
             map.get("wai.tar.gz").unwrap(),
             "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"

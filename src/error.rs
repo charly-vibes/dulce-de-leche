@@ -37,6 +37,9 @@ pub enum DdlError {
 
     // Note: no #[diagnostic(help)] on this variant — same miette derive
     // mis-lint as NoReleaseBinary; the remedy is spelled out in the message.
+    // Note also: this defends against corruption / mismatched re-publish. A
+    // release whose checksums.txt itself lists the attacker's digest is not
+    // caught — that would require release signing (e.g. sigstore).
     #[error(
         "Checksum verification failed for {tool}: downloaded asset does not match the release checksum (expected sha256 {expected}, got {actual}) — {url}. The download was NOT installed; it may be corrupted or tampered with. Retry, or verify the release manually."
     )]
