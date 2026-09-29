@@ -21,6 +21,17 @@ fn main() {
     let want_json = args.is_json();
 
     if let Err(e) = run(args) {
+        // Record the failure for `ddl feedback bug --from-last-error`.
+        genesis::feedback::scratch::write_scratch_best_effort(
+            "ddl",
+            &genesis::feedback::scratch::ErrorRecord {
+                ts: chrono::Utc::now().to_rfc3339(),
+                argv: std::env::args().collect(),
+                exit: 1,
+                footer: None,
+                kind: "error".to_string(),
+            },
+        );
         output::print_error(&format!("{e}"), want_json);
         process::exit(1);
     }
@@ -37,6 +48,18 @@ fn run(args: dulce_de_leche::cli::Args) -> Result<()> {
         }) => cmd_init(tools.clone(), no_install, &args),
         Some(Commands::Install { ref tool }) => cmd_install(tool, &args),
         Some(Commands::Catalog) => cmd_catalog(&args),
+        Some(Commands::Feedback {
+            ref kind,
+            from_last_error,
+            dry_run,
+            ref title,
+        }) => {
+            let mut fb = genesis::feedback::FeedbackArgs::new(kind, dry_run, from_last_error);
+            if let Some(t) = title {
+                fb = fb.with_title(t);
+            }
+            cmd_feedback(fb, &args)
+        }
         Some(Commands::Status) => cmd_status(&args),
         Some(Commands::Doctor { fix }) => cmd_doctor(fix, &args),
         Some(Commands::Version { check }) => cmd_version(check, &args),
@@ -437,6 +460,59 @@ fn cmd_install(tool_name: &str, args: &dulce_de_leche::cli::Args) -> Result<()> 
     } else {
         ddl_dir.record_failed(result.tool, &result.method.to_string())?;
         Err(DdlError::InstallFailed(result.message))
+    }
+}
+
+fn cmd_feedback(
+    args: genesis::feedback::FeedbackArgs,
+    args_cli: &dulce_de_leche::cli::Args,
+) -> Result<()> {
+    use genesis::feedback::gh::GhResult;
+
+    match genesis::feedback::handle_feedback(
+        &args,
+        "ddl",
+        dulce_de_leche::VERSION,
+        "charly-vibes/dulce-de-leche",
+        &std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+    ) {
+        Ok(result) => {
+            let (message, url) = match &result {
+                genesis::feedback::gh::GhResult::Created { url, number } => {
+                    (format!("Created issue #{number}: {url}"), Some(url.clone()))
+                }
+                GhResult::FallbackUrl(url) => (
+                    format!("Could not create the issue directly — open {url} to file it manually"),
+                    Some(url.clone()),
+                ),
+                GhResult::LocalFile(path) => (
+                    format!(
+                        "Network unavailable — issue body saved to {}",
+                        path.display()
+                    ),
+                    None,
+                ),
+            };
+            if args_cli.is_json() {
+                let data = serde_json::json!({
+                    "message": message,
+                    "url": url,
+                });
+                let json_str = output::json_output(
+                    dulce_de_leche::VERSION,
+                    true,
+                    EnvelopeKind::Ok,
+                    data,
+                    vec![],
+                    vec![],
+                )?;
+                println!("{json_str}");
+            } else {
+                output::print_success(&message, false);
+            }
+            Ok(())
+        }
+        Err(e) => Err(DdlError::Other(e)),
     }
 }
 
