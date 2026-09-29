@@ -35,6 +35,18 @@ pub enum DdlError {
     #[error("No release binary for {tool}: {url}")]
     NoReleaseBinary { tool: String, url: String },
 
+    // Note: no #[diagnostic(help)] on this variant — same miette derive
+    // mis-lint as NoReleaseBinary; the remedy is spelled out in the message.
+    #[error(
+        "Checksum verification failed for {tool}: downloaded asset does not match the release checksum (expected sha256 {expected}, got {actual}) — {url}. The download was NOT installed; it may be corrupted or tampered with. Retry, or verify the release manually."
+    )]
+    ChecksumMismatch {
+        tool: String,
+        expected: String,
+        actual: String,
+        url: String,
+    },
+
     #[error("Prerequisite missing: {0}")]
     #[diagnostic(help("Install the prerequisite and try again"))]
     PrerequisiteMissing(String),

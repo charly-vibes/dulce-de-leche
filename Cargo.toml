@@ -59,6 +59,10 @@ indicatif = "0.17"
 # Shell-word splitting
 shell-words = "1"
 
+# SHA-256 verification of downloaded release binaries (DDL-5ph)
+sha2 = "0.10"
+bytes = "1"
+
 # Archive extraction (tar.gz for unix, zip for windows)
 tar = "0.4"
 flate2 = "1"
