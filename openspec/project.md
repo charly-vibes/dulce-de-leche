@@ -2,7 +2,7 @@
 
 ## Purpose
 
-dulce-de-leche (CLI: `ddl`) is a cross-platform bootstrap and orchestration tool for the charly-vibes ecosystem. It provides a single entry point to install, configure, and manage all charly-vibes CLI tools (wai, dont, ah, pretender, testaruda, fotos-mcp, fabbro) across macOS, Linux, and Windows.
+dulce-de-leche (CLI: `ddl`) is a cross-platform bootstrap and orchestration tool for the charly-vibes ecosystem. It provides a single entry point to install, configure, and manage the charly-vibes CLI tools (wai, dont, ah, pretender, testaruda, vampiro, turu, specodelic, bd, openspec, incitaciones) across macOS, Linux, and Windows.
 
 The core value proposition is: **one binary, one command, any platform.** Download a single pre-compiled static binary, run `ddl init`, and get the entire charly-vibes toolset working on any platform — no package manager prerequisites, no Rust toolchain required.
 
@@ -78,12 +78,15 @@ openspec/
 |---|---|---|---|---|---|
 | `wai` | `wai-cli` | `wai.rb` ✓ | `charly-vibes/wai` | ✓ | Active |
 | `dont` | `dont-cli` | `dont.rb` (placeholder) | `charly-vibes/dont` | ✓ | Active |
-| `ah` | `espectacular` | `ah.rb` (placeholder) | `charly-vibes/espectacular` | ✓ | Active |
-| `pretender` | `pretender` | `pretender.rb` (placeholder) | `charly-vibes/pretender` | ✓ | Active |
-| `testaruda` | `testaruda` | — (not in homebrew) | `charly-vibes/testaruda` | ✓ | Active |
-| `fotos-mcp` | `fotos-mcp` | `fotos-mcp.rb` ✓ | `charly-vibes/fotos` | ✗ | Active |
-| `fabbro` | — (Go) | `fabbro.rb` (placeholder) | `charly-vibes/fabbro` | ✗ (Go) | Active |
-| `vampiro` | — (planned) | — | `charly-vibes/vampiro` | planned | In spec |
+| `ah` | `espectacular` | `ah.rb` ✓ | `charly-vibes/espectacular` | ✓ | Active |
+| `pretender` | `pretender` | `pretender.rb` ✓ | `charly-vibes/pretender` | ✓ | Active |
+| `testaruda` | `testaruda` | `testaruda.rb` ✓ | `charly-vibes/testaruda` | ✓ | Active |
+| `vampiro` | `vampiro` | `vampiro.rb` ✓ | `charly-vibes/vampiro` | ✓ | Active |
+| `turu` | `whisper-vibes` | `turu.rb` ✓ | `charly-vibes/whisper` | ✓ | Active |
+| `specodelic` | `specodelic` | — (crate only) | `charly-vibes/specodelic` | ✓ | Spec stage |
+| `bd` | — (Go binary) | — (homebrew-core + tap `beads`) | `gastownhall/beads` | — | Active (install-only) |
+| `openspec` | — (npm `@fission-ai/openspec`) | — (homebrew-core) | `fission-ai/openspec` | — | Active (install-only) |
+| `incitaciones` | — (npm `incitaciones`) | — (npm) | `charly-vibes/incitaciones` | — | Active (install-only) |
 
 **Important:** For cargo install, use the **crate name** (e.g., `cargo install espectacular`, NOT `cargo install ah`). For brew install, use the formula name minus `.rb` (e.g., `brew install ah`). This mapping is defined in the bootstrap spec's Design Rationale.
 

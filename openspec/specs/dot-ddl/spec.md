@@ -56,7 +56,8 @@ The `.ddl/` directory SHALL follow a standard layout.
   - `.ddl/ah/` — espectacular config directory
   - `.ddl/pretender.toml` — pretender config file
   - `.ddl/testaruda/` — testaruda config directory
-  - `.ddl/fabbro/` — fabbro config directory
+  - `.ddl/vampiro/` — vampiro config directory
+  - `.ddl/specodelic/` — specodelic config directory
 
 #### Scenario: Per-tool subdirectory
 

@@ -90,7 +90,7 @@ The CLI SHALL provide `ddl status` to show a quick overview of all managed tools
 #### Scenario: Discovery mode (no manifest)
 
 - **WHEN** user runs `ddl status` and `.ddl/manifest.json` does not exist
-- **THEN** the system scans PATH for known tool binaries (wai, dont, ah, pretender, testaruda, fotos-mcp, fabbro)
+- **THEN** the system scans PATH for known tool binaries (wai, dont, ah, pretender, testaruda, vampiro, turu, specodelic, bd, openspec, incitaciones)
 - **AND** reports each found tool as "detected (PATH)"
 - **AND** suggests `ddl init` to create a manifest
 - **AND** exits with code 0 if all tools found, code 1 if some missing
