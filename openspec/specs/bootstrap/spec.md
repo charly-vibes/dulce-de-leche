@@ -20,17 +20,21 @@ ddl detects the OS and architecture at runtime and selects the best installation
 
 Each managed tool has different names across distribution channels. ddl maintains this mapping:
 
-| Tool (binary name) | Cargo crate | Homebrew formula | GitHub repo |
+| Tool (binary name) | Cargo crate / npm package | Homebrew formula | GitHub repo |
 |---|---|---|---|
 | `wai` | `wai-cli` | `wai.rb` | `charly-vibes/wai` |
 | `dont` | `dont-cli` | `dont.rb` | `charly-vibes/dont` |
 | `ah` | `espectacular` | `ah.rb` | `charly-vibes/espectacular` |
 | `pretender` | `pretender` | `pretender.rb` | `charly-vibes/pretender` |
-| `testaruda` | `testaruda` | — (not in homebrew) | `charly-vibes/testaruda` |
-| `fotos-mcp` | `fotos-mcp` | `fotos-mcp.rb` | `charly-vibes/fotos` |
-| `fabbro` | — (Go tool) | `fabbro.rb` | `charly-vibes/fabbro` |
+| `testaruda` | `testaruda` | `testaruda.rb` | `charly-vibes/testaruda` |
+| `vampiro` | `vampiro` | `vampiro.rb` | `charly-vibes/vampiro` |
+| `turu` | `whisper-vibes` | `turu.rb` | `charly-vibes/whisper` |
+| `specodelic` | `specodelic` | — (crate only) | `charly-vibes/specodelic` |
+| `bd` | — (Go tool) | — (homebrew-core + tap `beads`) | `gastownhall/beads` |
+| `openspec` | — (npm `@fission-ai/openspec`) | — | `fission-ai/openspec` |
+| `incitaciones` | — (npm `incitaciones`) | — | `charly-vibes/incitaciones` |
 
-For cargo install, use the crate name (e.g., `cargo install espectacular`). For brew install, use the formula name minus `.rb` (e.g., `brew install ah`).
+For cargo install, use the crate name (e.g., `cargo install espectacular`). For brew install, use the formula name minus `.rb` (e.g., `brew install ah`). The install policy (DDL-ei3) is prebuilt binary first, cargo as fallback — brew/scoop formulas remain published for manual installs only.
 
 ### Prerequisites
 
@@ -51,7 +55,7 @@ The binary download path is the only truly "no prerequisites" path (aside from `
 
 ### Placeholder Detection
 
-Some Homebrew formulas (ah, dont, pretender, fabbro) have placeholder versions (0.0.0 with fake SHA256). ddl MUST detect these and skip brew install with a clear message, falling back to cargo install or binary download.
+Some Homebrew formulas (currently only dont) have placeholder versions (0.0.0 with fake SHA256). ddl MUST detect these and skip brew install with a clear message, falling back to cargo install or binary download.
 
 ### Network Failure Handling
 
