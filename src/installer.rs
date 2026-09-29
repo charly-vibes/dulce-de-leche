@@ -1200,6 +1200,9 @@ mod tests {
         );
     }
 
+    // Unix-only: the stub is a shebang script; on Windows the probe would
+    // need an .exe stub, which the executor shims differently.
+    #[cfg(unix)]
     #[test]
     fn test_probe_version_at_finds_version_in_ddl_bin() {
         // DDL-x0m: after a binary download to .ddl/bin (not yet on PATH),
