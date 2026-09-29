@@ -2,6 +2,8 @@
 
 > What ddl manages, and how each tool fits in.
 
+For a machine-generated intent → tool table, see the [capability matrix](capability-matrix.md) (regenerated from ddl's registry; drift-checked in CI).
+
 ## Inclusion criteria
 
 ddl manages a tool when all of the following hold:

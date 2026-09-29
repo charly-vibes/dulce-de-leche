@@ -158,6 +158,7 @@ package) — it installs strictly from gastownhall/beads release binaries.
 |---------|-------------|
 | `ddl init` | Interactive or non-interactive bootstrap |
 | `ddl install <tool>` | Install a single tool |
+| `ddl catalog` | Show the tool catalog — what exists, what it does, how to invoke |
 | `ddl status` | Cross-tool health overview |
 | `ddl doctor` | Detailed diagnostics |
 | `ddl version` | Show versions of ddl and all managed tools |

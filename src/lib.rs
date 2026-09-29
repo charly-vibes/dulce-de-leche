@@ -3,6 +3,7 @@
 //! One binary, one command, any platform. Installs, configures, and updates
 //! every charly-vibes tool from a single CLI.
 
+pub mod catalog;
 pub mod cli;
 pub mod compat;
 pub mod diagnostics;
