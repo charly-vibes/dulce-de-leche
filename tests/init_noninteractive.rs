@@ -225,9 +225,14 @@ fn test_init_yes_in_initialized_dir_skips_installed_tools() {
     cmd.timeout(CMD_TIMEOUT);
     cmd.assert().success();
 
-    // Second run — should detect already-initialized
+    // Second run — should detect already-initialized.
+    // The stub must be applied here too (not just the first cmd): without
+    // it, the --yes skill-install step falls back to a real `npx --yes`
+    // network install and gets killed by CMD_TIMEOUT — same failure class
+    // PR #32 fixed for the first cmd (seen again 2026-09-29).
     let mut cmd2 = Command::cargo_bin("ddl").unwrap();
     cmd2.current_dir(temp.path());
+    stub_incytestes_on_path(&mut cmd2, &temp);
     cmd2.arg("init")
         .arg("--yes")
         .arg("--human")

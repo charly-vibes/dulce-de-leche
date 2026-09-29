@@ -34,28 +34,15 @@ fn readme_managed_tools_block_matches_registry() {
         .lines()
         .find(|l| l.starts_with("Managed tools ("))
         .expect("managed tools line missing from README block");
-    let (count, list) = line
+    let (count, _rest) = line
         .strip_prefix("Managed tools (")
-        .and_then(|l| l.split_once("): "))
+        .and_then(|l| l.split_once(')'))
         .expect("malformed managed tools line");
     let count: usize = count.parse().expect("managed tools count not a number");
     assert_eq!(
         count,
         MANAGED_TOOLS.len(),
         "README tool count drifts from MANAGED_TOOLS"
-    );
-
-    let mut listed: Vec<&str> = list
-        .trim_end_matches('.')
-        .split(", ")
-        .map(|s| s.trim())
-        .collect();
-    listed.sort();
-    let mut expected = registry_names();
-    expected.sort();
-    assert_eq!(
-        listed, expected,
-        "README managed-tools block drifts from MANAGED_TOOLS"
     );
 }
 
@@ -103,4 +90,116 @@ fn ecosystem_map_mentions_every_tool() {
             "tool `{name}` missing from docs/ecosystem-map.md"
         );
     }
+}
+
+// ── Registry partition (DDL-3i4) ──────────────────────────────────────
+
+/// The draft partition from the usage census (family-evaluation §5), as
+/// recorded in DDL-3i4. Category surfacing and future enforcement build on
+/// this; changing the partition is a deliberate product decision, so the
+/// expected mapping is locked here.
+const EXPECTED_CATEGORY: &[(&str, &str)] = &[
+    ("wai", "core"),
+    ("testaruda", "core"),
+    ("turu", "recommended"),
+    ("dont", "recommended"),
+    ("ah", "recommended"),
+    ("pretender", "extension"),
+    ("vampiro", "extension"),
+    ("incitaciones", "extension"),
+    ("bd", "extension"),
+    ("openspec", "extension"),
+    ("specodelic", "extension"),
+];
+
+#[test]
+fn registry_partition_matches_census_draft() {
+    assert_eq!(
+        EXPECTED_CATEGORY.len(),
+        MANAGED_TOOLS.len(),
+        "partition table must cover every MANAGED_TOOLS entry"
+    );
+    for (name, category) in EXPECTED_CATEGORY {
+        let tool = MANAGED_TOOLS
+            .iter()
+            .find(|t| t.name == *name)
+            .unwrap_or_else(|| panic!("tool `{name}` in partition table not in registry"));
+        assert_eq!(
+            tool.category.as_str(),
+            *category,
+            "tool `{name}` category drifts from the census draft partition"
+        );
+    }
+}
+
+#[test]
+fn every_tool_has_valid_maturity() {
+    const VALID: &[&str] = &["stable", "working", "tracer-bullet", "spec-stage"];
+    for tool in MANAGED_TOOLS {
+        assert!(
+            VALID.contains(&tool.maturity.as_str()),
+            "tool `{}` has invalid maturity `{}`",
+            tool.name,
+            tool.maturity.as_str()
+        );
+    }
+}
+
+#[test]
+fn readme_category_blocks_match_registry() {
+    let start = README
+        .find("<!-- MANAGED-TOOLS:START -->")
+        .expect("README.md must contain MANAGED-TOOLS markers");
+    let end = README
+        .find("<!-- MANAGED-TOOLS:END -->")
+        .expect("README.md must contain MANAGED-TOOLS markers");
+    let block = &README[start..end];
+
+    let mut seen: Vec<&str> = Vec::new();
+    for (heading, category) in [
+        ("Core", "core"),
+        ("Recommended", "recommended"),
+        ("Extension", "extension"),
+    ] {
+        let prefix = format!("- {heading} (");
+        let line = block
+            .lines()
+            .find(|l| l.starts_with(&prefix))
+            .unwrap_or_else(|| panic!("README block missing `{heading}` category line"));
+        let (count, list) = line[prefix.len()..]
+            .split_once("): ")
+            .unwrap_or_else(|| panic!("malformed `{heading}` category line"));
+        let count: usize = count.parse().expect("category count not a number");
+        let listed: Vec<&str> = list
+            .trim_end_matches('.')
+            .split(", ")
+            .map(|s| s.trim())
+            .collect();
+        assert_eq!(
+            listed.len(),
+            count,
+            "`{heading}` count does not match listed names"
+        );
+        for name in &listed {
+            let tool = MANAGED_TOOLS
+                .iter()
+                .find(|t| t.name == *name)
+                .unwrap_or_else(|| panic!("README lists `{name}` which is not in the registry"));
+            assert_eq!(
+                tool.category.as_str(),
+                category,
+                "README lists `{name}` under {heading} but registry says {}",
+                tool.category.as_str()
+            );
+        }
+        seen.extend(listed);
+    }
+
+    seen.sort();
+    let mut expected = registry_names();
+    expected.sort();
+    assert_eq!(
+        seen, expected,
+        "README category blocks drift from MANAGED_TOOLS"
+    );
 }

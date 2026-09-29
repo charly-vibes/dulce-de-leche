@@ -25,7 +25,10 @@
 Repo root stays clean — everything lives under `.ddl/`.
 
 <!-- MANAGED-TOOLS:START -->
-Managed tools (11): wai, dont, ah, pretender, testaruda, vampiro, bd, openspec, incitaciones, turu, specodelic.
+Managed tools (11):
+- Core (2): wai, testaruda.
+- Recommended (3): turu, dont, ah.
+- Extension (6): pretender, vampiro, incitaciones, bd, openspec, specodelic.
 Run `ddl version` for the full picture. Additions and removals must update this block
 (enforced by `tests/tool_registry_drift.rs`).
 <!-- MANAGED-TOOLS:END -->
