@@ -519,6 +519,7 @@ fn cmd_version(check: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
                     let compatible = matrix.is_compatible(name, &entry.installed);
                     let latest = latest_versions.get(name.as_str());
                     let update_available = latest.is_some_and(|lv| *lv != entry.installed);
+                    let registry_tool = dulce_de_leche::platform::find_tool(name);
                     tools.push(serde_json::json!({
                         "name": name,
                         "version": entry.installed,
@@ -527,7 +528,9 @@ fn cmd_version(check: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
                         "source": entry.source,
                         "status": entry.status,
                         "compatible": compatible,
-                        "constraint": constraint
+                        "constraint": constraint,
+                        "category": registry_tool.map(|t| t.category.as_str()),
+                        "maturity": registry_tool.map(|t| t.maturity.as_str())
                     }));
                 }
             }
@@ -572,7 +575,10 @@ fn cmd_version(check: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
                 if diagnostics::which(tool.name).is_some() {
                     let version =
                         diagnostics::get_tool_version(tool).unwrap_or_else(|| "?".to_string());
-                    println!("  {:12} v{}", tool.name, version);
+                    println!(
+                        "  {:12} v{} [{}/{}]",
+                        tool.name, version, tool.category, tool.maturity
+                    );
                 }
             }
         }
@@ -628,13 +634,13 @@ fn cmd_version(check: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
 
             if installed {
                 println!(
-                    "  {:12} v{} (constraint: {}) {}",
-                    tool.name, version, constraint, status
+                    "  {:12} v{} [{}/{}] (constraint: {}) {}",
+                    tool.name, version, tool.category, tool.maturity, constraint, status
                 );
             } else {
                 println!(
-                    "  {:12} {} (constraint: {})",
-                    tool.name, version, constraint
+                    "  {:12} {} [{}/{}] (constraint: {})",
+                    tool.name, version, tool.category, tool.maturity, constraint
                 );
             }
         }

@@ -306,9 +306,9 @@ impl StatusContributor for DdlStatusContributor {
             };
 
             let value = if installed {
-                format!("v{version}")
+                format!("v{version} [{}/{}]", tool.category, tool.maturity)
             } else {
-                "not installed".to_string()
+                format!("not installed [{}/{}]", tool.category, tool.maturity)
             };
 
             items.push(StatusItem {

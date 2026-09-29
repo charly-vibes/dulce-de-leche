@@ -77,6 +77,20 @@ fn test_status_json_output() {
 }
 
 #[test]
+fn test_status_renders_category_per_tool() {
+    // DDL-3i4: every managed tool's status line carries its census category
+    // (and maturity), e.g. "not installed [core/stable]".
+    let (mut cmd, _temp) = ddl_cmd();
+    cmd.arg("status");
+    cmd.timeout(CMD_TIMEOUT);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("[core/"))
+        .stdout(predicate::str::contains("[recommended/"))
+        .stdout(predicate::str::contains("[extension/"));
+}
+
+#[test]
 fn test_status_unknown_flag_errors() {
     let mut cmd = Command::cargo_bin("ddl").unwrap();
     cmd.arg("status").arg("--unknown-flag");
