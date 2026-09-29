@@ -399,15 +399,22 @@ fn cmd_install(tool_name: &str, args: &dulce_de_leche::cli::Args) -> Result<()> 
     let mut ddl_dir = DdlDir::find_or_create()?;
 
     if dulce_de_leche::installer::is_tool_installed(tool.name) {
-        let msg = if let Some(entry) = ddl_dir.manifest.get_tool(tool.name) {
-            format!(
+        if let Some(entry) = ddl_dir.manifest.get_tool(tool.name) {
+            let msg = format!(
                 "{} v{} is already installed (via {})",
                 tool.name, entry.installed, entry.source
-            )
+            );
+            output::print_success(&msg, args.is_json());
         } else {
-            format!("{} is already installed on PATH", tool.name)
-        };
-        output::print_success(&msg, args.is_json());
+            // On PATH but untracked (DDL-zw4): probe the version and record
+            // the tool so manifest-driven paths (status, version --json) see
+            // it. Source "skipped" matches the init already-installed flow.
+            let ver = dulce_de_leche::installer::get_installed_version(tool.name)
+                .unwrap_or_else(|| "unknown".to_string());
+            ddl_dir.record_installed(tool.name, &ver, "skipped")?;
+            let msg = format!("{} v{} is already installed on PATH", tool.name, ver);
+            output::print_success(&msg, args.is_json());
+        }
         return Ok(());
     }
 
