@@ -58,6 +58,10 @@ pub enum Commands {
         tool: String,
     },
 
+    /// Show the charly-vibes tool catalog — what exists, what it does,
+    /// how to invoke it
+    Catalog,
+
     /// Show cross-tool health overview
     Status,
 

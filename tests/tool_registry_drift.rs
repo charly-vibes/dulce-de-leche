@@ -92,6 +92,22 @@ fn ecosystem_map_mentions_every_tool() {
     }
 }
 
+// ── Capability matrix (DDL-91a) ───────────────────────────────────────
+
+/// docs/capability-matrix.md is generated, not hand-written. The committed
+/// file must exactly match what the catalog module renders from the
+/// registry — hand edits fail here until regenerated.
+#[test]
+fn capability_matrix_matches_generation() {
+    let committed = include_str!("../docs/capability-matrix.md");
+    let generated = dulce_de_leche::catalog::render_capability_matrix();
+    assert_eq!(
+        committed, generated,
+        "docs/capability-matrix.md is out of sync with the registry — \
+         regenerate it (see the catalog module) instead of hand-editing"
+    );
+}
+
 // ── Registry partition (DDL-3i4) ──────────────────────────────────────
 
 /// The draft partition from the usage census (family-evaluation §5), as

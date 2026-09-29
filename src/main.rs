@@ -36,6 +36,7 @@ fn run(args: dulce_de_leche::cli::Args) -> Result<()> {
             no_install,
         }) => cmd_init(tools.clone(), no_install, &args),
         Some(Commands::Install { ref tool }) => cmd_install(tool, &args),
+        Some(Commands::Catalog) => cmd_catalog(&args),
         Some(Commands::Status) => cmd_status(&args),
         Some(Commands::Doctor { fix }) => cmd_doctor(fix, &args),
         Some(Commands::Version { check }) => cmd_version(check, &args),
@@ -437,6 +438,28 @@ fn cmd_install(tool_name: &str, args: &dulce_de_leche::cli::Args) -> Result<()> 
         ddl_dir.record_failed(result.tool, &result.method.to_string())?;
         Err(DdlError::InstallFailed(result.message))
     }
+}
+
+fn cmd_catalog(args: &dulce_de_leche::cli::Args) -> Result<()> {
+    use dulce_de_leche::catalog;
+
+    let entries = catalog::entries();
+    if args.is_json() {
+        let data = serde_json::json!({ "count": entries.len(), "tools": entries });
+        let json_str = output::json_output(
+            dulce_de_leche::VERSION,
+            true,
+            EnvelopeKind::List,
+            data,
+            vec![],
+            vec![],
+        )?;
+        println!("{json_str}");
+        return Ok(());
+    }
+
+    print!("{}", catalog::render_human());
+    Ok(())
 }
 
 fn cmd_status(args: &dulce_de_leche::cli::Args) -> Result<()> {
