@@ -62,6 +62,24 @@ pub enum Commands {
     /// how to invoke it
     Catalog,
 
+    /// Submit a feedback issue to the ddl repository
+    Feedback {
+        /// Kind of issue (bug|feature|question|chore)
+        kind: String,
+
+        /// Auto-populate the body from the last failed ddl command
+        #[arg(long)]
+        from_last_error: bool,
+
+        /// Print the issue body and gh command without submitting
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Override the issue title (wins over derived titles)
+        #[arg(long)]
+        title: Option<String>,
+    },
+
     /// Show cross-tool health overview
     Status,
 
