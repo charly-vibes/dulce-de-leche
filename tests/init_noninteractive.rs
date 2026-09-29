@@ -15,12 +15,34 @@ use std::time::Duration;
 /// Timeout for each test — init with --no-install should be instant.
 const CMD_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// Prepend a stub `incitaciones` executable to the child's PATH so init's
+/// skill-install step runs the stub instead of a real `npx --yes` network
+/// install. Without this, CI is non-hermetic: slow/unreachable npm registry
+/// hangs the run past CMD_TIMEOUT and the test is killed (seen 2026-09-29 on
+/// two consecutive push-triggered runs).
+fn stub_incytestes_on_path(cmd: &mut Command, temp: &tempfile::TempDir) {
+    let bin_dir = temp.path().join("stub-bin");
+    std::fs::create_dir_all(&bin_dir).unwrap();
+    let stub = bin_dir.join("incitaciones");
+    std::fs::write(&stub, "#!/bin/sh\nexit 0\n").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let inherited = std::env::var_os("PATH").unwrap_or_default();
+    let mut paths = vec![bin_dir];
+    paths.extend(std::env::split_paths(&inherited));
+    cmd.env("PATH", std::env::join_paths(paths).unwrap());
+}
+
 /// Helper: create a temp directory and return the cmd pre-configured to run
 /// inside it.
 fn ddl_cmd() -> (Command, tempfile::TempDir) {
     let temp = tempfile::tempdir().unwrap();
     let mut cmd = Command::cargo_bin("ddl").unwrap();
     cmd.current_dir(temp.path());
+    stub_incytestes_on_path(&mut cmd, &temp);
     (cmd, temp)
 }
 
