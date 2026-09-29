@@ -1,7 +1,10 @@
-//! Installation chain — binary download (primary), cargo install (fallback), npm install.
+//! Installation chain — binary download (primary, sha256-verified), cargo
+//! install (fallback), npm install.
 //!
 //! Policy (DDL-ei3): prebuilt binary first on every platform — no prerequisites
-//! beyond curl/wget. When the release has no binary for the platform (404),
+//! beyond curl/wget. Binary downloads are verified against the release's
+//! published checksums (DDL-5ph) before extraction; mismatch aborts the
+//! install. When the release has no binary for the platform (404),
 //! fall back to `cargo install` if cargo is available; otherwise fail with an
 //! error naming both remedies. npm-distributed tools (incitaciones) always
 //! install via npm. Homebrew and Scoop are not part of ddl's install decisions;
@@ -420,10 +423,13 @@ fn install_binary(tool: &Tool, platform: &Platform, verbose: bool) -> Result<()>
 
     let dest_path = dest_dir.join(&binary_name);
 
+    let archive_bytes = fetch_release_asset(&download_url, tool.name)?;
+    verify_download(&download_url, &archive_bytes, tool, verbose)?;
+
     if ext == "zip" {
-        download_and_extract_zip(&download_url, &dest_path, tool.name)?;
+        extract_zip(&archive_bytes, &dest_path, &download_url)?;
     } else {
-        download_and_extract_tar_gz(&download_url, &dest_path, tool.name)?;
+        extract_tar_gz(&archive_bytes, &dest_path, tool.name, &download_url)?;
     }
 
     #[cfg(unix)]
@@ -439,7 +445,146 @@ fn install_binary(tool: &Tool, platform: &Platform, verbose: bool) -> Result<()>
     Ok(())
 }
 
-fn download_and_extract_tar_gz(url: &str, dest: &Path, tool_name: &str) -> Result<()> {
+/// SHA-256 of `bytes` as lowercase hex.
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(bytes);
+    let mut hex = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        hex.push_str(&format!("{byte:02x}"));
+    }
+    hex
+}
+
+/// Parse a shasum-style checksum manifest (`<sha256>  <filename>` per line;
+/// two spaces per `shasum -a 256`, single space and bsd-style `"<hex>" *name`
+/// also accepted). Lines without a 64-char hex digest are skipped.
+/// Returns `None` when nothing valid remains.
+fn parse_checksums(content: &str) -> Option<std::collections::HashMap<String, String>> {
+    let mut map = std::collections::HashMap::new();
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        // bsd-style: "<hex>" *filename
+        let (digest, name) = if let Some(quoted) = line.strip_prefix('"') {
+            let Some((digest, rest)) = quoted.split_once('"') else {
+                continue;
+            };
+            let rest = rest.trim_start();
+            let name = rest.trim_start_matches('*');
+            (digest, name)
+        } else {
+            let Some((digest, rest)) = line.split_once(char::is_whitespace) else {
+                continue;
+            };
+            // sha256sum binary mode prefixes the filename with `*`
+            (digest, rest.trim_start().trim_start_matches('*'))
+        };
+        let digest = digest.to_lowercase();
+        if digest.len() != 64 || !digest.chars().all(|c| c.is_ascii_hexdigit()) {
+            continue;
+        }
+        if name.is_empty() {
+            continue;
+        }
+        map.insert(name.to_string(), digest);
+    }
+    (!map.is_empty()).then_some(map)
+}
+
+/// Verify `bytes` hash to `expected` (case-insensitive). Mismatch is a hard
+/// `ChecksumMismatch` naming the tool — the caller must not install the asset.
+fn verify_checksum(bytes: &[u8], expected: &str, tool: &str, url: &str) -> Result<()> {
+    let actual = sha256_hex(bytes);
+    if actual == expected.to_lowercase() {
+        Ok(())
+    } else {
+        Err(DdlError::ChecksumMismatch {
+            tool: tool.to_string(),
+            expected: expected.to_lowercase(),
+            actual,
+            url: url.to_string(),
+        })
+    }
+}
+
+/// Look up the published sha256 for the asset at `archive_url`, printing an
+/// accurate skip-reason (verbose) whenever `None` is returned.
+///
+/// Conventions checked in order:
+/// 1. `checksums.txt` next to the asset (shasum format — ddl's own release
+///    workflow publishes this), with the archive looked up by filename
+/// 2. a per-asset `<archive>.sha256` file containing a bare digest
+///
+/// Returns `None` when the release publishes no usable checksum source or the
+/// asset is absent from the manifest — verification is then skipped rather
+/// than failing, since aborting would break installs for family tools that
+/// don't publish checksums yet. When a checksum IS published, mismatch is
+/// fatal (see `verify_checksum`).
+fn fetch_expected_checksum(archive_url: &str, verbose: bool) -> Option<String> {
+    let (base, archive_name) = archive_url.rsplit_once('/')?;
+
+    let checksums_url = format!("{base}/checksums.txt");
+    if let Ok(resp) = reqwest::blocking::get(&checksums_url)
+        && resp.status().is_success()
+        && let Ok(body) = resp.text()
+    {
+        if let Some(expected) = parse_checksums(&body).and_then(|m| m.get(archive_name).cloned()) {
+            return Some(expected);
+        }
+        verbose_print(
+            verbose,
+            &format!(
+                "⚠ {archive_name} is not listed in this release's checksums.txt — skipping verification"
+            ),
+        );
+        return None;
+    }
+
+    let per_asset_url = format!("{archive_url}.sha256");
+    if let Ok(resp) = reqwest::blocking::get(&per_asset_url)
+        && resp.status().is_success()
+        && let Ok(body) = resp.text()
+    {
+        let digest = body.split_whitespace().next().unwrap_or("").to_lowercase();
+        if digest.len() == 64 && digest.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Some(digest);
+        }
+    }
+
+    verbose_print(
+        verbose,
+        &format!("⚠ release publishes no checksum for {archive_name} — skipping verification"),
+    );
+    None
+}
+
+/// Verify a downloaded release archive against the checksum published for the
+/// same release. Skip-warning is owned by `fetch_expected_checksum`.
+fn verify_download(
+    archive_url: &str,
+    archive_bytes: &[u8],
+    tool: &Tool,
+    verbose: bool,
+) -> Result<()> {
+    match fetch_expected_checksum(archive_url, verbose) {
+        Some(expected) => {
+            verify_checksum(archive_bytes, &expected, tool.name, archive_url)?;
+            verbose_print(
+                verbose,
+                &format!("✓ {} sha256 verified against release checksum", tool.name),
+            );
+            Ok(())
+        }
+        None => Ok(()),
+    }
+}
+
+/// Fetch a release archive, mapping the release-404
+/// case to `NoReleaseBinary` and any other non-success to `InstallFailed`.
+fn fetch_release_asset(url: &str, tool_name: &str) -> Result<bytes::Bytes> {
     let response = reqwest::blocking::get(url).map_err(DdlError::Network)?;
 
     if response.status() == reqwest::StatusCode::NOT_FOUND {
@@ -455,9 +600,11 @@ fn download_and_extract_tar_gz(url: &str, dest: &Path, tool_name: &str) -> Resul
             url
         )));
     }
+    response.bytes().map_err(DdlError::Network)
+}
 
-    let bytes = response.bytes().map_err(DdlError::Network)?;
-    let decoder = flate2::read::GzDecoder::new(&bytes[..]);
+fn extract_tar_gz(bytes: &[u8], dest: &Path, tool_name: &str, url: &str) -> Result<()> {
+    let decoder = flate2::read::GzDecoder::new(bytes);
     let mut archive = tar::Archive::new(decoder);
 
     for entry in archive
@@ -478,24 +625,7 @@ fn download_and_extract_tar_gz(url: &str, dest: &Path, tool_name: &str) -> Resul
     )))
 }
 
-fn download_and_extract_zip(url: &str, dest: &Path, tool_name: &str) -> Result<()> {
-    let response = reqwest::blocking::get(url).map_err(DdlError::Network)?;
-
-    if response.status() == reqwest::StatusCode::NOT_FOUND {
-        return Err(DdlError::NoReleaseBinary {
-            tool: tool_name.to_string(),
-            url: url.to_string(),
-        });
-    }
-    if !response.status().is_success() {
-        return Err(DdlError::InstallFailed(format!(
-            "Download failed: HTTP {} for {}",
-            response.status(),
-            url
-        )));
-    }
-
-    let bytes = response.bytes().map_err(DdlError::Network)?;
+fn extract_zip(bytes: &[u8], dest: &Path, url: &str) -> Result<()> {
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes.to_vec()))
         .map_err(|e| DdlError::Other(e.to_string()))?;
 
@@ -997,6 +1127,114 @@ mod tests {
         // Must not panic for either value
         verbose_print(true, "trace message");
         verbose_print(false, "trace message");
+    }
+
+    #[test]
+    fn test_sha256_hex_known_digests() {
+        assert_eq!(
+            sha256_hex(b""),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+        assert_eq!(
+            sha256_hex(b"hello world"),
+            "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+        );
+    }
+
+    #[test]
+    fn test_parse_checksums_shasum_format() {
+        let content = concat!(
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  wai_0.1.0_darwin_arm64.tar.gz\n",
+            "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9  beads_1.0.0_linux_amd64.zip\n"
+        );
+        let map = parse_checksums(content).expect("should parse two lines");
+        assert_eq!(
+            map.get("wai_0.1.0_darwin_arm64.tar.gz").unwrap(),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+        assert_eq!(
+            map.get("beads_1.0.0_linux_amd64.zip").unwrap(),
+            "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+        );
+    }
+
+    #[test]
+    fn test_parse_checksums_single_space_separator() {
+        let content =
+            "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9 wai.tar.gz\n";
+        let map = parse_checksums(content).expect("single-space lines parse");
+        assert_eq!(
+            map.get("wai.tar.gz").unwrap(),
+            "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+        );
+    }
+
+    #[test]
+    fn test_parse_checksums_binary_mode_star_prefix() {
+        // `sha256sum -b` emits `hex *filename` (single space, asterisk prefix)
+        let content =
+            "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9 *wai.tar.gz\n";
+        let map = parse_checksums(content).expect("binary-mode line parses");
+        assert_eq!(
+            map.get("wai.tar.gz").unwrap(),
+            "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+        );
+    }
+
+    #[test]
+    fn test_parse_checksums_skips_malformed_lines() {
+        let content = concat!(
+            "not-a-checksum oops.tar.gz\n",
+            "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9  good.tar.gz\n",
+            "\n",
+            "\"b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9\" *quoted.tar.gz\n"
+        );
+        let map = parse_checksums(content).expect("at least one valid line");
+        assert_eq!(map.len(), 2);
+        assert!(map.contains_key("good.tar.gz"));
+        assert!(
+            map.contains_key("quoted.tar.gz"),
+            "bsd-style quoted line parses"
+        );
+    }
+
+    #[test]
+    fn test_parse_checksums_no_valid_lines_returns_none() {
+        assert_eq!(parse_checksums(""), None);
+        assert_eq!(parse_checksums("garbage\nlines\n"), None);
+    }
+
+    #[test]
+    fn test_verify_checksum_accepts_matching_digest() {
+        let digest = sha256_hex(b"payload");
+        assert!(verify_checksum(b"payload", &digest, "wai", "https://example.test").is_ok());
+    }
+
+    #[test]
+    fn test_verify_checksum_aborts_on_mismatch_naming_tool() {
+        let digest = sha256_hex(b"payload");
+        let err = verify_checksum(
+            b"tampered",
+            &digest,
+            "wai",
+            "https://example.test/asset.tar.gz",
+        )
+        .expect_err("mismatch must error");
+        match &err {
+            DdlError::ChecksumMismatch { tool, .. } => assert_eq!(tool, "wai"),
+            other => panic!("expected ChecksumMismatch, got: {other}"),
+        }
+        // Error text names the tool and both digests so the operator can triage
+        let text = err.to_string();
+        assert!(text.contains("wai"));
+        assert!(text.contains(&digest));
+    }
+
+    #[test]
+    fn test_verify_checksum_accepts_uppercase_expected() {
+        // Some release pipelines emit uppercase hex — normalize before comparing
+        let digest = sha256_hex(b"payload").to_uppercase();
+        assert!(verify_checksum(b"payload", &digest, "wai", "https://example.test").is_ok());
     }
 
     /// github_token reads GITHUB_TOKEN, then GH_TOKEN, and ignores empty
