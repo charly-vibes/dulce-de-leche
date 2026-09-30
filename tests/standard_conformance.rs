@@ -40,6 +40,7 @@ const ALL_REPOS: &[&str] = &[
     "whisper",
     "dulce-de-leche",
     "incitaciones",
+    "genesis",
 ];
 
 const RELEASE_TARGETS: &[&str] = &[
@@ -91,8 +92,11 @@ fn s1_release_slot_exists() {
         let Some(dir) = repo_dir(name) else { continue };
         let slot = if RUST_REPOS.contains(name) {
             "release.yml"
-        } else {
+        } else if *name == "incitaciones" {
             "npm-publish.yml"
+        } else {
+            // lib crates publish to crates.io on tag (no binary matrix)
+            "publish.yml"
         };
         assert!(
             read(&dir, &format!(".github/workflows/{slot}")).is_some(),

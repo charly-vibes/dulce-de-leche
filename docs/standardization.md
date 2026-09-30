@@ -59,6 +59,10 @@ Rules:
 - `incitaciones` gains a `ci.yml` (lint + link-check of skills/content); its
   existing `npm-publish.yml` is the §1 `release.yml` slot under that name
   (registry-specific publish workflows map to the release slot).
+- `genesis` (shared lib crate, in scope for §2–§5 and the conformance test)
+  has no binary matrix: its release slot is `publish.yml` (CI checks →
+  crates.io on tag). The 5-target/canonical-naming §1 assertions apply only
+  to binary repos (`RUST_REPOS` in the conformance test).
 - README badges must mirror actual workflow files — a badge for a workflow
   that doesn't exist is a bug.
 
