@@ -6,15 +6,15 @@ Intent → tool mapping for the charly-vibes ecosystem, generated from ddl's too
 | Tool | Binary | Purpose | Category | Maturity |
 |------|--------|---------|----------|----------|
 | wai | `wai` | Workflow manager for AI-driven development | core | stable |
-| dont | `dont` | Epistemic discipline for AI-driven development | recommended | tracer-bullet |
-| ah | `ah` | Behavioral specification testing | recommended | tracer-bullet |
-| pretender | `pretender` | Code quality automation | extension | spec-stage |
+| dont | `dont` | Epistemic discipline for AI-driven development | recommended | beta |
+| ah | `ah` | Behavioral specification testing | recommended | beta |
+| pretender | `pretender` | Code quality automation | extension | beta |
 | testaruda | `testaruda` | Test selection and prioritization | core | stable |
-| vampiro | `vampiro` | Cross-language composition checking at call boundaries | extension | spec-stage |
+| vampiro | `vampiro` | Cross-language composition checking at call boundaries | extension | beta |
 | bd | `bd` | Issue tracker with first-class dependency support (beads) | extension | stable |
-| openspec | `openspec` | Spec-driven development workflow for AI coding agents | extension | working |
-| incitaciones | `incitaciones` | Reusable prompts and skills for CLI LLM tools | extension | working |
-| turu | `turu` | Deterministic knowledge workspace management (whisper-vibes) | recommended | working |
-| specodelic | `specodelic` | Markdown spec format (Intent/Constraints/Model/Properties) and the CLI that lints, compiles, verifies, and refactors it | extension | spec-stage |
+| openspec | `openspec` | Spec-driven development workflow for AI coding agents | extension | beta |
+| incitaciones | `incitaciones` | Reusable prompts and skills for CLI LLM tools | extension | experimental |
+| turu | `turu` | Deterministic knowledge workspace management (whisper-vibes) | recommended | beta |
+| specodelic | `specodelic` | Markdown spec format (Intent/Constraints/Model/Properties) and the CLI that lints, compiles, verifies, and refactors it | extension | experimental |
 
 Install any of these with `ddl install <name>` — 11 tools total.

@@ -158,26 +158,26 @@ impl std::fmt::Display for ToolCategory {
     }
 }
 
-/// Development maturity of a managed tool (DDL-3i4).
+/// Development maturity of a managed tool (§5 vocabulary, DDL-57e).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Maturity {
-    /// Proven in daily use across multiple repos.
+    /// Public API frozen; semver; breaking changes only via major.
     Stable,
-    /// Used regularly but with known rough edges.
-    Working,
-    /// Functional prototype proving the concept.
-    TracerBullet,
-    /// Spec exists, implementation not yet adopted.
-    SpecStage,
+    /// Core works, API may still shift; used in anger by ≥1 other ecosystem tool.
+    Beta,
+    /// Exploratory; may be renamed or sunset.
+    Experimental,
+    /// Maintenance mode; no new features; CI shrinks to build+test.
+    Sunset,
 }
 
 impl Maturity {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Stable => "stable",
-            Self::Working => "working",
-            Self::TracerBullet => "tracer-bullet",
-            Self::SpecStage => "spec-stage",
+            Self::Beta => "beta",
+            Self::Experimental => "experimental",
+            Self::Sunset => "sunset",
         }
     }
 }
@@ -203,7 +203,7 @@ pub struct Tool {
     pub npm_package: Option<&'static str>,
     /// Adoption tier (core/recommended/extension) from the usage census.
     pub category: ToolCategory,
-    /// Development maturity (stable/working/tracer-bullet/spec-stage).
+    /// Development maturity (stable/beta/experimental/sunset, §5).
     pub maturity: Maturity,
 }
 
@@ -248,7 +248,7 @@ pub const MANAGED_TOOLS: &[Tool] = &[
         repo: "charly-vibes/dont",
         npm_package: None,
         category: ToolCategory::Recommended,
-        maturity: Maturity::TracerBullet,
+        maturity: Maturity::Beta,
     },
     Tool {
         name: "ah",
@@ -258,7 +258,7 @@ pub const MANAGED_TOOLS: &[Tool] = &[
         repo: "charly-vibes/espectacular",
         npm_package: None,
         category: ToolCategory::Recommended,
-        maturity: Maturity::TracerBullet,
+        maturity: Maturity::Beta,
     },
     Tool {
         name: "pretender",
@@ -268,7 +268,7 @@ pub const MANAGED_TOOLS: &[Tool] = &[
         repo: "charly-vibes/pretender",
         npm_package: None,
         category: ToolCategory::Extension,
-        maturity: Maturity::SpecStage,
+        maturity: Maturity::Beta,
     },
     Tool {
         name: "testaruda",
@@ -288,7 +288,7 @@ pub const MANAGED_TOOLS: &[Tool] = &[
         repo: "charly-vibes/vampiro",
         npm_package: None,
         category: ToolCategory::Extension,
-        maturity: Maturity::SpecStage,
+        maturity: Maturity::Beta,
     },
     Tool {
         name: "bd",
@@ -308,7 +308,7 @@ pub const MANAGED_TOOLS: &[Tool] = &[
         repo: "fission-ai/openspec",
         npm_package: Some("@fission-ai/openspec"),
         category: ToolCategory::Extension,
-        maturity: Maturity::Working,
+        maturity: Maturity::Beta,
     },
     Tool {
         name: "incitaciones",
@@ -318,7 +318,7 @@ pub const MANAGED_TOOLS: &[Tool] = &[
         repo: "charly-vibes/incitaciones",
         npm_package: Some("incitaciones"),
         category: ToolCategory::Extension,
-        maturity: Maturity::Working,
+        maturity: Maturity::Experimental,
     },
     Tool {
         name: "turu",
@@ -328,7 +328,7 @@ pub const MANAGED_TOOLS: &[Tool] = &[
         repo: "charly-vibes/whisper",
         npm_package: None,
         category: ToolCategory::Recommended,
-        maturity: Maturity::Working,
+        maturity: Maturity::Beta,
     },
     Tool {
         name: "specodelic",
@@ -338,7 +338,7 @@ pub const MANAGED_TOOLS: &[Tool] = &[
         repo: "charly-vibes/specodelic",
         npm_package: None,
         category: ToolCategory::Extension,
-        maturity: Maturity::SpecStage,
+        maturity: Maturity::Experimental,
     },
 ];
 

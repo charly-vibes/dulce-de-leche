@@ -220,8 +220,8 @@ fn s2_specs_deployed_in_docs() {
         }
         let docs_yml = read(&dir, ".github/workflows/docs.yml")
             .unwrap_or_else(|| panic!("{name}: missing .github/workflows/docs.yml (§1)"));
-        let deploys_specs = docs_yml.contains("docs/src/specs")
-            || docs_yml.contains("build_docs.py");
+        let deploys_specs =
+            docs_yml.contains("docs/src/specs") || docs_yml.contains("build_docs.py");
         assert!(
             deploys_specs,
             "{name}: docs.yml must copy openspec specs into the book source (docs/src/specs) or assemble them via build_docs.py (§2)"
@@ -229,7 +229,9 @@ fn s2_specs_deployed_in_docs() {
         let summary = read(&dir, "docs/src/SUMMARY.md")
             .unwrap_or_else(|| panic!("{name}: missing docs/src/SUMMARY.md (§2)"));
         assert!(
-            summary.contains("./specs/") || summary.contains("(specs/") || summary.contains("spec.md"),
+            summary.contains("./specs/")
+                || summary.contains("(specs/")
+                || summary.contains("spec.md"),
             "{name}: SUMMARY.md must link the deployed spec pages so they render in the book (§2)"
         );
     }

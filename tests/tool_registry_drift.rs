@@ -150,13 +150,49 @@ fn registry_partition_matches_census_draft() {
 
 #[test]
 fn every_tool_has_valid_maturity() {
-    const VALID: &[&str] = &["stable", "working", "tracer-bullet", "spec-stage"];
+    // §5 vocabulary: stable | beta | experimental | sunset (DDL-57e).
+    const VALID: &[&str] = &["stable", "beta", "experimental", "sunset"];
     for tool in MANAGED_TOOLS {
         assert!(
             VALID.contains(&tool.maturity.as_str()),
             "tool `{}` has invalid maturity `{}`",
             tool.name,
             tool.maturity.as_str()
+        );
+    }
+}
+
+#[test]
+fn maturity_matches_ratified_assignments() {
+    // DDL-57e ratification: stable = frozen-API cores; beta = core works,
+    // used in anger by ≥1 ecosystem tool; experimental = exploratory.
+    let ratified: &[(&str, &str)] = &[
+        ("wai", "stable"),
+        ("dont", "beta"),
+        ("ah", "beta"),
+        ("pretender", "beta"),
+        ("testaruda", "stable"),
+        ("vampiro", "beta"),
+        ("bd", "stable"),
+        ("openspec", "beta"),
+        ("incitaciones", "experimental"),
+        ("turu", "beta"),
+        ("specodelic", "experimental"),
+    ];
+    assert_eq!(
+        ratified.len(),
+        MANAGED_TOOLS.len(),
+        "ratified map must cover the whole registry"
+    );
+    for (name, maturity) in ratified {
+        let tool = MANAGED_TOOLS
+            .iter()
+            .find(|t| t.name == *name)
+            .unwrap_or_else(|| panic!("tool `{name}` not in registry"));
+        assert_eq!(
+            tool.maturity.as_str(),
+            *maturity,
+            "tool `{name}` maturity drifts from the DDL-57e ratification"
         );
     }
 }
