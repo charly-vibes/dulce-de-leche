@@ -318,7 +318,10 @@ const DOGFOOD_MATRIX: &[(&str, &[&str])] = &[
         "specodelic",
         &["pretender", "wai", "bd", "openspec", "dulce-de-leche"],
     ),
-    ("incitaciones", &["pretender", "wai", "bd", "dulce-de-leche"]),
+    (
+        "incitaciones",
+        &["pretender", "wai", "bd", "dulce-de-leche"],
+    ),
     (
         "espectacular",
         &["pretender", "wai", "bd", "openspec", "dulce-de-leche"],
@@ -357,7 +360,10 @@ fn parse_pins(src: &str) -> Vec<(String, String)> {
         .filter_map(|line| {
             let line = line.split('#').next()?.trim();
             let (key, value) = line.split_once('=')?;
-            Some((key.trim().to_string(), value.trim().trim_matches('"').to_string()))
+            Some((
+                key.trim().to_string(),
+                value.trim().trim_matches('"').to_string(),
+            ))
         })
         .collect()
 }
@@ -373,9 +379,7 @@ fn s4_ci_installs_dogfood_matrix() {
         let pins = parse_pins(&pins_src);
         for tool in *required {
             let Some((_, pin)) = pins.iter().find(|(k, _)| k == tool) else {
-                panic!(
-                    "{name}: §4 matrix requires {tool} but versions.ddl.toml has no pin for it"
-                );
+                panic!("{name}: §4 matrix requires {tool} but versions.ddl.toml has no pin for it");
             };
             let marker = install_marker(tool, pin);
             assert!(
