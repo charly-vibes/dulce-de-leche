@@ -120,6 +120,48 @@ fn s1_release_publishes_all_five_targets() {
     }
 }
 
+// ---------- §1 canonical release naming ----------
+
+// §1: archives are named {tool}_{VERSION}_{os}_{arch} (.tar.gz, windows .zip).
+// os/arch use the short amd64/arm64 forms, not target triples. The tool name
+// may differ from the repo name (espectacular ships `ah`, whisper ships
+// `turu`, dulce-de-leche ships `ddl`). The four .tar.gz variants may be
+// spelled out or produced by a `for plat in …` loop over exactly those
+// platforms (testaruda/vampiro idiom); the windows .zip must be literal.
+#[test]
+fn s1_release_uses_canonical_naming() {
+    const TAR_VARIANTS: &[&str] = &[
+        "linux_amd64.tar.gz",
+        "linux_arm64.tar.gz",
+        "darwin_amd64.tar.gz",
+        "darwin_arm64.tar.gz",
+    ];
+    for name in RUST_REPOS {
+        let Some(dir) = repo_dir(name) else { continue };
+        let rel = read(&dir, ".github/workflows/release.yml")
+            .unwrap_or_else(|| panic!("{name}: missing release.yml"));
+        let tool = match *name {
+            "espectacular" => "ah",
+            "whisper" => "turu",
+            "dulce-de-leche" => "ddl",
+            other => other,
+        };
+        assert!(
+            rel.contains(&format!("{tool}_${{VERSION}}_windows_amd64.zip")),
+            "{name}: release.yml must publish '{tool}_${{VERSION}}_windows_amd64.zip' (§1 canonical naming)"
+        );
+        let tar_ok = TAR_VARIANTS
+            .iter()
+            .all(|v| rel.contains(&format!("{tool}_${{VERSION}}_{v}")))
+            || (rel.contains("for plat in linux_amd64 linux_arm64 darwin_amd64 darwin_arm64")
+                && rel.contains(&format!("{tool}_${{VERSION}}_${{plat}}.tar.gz")));
+        assert!(
+            tar_ok,
+            "{name}: release.yml must publish '{tool}_${{VERSION}}_{{linux,darwin}}_{{amd64,arm64}}.tar.gz' (§1 canonical naming)"
+        );
+    }
+}
+
 // ---------- §2 documentation structure ----------
 
 #[test]
