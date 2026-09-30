@@ -1,6 +1,6 @@
 # Ecosystem Standardization Proposal
 
-> **Status:** PROPOSED v0.3 — not yet ratified. Rollout is tracked in bd (epic DDL-u8x).
+> **Status:** RATIFIED v0.3 (2026-09-30, bd `DDL-u8x`). Rollout is tracked in bd under this epic:
 > Applies to every in-org tool repo managed by `ddl`: wai, testaruda, dont, pretender,
 > vampiro, specodelic, incitaciones, espectacular (the `ah` binary), whisper (the `turu`
 > binary), and dulce-de-leche itself — plus any future charly-vibes CLI tool. External
