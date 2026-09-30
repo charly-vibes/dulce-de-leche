@@ -243,6 +243,10 @@ fn s2_llms_txt_at_root() {
             dir.join("llms.txt").is_file(),
             "{name}: missing llms.txt at repo root (§2)"
         );
+        assert!(
+            dir.join("llm.txt").is_file(),
+            "{name}: missing llm.txt at repo root (§3 layout: narrative summary alongside llms.txt)"
+        );
     }
 }
 

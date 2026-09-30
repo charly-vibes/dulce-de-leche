@@ -1,0 +1,44 @@
+# dulce-de-leche
+
+> Rust CLI orchestrator for the charly-vibes tool ecosystem — one command (`ddl`) to install, configure, and update every tool, with per-tool health via `ddl status` and everything living under a clean `.ddl/` directory.
+
+## What It Does
+
+dulce-de-leche is the home of the ecosystem standard: it dogfoods every
+convention the suite follows (book layout, theme, spec deployment, pinned
+installs, status pages) and enforces them fleet-wide with a conformance test
+(`tests/standard_conformance.rs`) that checks every sibling repo.
+
+- **`ddl init`** — installs & configures the whole toolset
+- **`ddl status`** — shows health of all tools at a glance
+- **`ddl migrate`** — moves existing configs under `.ddl/`
+- **`ddl upgrade`** — updates everything to latest compatible versions
+- **`ddl version`** — full picture of installed tool versions
+
+## Managed Tools
+
+Core: `wai`, `testaruda` · Recommended: `turu`, `dont`, `ah` (espectacular) ·
+Extension: `pretender`, `vampiro`, `incitaciones`, `bd`, `openspec`,
+`specodelic`.
+
+## The Standard
+
+Ecosystem conventions are normative in `docs/standardization.md`: CI shape
+(§1), book + spec deployment (§2), charly theme (§3), pinned tool versions
+via `versions.ddl.toml` (§4), and status pages (§5). The conformance test
+runs the assertions against all in-org repos, including this one.
+
+## Installation
+
+```bash
+brew tap charly-vibes/charly && brew install dulce-de-leche
+
+cargo install dulce-de-leche
+```
+
+## Links
+
+- Repository: https://github.com/charly-vibes/dulce-de-leche
+- Docs: https://charly-vibes.github.io/dulce-de-leche/
+- Standard: `docs/standardization.md`
+- charly-vibes suite: https://charly-vibes.github.io/charly-vibes/
