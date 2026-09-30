@@ -9,7 +9,8 @@
 //! - §2  root `book.toml` with required fields; `llms.txt` at root
 //! - §3  charly theme: `default-theme = "coal"`, `additional-css` includes
 //!   `theme/charly.css`, and the file exists
-//! - §4  pinned ecosystem installs (`versions.ddl.toml` committed)
+//! - §4  pinned ecosystem installs (`versions.ddl.toml` committed, and each
+//!   §4-matrix ✅ tool wired into `ci.yml` at the committed pin)
 //! - §5  README motivation + status block (`> **Why:**` / `> **Status:**`)
 //!
 //! Fleet conformance is a local/ddl-side check: repos not checked out are
@@ -285,6 +286,104 @@ fn s4_pinned_versions_file_committed() {
             dir.join("versions.ddl.toml").is_file(),
             "{name}: missing versions.ddl.toml (§4: ecosystem CI installs must be pinned)"
         );
+    }
+}
+
+/// §4 dogfooding matrix: required (✅) columns per consumer row.
+/// `◻ opt` and `—` (self) are excluded. `genesis` is absent: lib-crate
+/// carve-out (§4) — its CI installs no in-org family tools.
+const DOGFOOD_MATRIX: &[(&str, &[&str])] = &[
+    ("wai", &["pretender", "bd", "openspec", "dulce-de-leche"]),
+    (
+        "testaruda",
+        &["pretender", "wai", "bd", "openspec", "dulce-de-leche"],
+    ),
+    (
+        "dont",
+        &["pretender", "wai", "bd", "openspec", "dulce-de-leche"],
+    ),
+    ("pretender", &["wai", "bd", "openspec", "dulce-de-leche"]),
+    (
+        "vampiro",
+        &[
+            "pretender",
+            "wai",
+            "bd",
+            "openspec",
+            "dont",
+            "dulce-de-leche",
+        ],
+    ),
+    (
+        "specodelic",
+        &["pretender", "wai", "bd", "openspec", "dulce-de-leche"],
+    ),
+    ("incitaciones", &["pretender", "wai", "bd", "dulce-de-leche"]),
+    (
+        "espectacular",
+        &["pretender", "wai", "bd", "openspec", "dulce-de-leche"],
+    ),
+    ("whisper", &["pretender", "wai", "bd", "dulce-de-leche"]),
+    (
+        "dulce-de-leche",
+        &["pretender", "wai", "bd", "openspec", "dont"],
+    ),
+];
+
+/// The install reference each tool's pin must produce in `ci.yml`.
+/// One canonical install form per tool keeps fleet CI uniform and the
+/// assertion mechanical:
+/// - crates.io tools: `cargo install <pkg>@<pin>` (package name, not bin name)
+/// - npm tools: `<pkg>@<pin>`
+/// - bd: GitHub release asset `beads_<pin>_<target>.tar.gz` (no versioned
+///   homebrew-core formula — release download is the pinned mechanism)
+fn install_marker(tool: &str, pin: &str) -> String {
+    match tool {
+        "pretender" | "espectacular" | "specodelic" | "dulce-de-leche" => {
+            format!("{tool}@{pin}")
+        }
+        "wai" => format!("wai-cli@{pin}"),
+        "dont" => format!("dont-cli@{pin}"),
+        "openspec" => format!("@fission-ai/openspec@{pin}"),
+        "bd" => format!("beads_{pin}_"),
+        other => panic!("unknown dogfood tool {other}"),
+    }
+}
+
+/// Minimal `key = "value"` parser for `versions.ddl.toml` `[tools]` entries
+/// (comment- and whitespace-tolerant; deliberately avoids a toml dependency).
+fn parse_pins(src: &str) -> Vec<(String, String)> {
+    src.lines()
+        .filter_map(|line| {
+            let line = line.split('#').next()?.trim();
+            let (key, value) = line.split_once('=')?;
+            Some((key.trim().to_string(), value.trim().trim_matches('"').to_string()))
+        })
+        .collect()
+}
+
+#[test]
+fn s4_ci_installs_dogfood_matrix() {
+    for (name, required) in DOGFOOD_MATRIX {
+        let Some(dir) = repo_dir(name) else { continue };
+        let pins_src = read(&dir, "versions.ddl.toml")
+            .unwrap_or_else(|| panic!("{name}: missing versions.ddl.toml (§4)"));
+        let ci = read(&dir, ".github/workflows/ci.yml")
+            .unwrap_or_else(|| panic!("{name}: missing ci.yml (§4)"));
+        let pins = parse_pins(&pins_src);
+        for tool in *required {
+            let Some((_, pin)) = pins.iter().find(|(k, _)| k == tool) else {
+                panic!(
+                    "{name}: §4 matrix requires {tool} but versions.ddl.toml has no pin for it"
+                );
+            };
+            let marker = install_marker(tool, pin);
+            assert!(
+                ci.contains(&marker),
+                "{name}: ci.yml does not install {tool} at the committed pin \
+                 (expected `{marker}`) — §4: installs must be wired per the dogfooding matrix"
+            );
+        }
     }
 }
 
