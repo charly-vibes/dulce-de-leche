@@ -183,6 +183,55 @@ fn s2_root_book_toml_with_required_fields() {
 }
 
 #[test]
+fn s2_book_src_is_docs_src() {
+    for name in ALL_REPOS {
+        let Some(dir) = repo_dir(name) else { continue };
+        let book = read(&dir, "book.toml")
+            .unwrap_or_else(|| panic!("{name}: book.toml must live at repo root (§2)"));
+        assert!(
+            book.contains(r#"src = "docs/src""#),
+            "{name}: book.toml must set src = \"docs/src\" (§2 book pages live in docs/src/)"
+        );
+        assert!(
+            dir.join("docs/src/SUMMARY.md").is_file(),
+            "{name}: missing docs/src/SUMMARY.md (§2)"
+        );
+    }
+}
+
+#[test]
+fn s2_specs_deployed_in_docs() {
+    for name in ALL_REPOS {
+        let Some(dir) = repo_dir(name) else { continue };
+        let specs_dir = dir.join("openspec/specs");
+        let has_specs = fs::read_dir(&specs_dir)
+            .map(|entries| {
+                entries
+                    .filter_map(|e| e.ok())
+                    .any(|e| e.path().is_dir() && e.path().join("spec.md").is_file())
+            })
+            .unwrap_or(false);
+        if !has_specs {
+            continue; // no openspec specs → nothing to deploy
+        }
+        let docs_yml = read(&dir, ".github/workflows/docs.yml")
+            .unwrap_or_else(|| panic!("{name}: missing .github/workflows/docs.yml (§1)"));
+        let deploys_specs = docs_yml.contains("docs/src/specs")
+            || docs_yml.contains("build_docs.py");
+        assert!(
+            deploys_specs,
+            "{name}: docs.yml must copy openspec specs into the book source (docs/src/specs) or assemble them via build_docs.py (§2)"
+        );
+        let summary = read(&dir, "docs/src/SUMMARY.md")
+            .unwrap_or_else(|| panic!("{name}: missing docs/src/SUMMARY.md (§2)"));
+        assert!(
+            summary.contains("./specs/") || summary.contains("(specs/") || summary.contains("spec.md"),
+            "{name}: SUMMARY.md must link the deployed spec pages so they render in the book (§2)"
+        );
+    }
+}
+
+#[test]
 fn s2_llms_txt_at_root() {
     for name in ALL_REPOS {
         let Some(dir) = repo_dir(name) else { continue };

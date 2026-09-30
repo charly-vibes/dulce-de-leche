@@ -18,3 +18,11 @@
 
 - [Development](./development.md)
 - [Ecosystem Development](./ecosystem.md)
+
+# Design Specs
+
+- [`bootstrap`](./specs/bootstrap.md)
+- [`cli-core`](./specs/cli-core.md)
+- [`dot-ddl`](./specs/dot-ddl.md)
+- [`health`](./specs/health.md)
+- [`version-management`](./specs/version-management.md)

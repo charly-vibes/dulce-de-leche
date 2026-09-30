@@ -45,3 +45,4 @@ book/
 # macOS
 .DS_Store
 .beads.gate.lock
+docs/src/specs/

@@ -69,6 +69,7 @@ book.toml            # repo root
 docs/
   src/
     SUMMARY.md       # mdBook TOC
+    specs/           # OpenSpec specs copied here at build time (never committed)
     index.md         # what it is, 30-second pitch, install
     getting-started.md
     configuration.md
@@ -91,6 +92,13 @@ Rules:
   for `default-theme`; `additional-css` restyles coal into the charly theme — see §3),
   and `additional-css = ["theme/charly.css"]`.
 - Every tool ships `llms.txt` at root.
+- OpenSpec specs deploy into the book: `docs.yml` copies
+  `openspec/specs/*/spec.md` → `docs/src/specs/<name>.md` at build time (or a
+  docs-assembly script generates them, e.g. vampiro's `build_docs.py`), and
+  `docs/src/SUMMARY.md` links every spec page under a `# Design Specs`
+  heading. Copies are build artifacts — never committed; raw copies without
+  SUMMARY links do not render. Enforced by the `s2_specs_deployed_in_docs`
+  conformance test.
 - README badge row is standardized (order fixed): wai-tracked → CI → Release
   → Docs → registry (crates/brew/scoop/npm) → docs.rs → License.
 
