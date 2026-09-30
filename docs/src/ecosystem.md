@@ -20,10 +20,11 @@ consumers:
 | [specodelic](https://github.com/charly-vibes/specodelic) | `specodelic` / `spk` | Markdown spec format (Intent/Constraints/Model/Properties) + linter/compiler | Extension |
 | [incitaciones](https://github.com/charly-vibes/incitaciones) | — | Skills package (npm; the one non-Rust tool) | Extension |
 | [espectacular](https://github.com/charly-vibes/espectacular) | `ah` | Behavioral verification layer | Recommended |
+| [whisper](https://github.com/charly-vibes/whisper) | `turu` (aliases: `whisper`, `turututu`) | Deterministic knowledge workspace management | Recommended |
 | [dulce-de-leche](https://github.com/charly-vibes/dulce-de-leche) | `ddl` | This orchestrator | — |
 
 External (install-only, not developed here): `bd` (beads, issue tracking),
-`openspec` (spec-driven proposals), `turu` (knowledge routing).
+`openspec` (spec-driven proposals).
 
 Every tool's *why* and *maturity* lives in its README top block and
 `docs/src/status.md` — that placement is the standard (§5), not a convention.
@@ -59,7 +60,7 @@ brew install just mdbook        # or cargo install just / mdbook
 cargo install wai testaruda pretender dont bd openspec
 
 # 3. Clone the siblings you'll touch
-for r in wai testaruda dont pretender vampiro specodelic espectacular incitaciones; do
+for r in wai testaruda dont pretender vampiro specodelic espectacular incitaciones whisper; do
   git clone "git@github.com:charly-vibes/$r.git" "../$r"   # from ddl/
 done
 

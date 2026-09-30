@@ -26,6 +26,7 @@ const RUST_REPOS: &[&str] = &[
     "vampiro",
     "specodelic",
     "espectacular",
+    "whisper",
     "dulce-de-leche",
 ];
 const ALL_REPOS: &[&str] = &[
@@ -36,6 +37,7 @@ const ALL_REPOS: &[&str] = &[
     "vampiro",
     "specodelic",
     "espectacular",
+    "whisper",
     "dulce-de-leche",
     "incitaciones",
 ];

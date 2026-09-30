@@ -1,12 +1,12 @@
 # Ecosystem Standardization Proposal
 
-> **Status:** PROPOSED v0.2 — not yet ratified. Rollout is tracked in bd (epic DDL-u8x).
+> **Status:** PROPOSED v0.3 — not yet ratified. Rollout is tracked in bd (epic DDL-u8x).
 > Applies to every in-org tool repo managed by `ddl`: wai, testaruda, dont, pretender,
-> vampiro, specodelic, incitaciones, espectacular (the `ah` binary), and dulce-de-leche
-> itself — plus any future charly-vibes CLI tool. External consumers (`bd`, `openspec`,
-> `turu`) appear in the dogfood matrix but are not rollout targets. `microdancing`
-> (blog), `jams`, and non-CLI artifacts are out of scope except as the source of the
-> visual theme.
+> vampiro, specodelic, incitaciones, espectacular (the `ah` binary), whisper (the `turu`
+> binary), and dulce-de-leche itself — plus any future charly-vibes CLI tool. External
+> consumers (`bd`, `openspec`) appear in the dogfood matrix but are not rollout targets.
+> `microdancing` (blog), `jams`, and non-CLI artifacts are out of scope except as the
+> source of the visual theme.
 
 ## 0. Principles
 
@@ -139,6 +139,7 @@ Rows are in-org repos only; external consumers (bd, openspec, turu) appear as
 | specodelic   | ✅ | ✅ | ✅ | ✅ | ◻ opt | — | ✅ |
 | incitaciones | ✅ | ✅ | ✅ | — | ◻ opt | — | ✅ |
 | espectacular (`ah`) | ✅ | ✅ | ✅ | ✅ | ◻ opt | ◻ opt | ✅ |
+| whisper (`turu`) | ✅ | ✅ | ✅ | — | ◻ opt | — | ✅ |
 | ddl          | ✅ | ✅ | ✅ | ✅ | ◻ opt | — | — |
 
 `✅` = required in `ci.yml` (unless the section says otherwise); `◻ opt` = opt-in;
