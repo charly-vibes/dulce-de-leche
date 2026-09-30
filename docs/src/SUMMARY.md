@@ -17,3 +17,4 @@
 # Contributing
 
 - [Development](./development.md)
+- [Ecosystem Development](./ecosystem.md)

@@ -86,11 +86,11 @@ setup:
 
 # Build docs locally (requires mdbook)
 docs:
-    mdbook build docs
+    mdbook build
 
 # Live preview docs at localhost:3000 (requires mdbook)
 docs-serve:
-    mdbook serve docs
+    mdbook serve
 
 # === Design Commands ===
 

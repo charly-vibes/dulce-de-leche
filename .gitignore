@@ -40,7 +40,7 @@ target
 .ddl/
 
 # mdBook build output
-docs/book/
+book/
 
 # macOS
 .DS_Store
