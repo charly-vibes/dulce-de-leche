@@ -423,3 +423,5 @@ fn s5_status_page_exists() {
         );
     }
 }
+
+// cache-bust probe (DDL-1a0 CI investigation)
