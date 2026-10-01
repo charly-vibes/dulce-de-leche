@@ -696,3 +696,36 @@ fn s8_lefthook_yml_defines_commit_and_push_gates() {
         }
     }
 }
+
+// ---------- §9 explicit checker modes ----------
+
+/// §9 (DDL-1v5 follow-up): pretender and vampiro default to advisory modes
+/// (tiered/guidance) that ALWAYS exit 0 — a checker wired without an explicit
+/// `--mode` is noise, not a gate (the pretender §audit proved wai/genesis
+/// hooks never blocked). Every `pretender check` / `vampiro check` invocation
+/// in fleet hooks must therefore declare its mode explicitly, forcing the
+/// gate-vs-advisory decision to be visible in the wiring itself. Advisory
+/// choices remain allowed — but only as an explicit, greppable decision.
+#[test]
+fn s9_checker_invocations_declare_mode_explicitly() {
+    for name in ALL_REPOS {
+        let Some(dir) = repo_dir(name) else { continue };
+        let Ok(yml) = std::fs::read_to_string(dir.join("lefthook.yml")) else {
+            continue;
+        };
+        for (lineno, line) in yml.lines().enumerate() {
+            let trimmed = line.trim_start();
+            let invokes_advisory_default = (trimmed.contains("pretender check")
+                || trimmed.contains("vampiro check"))
+                && !trimmed.contains("--mode");
+            if invokes_advisory_default && !trimmed.starts_with('#') {
+                panic!(
+                    "{name}: lefthook.yml:{} checker runs without explicit --mode \
+                     (advisory defaults exit 0 always — declare gate or advisory \
+                     explicitly, §9): {trimmed}",
+                    lineno + 1
+                );
+            }
+        }
+    }
+}
