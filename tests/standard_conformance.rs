@@ -398,14 +398,6 @@ fn s5_readme_has_why_and_status_block() {
     for name in ALL_REPOS {
         let Some(dir) = repo_dir(name) else { continue };
         let readme = read(&dir, "README.md").unwrap_or_else(|| panic!("{name}: missing README.md"));
-        if !readme.contains("> **Why:**") && *name == "dulce-de-leche" {
-            eprintln!(
-                "DEBUG readme len={} first-200={:?}",
-                readme.len(),
-                &readme[..200.min(readme.len())]
-            );
-            eprintln!("DEBUG dir={:?}", dir);
-        }
         assert!(
             readme.contains("> **Why:**"),
             "{name}: README missing `> **Why:**` block (§5)"
@@ -431,5 +423,3 @@ fn s5_status_page_exists() {
         );
     }
 }
-
-// cache-bust probe (DDL-1a0 CI investigation)
