@@ -391,6 +391,77 @@ fn s4_ci_installs_dogfood_matrix() {
     }
 }
 
+/// §4 lib pins: every in-org repo that consumes the shared `genesis-vibes`
+/// crate must pin the fleet's current genesis minor version. Libraries are
+/// not §4 install pins (those live in `versions.ddl.toml`); the pin lives in
+/// each repo's `Cargo.toml`. Not depending on genesis at all is a valid,
+/// explicit state (currently vampiro, pretender) — those repos are skipped.
+/// `genesis` itself is the version source, not a consumer.
+fn genesis_fleet_minor() -> (u32, u32) {
+    let src = read(
+        &repo_dir("genesis").expect("genesis repo must be checked out"),
+        "Cargo.toml",
+    )
+    .expect("genesis Cargo.toml readable");
+    let version = src
+        .lines()
+        .find_map(|l| {
+            let l = l.split('#').next()?.trim();
+            l.strip_prefix("version =")
+                .map(|v| v.trim().trim_matches('"').to_string())
+        })
+        .expect("genesis Cargo.toml has a version line");
+    let mut it = version.split('.');
+    (
+        it.next().and_then(|s| s.parse().ok()).expect("genesis major"),
+        it.next().and_then(|s| s.parse().ok()).expect("genesis minor"),
+    )
+}
+
+/// First quoted semver-ish token on the `genesis-vibes` dependency line of a
+/// Cargo.toml (handles both `genesis-vibes = "0.8"` and inline-table form).
+fn genesis_pin(src: &str) -> Option<(u32, u32)> {
+    src.lines()
+        .filter(|l| {
+            let trimmed = l.trim_start();
+            trimmed.starts_with("genesis-vibes") && !trimmed.starts_with('#')
+        })
+        .find_map(|l| {
+            l.split('"')
+                .nth(1)
+                .filter(|v| v.split('.').count() >= 2)
+                .and_then(|v| {
+                    let mut it = v.split('.');
+                    Some((
+                        it.next()?.parse().ok()?,
+                        it.next()?.parse().ok()?,
+                    ))
+                })
+        })
+}
+
+#[test]
+fn s4_genesis_lib_pins_track_fleet_latest() {
+    let (major, minor) = genesis_fleet_minor();
+    for name in ALL_REPOS {
+        if *name == "genesis" {
+            continue;
+        }
+        let Some(dir) = repo_dir(name) else { continue };
+        let Some(src) = read(&dir, "Cargo.toml") else {
+            // npm-only repos (incitaciones) have no Cargo.toml — nothing to check
+            continue;
+        };
+        if let Some((p_major, p_minor)) = genesis_pin(&src) {
+            assert!(
+                (p_major, p_minor) == (major, minor),
+                "{name}: genesis-vibes pin {p_major}.{p_minor} is behind the fleet's \
+                 current genesis {major}.{minor} — reconcile the pin (§4 lib pins)"
+            );
+        }
+    }
+}
+
 // ---------- §5 motivation & status ----------
 
 #[test]
