@@ -1,0 +1,27 @@
+# lefthook.yml - pre-commit/pre-push gates (§8, DDL-ads)
+#
+# Install: lefthook install (shims land in core.hooksPath = .beads/hooks)
+# Bypass (WIP only): git push --no-verify
+#
+# The bd hooks run commands chain beads validation — lefthook's shim
+# replaces the beads-managed hook scripts, so without this chain the bd
+# checks would silently stop running (the DDL-0tp failure mode in wai/genesis).
+
+pre-commit:
+  parallel: true
+  commands:
+    bd:
+      run: bd hooks run pre-commit
+    fmt-check:
+      glob: "*.rs"
+      run: just fmt-check
+    lint:
+      glob: "*.rs"
+      run: just lint
+
+pre-push:
+  commands:
+    bd:
+      run: bd hooks run pre-push
+    gates:
+      run: just pre-push

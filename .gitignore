@@ -48,3 +48,6 @@ book/
 docs/src/specs/
 docs/src/release.md
 docs/src/ecosystem-map.md
+
+# pretender state dir — created by s4 dogfood smoke steps in the conformance suite
+.pretender/

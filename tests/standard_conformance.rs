@@ -615,10 +615,16 @@ fn s7_ecosystem_landing_cross_linked() {
             .unwrap_or_else(|| panic!("{name}: missing SUMMARY.md"));
         // ddl hosts the landing page in its own book — the relative link is
         // the canonical entry there; every other book links the live URL.
+        // Escape hatch (specodelic-j0m): mdbook 0.5 materializes absolute-URL
+        // SUMMARY entries as literal src/https:/... dirs, so books that ban
+        // absolute SUMMARY targets may host the link in index.md prose instead
+        // — discoverability is what §7 guards, not the specific file.
         let linked = if *name == "dulce-de-leche" {
             summary.contains("./ecosystem-map.md") || summary.contains(ECOSYSTEM_LANDING_URL)
         } else {
             summary.contains(ECOSYSTEM_LANDING_URL)
+                || read(&dir, "docs/src/index.md")
+                    .is_some_and(|idx| idx.contains(ECOSYSTEM_LANDING_URL))
         };
         assert!(
             linked,
@@ -662,5 +668,31 @@ fn s5_status_page_exists() {
             dir.join("docs/src/status.md").is_file(),
             "{name}: missing docs/src/status.md (§5)"
         );
+    }
+}
+
+// ---------- §8 local commit/push gates ----------
+
+/// §8 (DDL-0i8 / DDL-ads / DDL-0tp): every repo must author lefthook.yml with
+/// non-empty pre-commit AND pre-push sections so the ecosystem checkers
+/// (testaruda, pretender, vampiro, espectacular checks, ah) gate commits and
+/// pushes locally, not just in CI. Previous failure modes: vampiro/whisper had
+/// yamls but never installed shims (inert), ddl had no yaml at all, and
+/// wai/genesis shims had replaced beads hooks without chaining them back.
+/// NOTE: shim installation itself is machine-local state (core.hooksPath +
+/// .beads/hooks) and cannot be asserted from this suite — the §8 yaml gate is
+/// the repo-side half; run `lefthook install` after cloning.
+#[test]
+fn s8_lefthook_yml_defines_commit_and_push_gates() {
+    for name in ALL_REPOS {
+        let Some(dir) = repo_dir(name) else { continue };
+        let yml = read(&dir, "lefthook.yml")
+            .unwrap_or_else(|| panic!("{name}: missing lefthook.yml (§8: local gates)"));
+        for hook in ["pre-commit", "pre-push"] {
+            assert!(
+                yml.contains(&format!("{hook}:")),
+                "{name}: lefthook.yml lacks a {hook}: section (§8)"
+            );
+        }
     }
 }
