@@ -399,7 +399,11 @@ fn s5_readme_has_why_and_status_block() {
         let Some(dir) = repo_dir(name) else { continue };
         let readme = read(&dir, "README.md").unwrap_or_else(|| panic!("{name}: missing README.md"));
         if !readme.contains("> **Why:**") && name == "dulce-de-leche" {
-            eprintln!("DEBUG readme len={} first-200={:?}", readme.len(), &readme[..200.min(readme.len())]);
+            eprintln!(
+                "DEBUG readme len={} first-200={:?}",
+                readme.len(),
+                &readme[..200.min(readme.len())]
+            );
             eprintln!("DEBUG dir={:?}", dir);
         }
         assert!(
