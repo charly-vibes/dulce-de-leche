@@ -13,11 +13,23 @@
 //!   §4-matrix ✅ tool wired into `ci.yml` at the committed pin)
 //! - §5  README motivation + status block (`> **Why:**` / `> **Status:**`)
 //!
+//! §2 also carries a **live URL smoke guardrail**: every book-deploying repo's
+//! Pages site must return 200. Structural conformance (workflows, SUMMARY
+//! links) never touches the live URL — the turu book 404'd for weeks while
+//! s2 stayed green. The networked check runs in ddl's CI; set
+//! `DDL_SKIP_LIVE_SMOKE=1` to opt out locally (e.g. offline).
+//!
+//! Coverage follows the general conformance rule (only locally-present repos):
+//! in ddl's own CI that is ddl itself; in a hub checkout it is the whole
+//! fleet. Per-repo CI does not run this suite, so a sibling site can only go
+//! silently 404 until the next hub run — that residual is accepted here.
+//!
 //! Fleet conformance is a local/ddl-side check: repos not checked out are
 //! skipped, and each repo's own CI validates only itself.
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 const RUST_REPOS: &[&str] = &[
     "wai",
@@ -415,10 +427,7 @@ fn genesis_pin(src: &str) -> Option<(u32, u32)> {
                 .filter(|v| v.split('.').count() >= 2)
                 .and_then(|v| {
                     let mut it = v.split('.');
-                    Some((
-                        it.next()?.parse().ok()?,
-                        it.next()?.parse().ok()?,
-                    ))
+                    Some((it.next()?.parse().ok()?, it.next()?.parse().ok()?))
                 })
         })
 }
@@ -442,6 +451,82 @@ fn s4_genesis_lib_pins_meet_ratified_floor() {
                  floor {floor_major}.{floor_minor} — reconcile the pin deliberately (§4 lib pins)"
             );
         }
+    }
+}
+
+// ---------- §2 live URL smoke (regression guardrail) ----------
+
+/// A docs.yml deploys the book to GitHub Pages when it uses the official
+/// Pages deployment actions. Content-based detection — no hardcoded list of
+/// which repos have Pages (the previous carve-out reasoning for incitaciones
+/// and genesis turned out stale: both deploy books and both are live 200).
+const PAGES_DEPLOY_MARKER: &str = "actions/deploy-pages";
+
+/// Repos whose `docs.yml` deploys to GitHub Pages, detected from the file
+/// itself (only locally-present repos can be detected).
+fn pages_deploying_repos() -> Vec<&'static str> {
+    ALL_REPOS
+        .iter()
+        .copied()
+        .filter(|name| {
+            repo_dir(name)
+                .and_then(|dir| read(&dir, ".github/workflows/docs.yml"))
+                .is_some_and(|docs| docs.contains(PAGES_DEPLOY_MARKER))
+        })
+        .collect()
+}
+
+#[test]
+fn s2_book_repos_deploy_pages() {
+    for name in ALL_REPOS {
+        let Some(dir) = repo_dir(name) else { continue };
+        let docs = read(&dir, ".github/workflows/docs.yml")
+            .unwrap_or_else(|| panic!("{name}: missing .github/workflows/docs.yml"));
+        assert!(
+            docs.contains(PAGES_DEPLOY_MARKER),
+            "{name}: docs.yml does not deploy Pages ({PAGES_DEPLOY_MARKER} missing) — \
+             either restore the deploy or drop the repo from the smoke scope deliberately"
+        );
+    }
+}
+
+/// One GET with a hard 10s timeout; up to two attempts (one retry).
+fn url_returns_200(url: &str) -> bool {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .expect("http client");
+    for attempt in 0..2 {
+        if let Ok(resp) = client.get(url).send()
+            && resp.status().as_u16() == 200
+        {
+            return true;
+        }
+        if attempt == 0 {
+            std::thread::sleep(Duration::from_secs(2));
+        }
+    }
+    false
+}
+
+#[test]
+fn s2_live_book_sites_return_200() {
+    if std::env::var("DDL_SKIP_LIVE_SMOKE").is_ok() {
+        eprintln!("DDL_SKIP_LIVE_SMOKE set — skipping live URL smoke");
+        return;
+    }
+    let repos = pages_deploying_repos();
+    assert!(
+        !repos.is_empty(),
+        "no Pages-deploying repos detected — docs.yml detection broke"
+    );
+    for name in repos {
+        let url = format!("https://charly-vibes.github.io/{name}/");
+        assert!(
+            url_returns_200(&url),
+            "{name}: {url} did not return 200 (retry x2, 10s timeout) — \
+             the book deploy is broken while structural conformance may still be green"
+        );
     }
 }
 
