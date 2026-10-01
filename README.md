@@ -18,7 +18,7 @@
 > **Why:** a dozen independent CLI tools mean a dozen install paths, config
 > formats, and version drifts — `ddl` collapses that into one install, one
 > config directory (`.ddl/`), and one health check across the ecosystem.
-> **Status:** [stable](docs/src/status.md) · core commands (init/status/migrate/upgrade) shipped · [Ecosystem & motivation](docs/src/ecosystem.md)
+> **Status:** [stable](docs/src/status.md) · core commands (init/status/migrate/upgrade) shipped · [Ecosystem & motivation](docs/src/ecosystem.md) · [charly-vibes Tool Ecosystem](https://charly-vibes.github.io/dulce-de-leche/ecosystem-map.html)
 
 ```
    ddl init     →  installs & configures the whole toolset

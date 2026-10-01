@@ -67,6 +67,19 @@ jobs:
           - **Built from:** ${TAG} @ ${GITHUB_SHA::7}
           EOF
 
+      - name: Generate ecosystem landing page from ecosystem-map.md
+        # §7 (DDL-frh): the ecosystem map is the front door to the fleet.
+        # Generated from the authoritative repo doc so drift tests can cover
+        # it; the relative capability-matrix link is rewritten to GitHub
+        # (docs/capability-matrix.md is not part of the book).
+        run: |
+          {
+            echo '> **Generated artifact** (docs.yml, from docs/ecosystem-map.md).'
+            echo '> Do not hand-edit — the repo source file remains authoritative.'
+            echo
+            sed 's|(capability-matrix.md)|(https://github.com/charly-vibes/dulce-de-leche/blob/main/docs/capability-matrix.md)|' docs/ecosystem-map.md
+          } > docs/src/ecosystem-map.md
+
       - name: Build docs
         run: mdbook build
 

@@ -209,9 +209,12 @@ tools consume this one and how.
 
 ## 7. New-tool onboarding checklist
 
-A new charly-vibes CLI tool is conformant on day one when it has: the three
+A new charly-vibes CLI tool is conformant when it has: the three
 workflow files (§1) with `just ci`; root `book.toml` + `theme/charly.css` + the
 five §2 book pages; `llms.txt` + `llm.txt`; the §5 README block; a
 `versions.ddl.toml` pin file; a row in ddl's registry + capability matrix
-(enforced by `tests/tool_registry_drift.rs`); and an entry in the §4 dogfood
-matrix. Deviations must be documented in the tool's `docs/src/status.md`.
+(enforced by `tests/tool_registry_drift.rs`); an entry in the §4 dogfood
+matrix; and an ecosystem landing link in the book SUMMARY and README status
+block (§7 — the fleet's front door, enforced by the `s7_ecosystem_landing_*`
+conformance tests). Deviations must be documented in the tool's
+`docs/src/status.md`.

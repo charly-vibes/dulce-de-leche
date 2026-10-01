@@ -2,6 +2,7 @@
 
 [Introduction](./introduction.md)
 [Release Status](./release.md)
+[charly-vibes Tool Ecosystem](./ecosystem-map.md)
 
 # User Guide
 

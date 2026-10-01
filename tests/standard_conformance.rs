@@ -530,6 +530,108 @@ fn s2_live_book_sites_return_200() {
     }
 }
 
+// ---------- §6 versioned docs deploy (tag trigger + generated release page) ----------
+
+// §6: the book's version claims must come from Cargo.toml, never from
+// hand-typed text — hand-typed versions drift (ddl's deployed book said
+// v0.5.0 while the repo was v0.7.0, DDL-nsl). Every Pages-deploying repo
+// must: (1) trigger docs.yml on v* tags + Cargo.toml, (2) generate
+// docs/src/release.md from Cargo.toml at build time (gitignored), and
+// (3) wire the generated page into the book SUMMARY.
+//
+// Scope: pages-deploying repos with a Cargo.toml. Carve-outs: incitaciones
+// (npm-only — no Cargo.toml to inject from) and genesis (lib-crate carve-out
+// pattern, §1).
+const VERSION_INJECT_CARVE_OUTS: &[&str] = &["incitaciones", "genesis"];
+
+/// Repos in §6 scope: pages-deploying, has Cargo.toml, not carved out.
+fn version_injection_repos() -> Vec<&'static str> {
+    ALL_REPOS
+        .iter()
+        .copied()
+        .filter(|name| !VERSION_INJECT_CARVE_OUTS.contains(name))
+        .filter(|name| {
+            repo_dir(name)
+                .and_then(|dir| read(&dir, ".github/workflows/docs.yml"))
+                .is_some_and(|docs| docs.contains(PAGES_DEPLOY_MARKER))
+        })
+        .collect()
+}
+
+#[test]
+fn s6_docs_deploy_on_tags_with_version_injection() {
+    for name in version_injection_repos() {
+        let dir = repo_dir(name).expect("scope filter guarantees presence");
+        let docs = read(&dir, ".github/workflows/docs.yml")
+            .unwrap_or_else(|| panic!("{name}: missing .github/workflows/docs.yml"));
+        assert!(
+            docs.contains("tags:"),
+            "{name}: docs.yml does not trigger on tags (§6 versioned docs deploy)"
+        );
+        assert!(
+            docs.contains("Generate release-status"),
+            "{name}: docs.yml lacks the 'Generate release-status' pre-build step \
+             (§6: release page generated from Cargo.toml, not hand-typed)"
+        );
+        let summary = read(&dir, "docs/src/SUMMARY.md")
+            .unwrap_or_else(|| panic!("{name}: missing docs/src/SUMMARY.md"));
+        assert!(
+            summary.contains("./release.md"),
+            "{name}: SUMMARY.md does not wire the generated release page (§6)"
+        );
+    }
+}
+
+// ---------- §7 ecosystem landing page ----------
+
+/// §7 (DDL-frh): discoverability — the ecosystem map is the front door to the
+/// whole fleet. It is generated into ddl's book at build time and every
+/// tool book + README must link it. Previous failure mode: ecosystem-map.md
+/// was linked from exactly one place (ddl's own README).
+const ECOSYSTEM_LANDING_URL: &str =
+    "https://charly-vibes.github.io/dulce-de-leche/ecosystem-map.html";
+
+#[test]
+fn s7_ecosystem_landing_generated_in_ddl() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let docs = read(dir, ".github/workflows/docs.yml").expect("ddl docs.yml");
+    assert!(
+        docs.contains("Generate ecosystem landing"),
+        "ddl docs.yml lacks the 'Generate ecosystem landing' pre-build step \
+         (§7: landing page generated from docs/ecosystem-map.md)"
+    );
+    let summary = read(dir, "docs/src/SUMMARY.md").expect("ddl SUMMARY");
+    assert!(
+        summary.contains("./ecosystem-map.md"),
+        "ddl SUMMARY does not wire the generated ecosystem landing page (§7)"
+    );
+}
+
+#[test]
+fn s7_ecosystem_landing_cross_linked() {
+    for name in ALL_REPOS {
+        let Some(dir) = repo_dir(name) else { continue };
+        let summary = read(&dir, "docs/src/SUMMARY.md")
+            .unwrap_or_else(|| panic!("{name}: missing SUMMARY.md"));
+        // ddl hosts the landing page in its own book — the relative link is
+        // the canonical entry there; every other book links the live URL.
+        let linked = if *name == "dulce-de-leche" {
+            summary.contains("./ecosystem-map.md") || summary.contains(ECOSYSTEM_LANDING_URL)
+        } else {
+            summary.contains(ECOSYSTEM_LANDING_URL)
+        };
+        assert!(
+            linked,
+            "{name}: book SUMMARY does not link the ecosystem landing page (§7)"
+        );
+        let readme = read(&dir, "README.md").unwrap_or_else(|| panic!("{name}: missing README.md"));
+        assert!(
+            readme.contains(ECOSYSTEM_LANDING_URL),
+            "{name}: README does not link the ecosystem landing page (§7)"
+        );
+    }
+}
+
 // ---------- §5 motivation & status ----------
 
 #[test]
