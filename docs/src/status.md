@@ -1,8 +1,9 @@
 # Implementation Status
 
-Current state: **v0.5.0 shipped** — all planned phases are implemented and
+Current state: **shipped** — all planned phases are implemented and
 published; macOS, Linux, and Windows are verified end-to-end by the
-3-platform smoke gate.
+3-platform smoke gate. Current version: see the generated
+[Release Status](./release.md) page (from Cargo.toml — never hand-typed).
 
 ## Phases
 

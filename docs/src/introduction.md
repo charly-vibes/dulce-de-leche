@@ -43,9 +43,10 @@ charly-vibes.
 
 ## Status
 
-**v0.5.0 — shipped.** ddl is published on crates.io and GitHub releases, and
+**Shipped** — ddl is published on crates.io and GitHub releases, and
 the full toolset boots on macOS, Linux, and Windows (verified end-to-end by
-the 3-platform smoke gate). See [Implementation Status](./status.md) for
+the 3-platform smoke gate). Current version: see [Release Status](./release.md)
+(generated from Cargo.toml at build time). See [Implementation Status](./status.md) for
 current state.
 
 ## License

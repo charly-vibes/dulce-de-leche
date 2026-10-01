@@ -46,3 +46,4 @@ book/
 .DS_Store
 .beads.gate.lock
 docs/src/specs/
+docs/src/release.md

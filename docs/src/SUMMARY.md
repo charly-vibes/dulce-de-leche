@@ -1,6 +1,7 @@
 # Summary
 
 [Introduction](./introduction.md)
+[Release Status](./release.md)
 
 # User Guide
 
