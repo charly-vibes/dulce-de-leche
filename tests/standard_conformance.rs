@@ -392,32 +392,15 @@ fn s4_ci_installs_dogfood_matrix() {
 }
 
 /// §4 lib pins: every in-org repo that consumes the shared `genesis-vibes`
-/// crate must pin the fleet's current genesis minor version. Libraries are
+/// crate must pin at least the fleet's RATIFIED genesis floor. Libraries are
 /// not §4 install pins (those live in `versions.ddl.toml`); the pin lives in
-/// each repo's `Cargo.toml`. Not depending on genesis at all is a valid,
-/// explicit state (currently vampiro, pretender) — those repos are skipped.
+/// each repo's `Cargo.toml`. Pin policy is "update deliberately" (§4): the
+/// floor is a ratification act recorded here, NOT auto-tracking genesis's
+/// current version — genesis may release freely; the fleet reconciles and
+/// raises the floor in a deliberate pass. Not depending on genesis at all is
+/// a valid, explicit state (currently vampiro, pretender) — skipped.
 /// `genesis` itself is the version source, not a consumer.
-fn genesis_fleet_minor() -> (u32, u32) {
-    let src = read(
-        &repo_dir("genesis").expect("genesis repo must be checked out"),
-        "Cargo.toml",
-    )
-    .expect("genesis Cargo.toml readable");
-    let version = src
-        .lines()
-        .find_map(|l| {
-            let l = l.split('#').next()?.trim();
-            l.strip_prefix("version =")
-                .map(|v| v.trim().trim_matches('"').to_string())
-        })
-        .expect("genesis Cargo.toml has a version line");
-    let mut it = version.split('.');
-    (
-        it.next().and_then(|s| s.parse().ok()).expect("genesis major"),
-        it.next().and_then(|s| s.parse().ok()).expect("genesis minor"),
-    )
-}
-
+const RATIFIED_GENESIS_FLOOR: (u32, u32) = (0, 10);
 /// First quoted semver-ish token on the `genesis-vibes` dependency line of a
 /// Cargo.toml (handles both `genesis-vibes = "0.8"` and inline-table form).
 fn genesis_pin(src: &str) -> Option<(u32, u32)> {
@@ -441,8 +424,8 @@ fn genesis_pin(src: &str) -> Option<(u32, u32)> {
 }
 
 #[test]
-fn s4_genesis_lib_pins_track_fleet_latest() {
-    let (major, minor) = genesis_fleet_minor();
+fn s4_genesis_lib_pins_meet_ratified_floor() {
+    let (floor_major, floor_minor) = RATIFIED_GENESIS_FLOOR;
     for name in ALL_REPOS {
         if *name == "genesis" {
             continue;
@@ -454,9 +437,9 @@ fn s4_genesis_lib_pins_track_fleet_latest() {
         };
         if let Some((p_major, p_minor)) = genesis_pin(&src) {
             assert!(
-                (p_major, p_minor) == (major, minor),
-                "{name}: genesis-vibes pin {p_major}.{p_minor} is behind the fleet's \
-                 current genesis {major}.{minor} — reconcile the pin (§4 lib pins)"
+                (p_major, p_minor) >= (floor_major, floor_minor),
+                "{name}: genesis-vibes pin {p_major}.{p_minor} is below the ratified \
+                 floor {floor_major}.{floor_minor} — reconcile the pin deliberately (§4 lib pins)"
             );
         }
     }
