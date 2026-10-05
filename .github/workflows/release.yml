@@ -146,6 +146,10 @@ jobs:
           VERSION="${TAG#v}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           mkdir -p dist
+          # upload-artifact v4 does not preserve file permissions — restore the
+          # exec bit or the tarballs ship 644 binaries and `curl | tar xz` installs
+          # a non-runnable ddl (see DDL-3av).
+          chmod +x -- bins/*/*
           tar -czf "dist/ddl_${VERSION}_linux_amd64.tar.gz"  -C bins/linux_amd64  ddl
           tar -czf "dist/ddl_${VERSION}_linux_arm64.tar.gz"  -C bins/linux_arm64  ddl
           tar -czf "dist/ddl_${VERSION}_darwin_amd64.tar.gz" -C bins/darwin_amd64 ddl

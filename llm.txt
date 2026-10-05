@@ -31,10 +31,20 @@ runs the assertions against all in-org repos, including this one.
 ## Installation
 
 ```bash
-brew tap charly-vibes/charly && brew install dulce-de-leche
+# macOS & Linux via curl (latest release binary)
+V=$(basename "$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
+  https://github.com/charly-vibes/dulce-de-leche/releases/latest)" | sed 's/^v//')
+TGT="$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/^x86_64$/amd64/; s/^aarch64$/arm64/')"
+curl -fsSL "https://github.com/charly-vibes/dulce-de-leche/releases/download/v${V}/ddl_${V}_${TGT}.tar.gz" | tar xz
+chmod +x ddl && sudo mv ddl /usr/local/bin/
 
+# Or via package managers
+brew tap charly-vibes/charly && brew install dulce-de-leche
+scoop install dulce-de-leche        # Windows (charly bucket)
 cargo install dulce-de-leche
 ```
+
+Then: `ddl init` to bootstrap the whole toolset, `ddl status` to verify health.
 
 ## Links
 

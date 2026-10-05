@@ -45,9 +45,15 @@ Run `ddl version` for the full picture. Additions and removals must update this 
 brew tap charly-vibes/charly
 brew install dulce-de-leche
 
-# Linux (binary download)
-curl -fsSL https://github.com/charly-vibes/dulce-de-leche/releases/latest/download/ddl-$(uname -s)-$(uname -m).tar.gz | tar xz
-sudo mv ddl /usr/local/bin/
+# macOS & Linux (curl — resolves the latest release automatically)
+V=$(basename "$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
+  https://github.com/charly-vibes/dulce-de-leche/releases/latest)" | sed 's/^v//')
+TGT="$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/^x86_64$/amd64/; s/^aarch64$/arm64/')"
+curl -fsSL "https://github.com/charly-vibes/dulce-de-leche/releases/download/v${V}/ddl_${V}_${TGT}.tar.gz" | tar xz
+chmod +x ddl && sudo mv ddl /usr/local/bin/
+
+# Verify it runs
+ddl --version
 
 # Windows (Scoop)
 scoop bucket add charly https://github.com/charly-vibes/scoop-charly.git
