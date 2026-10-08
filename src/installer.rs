@@ -208,6 +208,19 @@ fn binary_dest_path(tool: &Tool, platform: &Platform) -> PathBuf {
     dest_dir.join(binary_name)
 }
 
+/// The ddl-managed binary directory (`~/.ddl/bin`, or the Windows
+/// LOCALAPPDATA equivalent) — prepended to child PATH during init cascades
+/// so freshly downloaded tools can initialize and find their siblings.
+pub fn ddl_bin_dir() -> Option<PathBuf> {
+    let platform = Platform::detect()?;
+    Some(if platform.os == Os::Windows {
+        let local_app_data = std::env::var("LOCALAPPDATA").ok().map(PathBuf::from);
+        binary_dest_dir(&platform.os, None, local_app_data.as_deref())
+    } else {
+        binary_dest_dir(&platform.os, dirs::home_dir().as_deref(), None)
+    })
+}
+
 /// Resolve the installed version of a binary tool: PATH probe first, then a
 /// direct probe at the `.ddl/bin` destination (covers the window between
 /// download and the next shell picking up the PATH entry — DDL-x0m).
@@ -765,12 +778,31 @@ fn install_npm(tool: &Tool, verbose: bool) -> Result<()> {
     }
 }
 
-/// Run a tool's init command after installation.
-pub fn run_tool_init(tool: &Tool, verbose: bool) -> Result<()> {
-    let (cmd, args): (&str, &[&str]) = match tool.name {
+/// A tool-init step that failed during the cascade.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InitFailure {
+    pub tool: String,
+    pub detail: String,
+}
+
+/// The init command for a tool, if it has one.
+///
+/// `non_interactive` selects prompt-free variants: wizards (pretender) would
+/// otherwise leak interactive prompt text into `--yes` output, and config
+/// prompts (openspec, bd) would hang CI.
+///
+/// Tools without an init command (fotos-mcp, incitaciones, turu) return None
+/// — ddl must skip them silently, never invoke a bogus `init` subcommand.
+pub fn init_command(
+    tool_name: &str,
+    non_interactive: bool,
+) -> Option<(&'static str, Vec<&'static str>)> {
+    let (cmd, args): (&'static str, &[&'static str]) = match tool_name {
         "wai" => ("wai", &["init"]),
-        "dont" => ("dont", &["prime", "--plain"]),
+        // `dont init` first: `prime` fails when no .dont/ project exists yet.
+        "dont" => ("dont", &["init"]),
         "ah" => ("ah", &["init"]),
+        "pretender" if non_interactive => ("pretender", &["init", "--non-interactive"]),
         "pretender" => ("pretender", &["init"]),
         "testaruda" => ("testaruda", &["init"]),
         "vampiro" => ("vampiro", &["init"]),
@@ -781,19 +813,78 @@ pub fn run_tool_init(tool: &Tool, verbose: bool) -> Result<()> {
         // --tools none skips that prompt.
         "openspec" => ("openspec", &["init", "--tools", "none"]),
         "specodelic" => ("specodelic", &["doctor"]),
-        _ => return Ok(()),
+        _ => return None,
+    };
+    Some((cmd, args.to_vec()))
+}
+
+/// `dir` prepended to an inherited PATH (so freshly downloaded binaries in
+/// `~/.ddl/bin` can be initialized and find their own siblings).
+pub fn prepend_path(
+    dir: &std::path::Path,
+    existing: Option<&std::ffi::OsStr>,
+) -> std::ffi::OsString {
+    let mut paths = vec![dir.to_path_buf()];
+    if let Some(rest) = existing
+        .filter(|p| !p.is_empty())
+        .map(std::env::split_paths)
+    {
+        paths.extend(rest);
+    }
+    std::env::join_paths(paths).unwrap_or_else(|_| dir.as_os_str().to_os_string())
+}
+
+/// Human-readable resume lines for failed init steps: what failed and the
+/// exact command(s) to finish manually (or via a selective re-run).
+pub fn resume_summary(failures: &[InitFailure]) -> Vec<String> {
+    failures
+        .iter()
+        .map(|f| {
+            let (cmd, args) =
+                init_command(&f.tool, false).unwrap_or((f.tool.as_str(), Vec::new()));
+            let manual = args.iter().fold(cmd.to_string(), |acc, a| format!("{acc} {a}"));
+            format!(
+                "  ✗ {} init failed: {}\n      finish with: {}\n      or re-run: ddl init --tools {}",
+                f.tool, f.detail, manual, f.tool
+            )
+        })
+        .collect()
+}
+
+/// Run a tool's init command after installation.
+pub fn run_tool_init(tool: &Tool, verbose: bool, non_interactive: bool) -> Result<()> {
+    let Some((cmd, args)) = init_command(tool.name, non_interactive) else {
+        return Ok(()); // tool has no init command — skip silently
     };
 
-    // Check if tool is on PATH first
-    if !is_tool_installed(cmd) {
+    // Check if tool is on PATH; if not, probe its .ddl/bin destination
+    // directly (DDL-6zn.3: freshly downloaded binaries are not on PATH yet —
+    // the old code skipped their init with only a hint).
+    let on_path = is_tool_installed(cmd);
+    let at_dest = Platform::detect().map(|p| binary_dest_path(tool, &p));
+    let at_dest_exists = at_dest.as_ref().is_some_and(|p| p.is_file());
+    if !on_path && !at_dest_exists {
         eprintln!("  ⚠ {} not found on PATH — skipping init", cmd);
         return Ok(());
     }
 
     verbose_print(verbose, &format!("running: {} init", cmd));
 
-    let output = Command::new(cmd)
-        .args(args)
+    let mut command = if on_path {
+        Command::new(cmd)
+    } else {
+        Command::new(at_dest.expect("checked at_dest_exists above"))
+    };
+    command.args(&args);
+    // Prepend the ddl bin dir so downloaded tools see their siblings.
+    if let Some(bin_dir) = ddl_bin_dir() {
+        command.env(
+            "PATH",
+            prepend_path(&bin_dir, std::env::var_os("PATH").as_deref()),
+        );
+    }
+
+    let output = command
         .output()
         .map_err(|e| DdlError::InstallFailed(format!("Failed to run {} init: {e}", tool.name)))?;
 
@@ -809,13 +900,20 @@ pub fn run_tool_init(tool: &Tool, verbose: bool) -> Result<()> {
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr);
         eprintln!(
-            "  ⚠ {} init exited with code {}: {}",
+            "  ✗ {} init exited with code {}: {}",
             tool.name,
             output.status.code().unwrap_or(-1),
             stderr.lines().next().unwrap_or("unknown error")
         );
-        // Don't fail the whole install — init is advisory
-        Ok(())
+        // DDL-6zn.3: init failures are no longer advisory warnings — the
+        // cascade collects them and the run exits with a resume summary,
+        // instead of silently leaving the repo half-configured.
+        Err(DdlError::InstallFailed(format!(
+            "{} init exited with code {}: {}",
+            tool.name,
+            output.status.code().unwrap_or(-1),
+            stderr.lines().next().unwrap_or("unknown error")
+        )))
     }
 }
 
@@ -1223,6 +1321,77 @@ mod tests {
             probe_version_at(dir.path().join("nope").as_path(), "fake-tool"),
             None
         );
+    }
+
+    // --- DDL-6zn.3: init-cascade semantics ---------------------------------
+
+    #[test]
+    fn init_command_per_tool_and_mode() {
+        // dont runs `init` (creates project state) — the old `prime --plain`
+        // failed circularly: no .dont/ project exists until dont init runs.
+        assert_eq!(init_command("dont", false), Some(("dont", vec!["init"])));
+        // pretender's wizard prompt leaked into -y output — non-interactive
+        // mode must pass --non-interactive (best-guess defaults).
+        assert_eq!(
+            init_command("pretender", true),
+            Some(("pretender", vec!["init", "--non-interactive"]))
+        );
+        assert_eq!(
+            init_command("pretender", false),
+            Some(("pretender", vec!["init"]))
+        );
+        // openspec: skip the AI-tool config prompt non-interactively.
+        assert_eq!(
+            init_command("openspec", true),
+            Some(("openspec", vec!["init", "--tools", "none"]))
+        );
+        // tools without an init command are skipped silently (fotos-mcp's
+        // 'expect initialize request' failure class).
+        assert_eq!(init_command("fotos-mcp", false), None);
+        assert_eq!(init_command("turu", true), None);
+        assert_eq!(init_command("incitaciones", false), None);
+        assert_eq!(init_command("unknown-tool", false), None);
+    }
+
+    #[test]
+    fn prepend_path_puts_ddl_bin_first() {
+        use std::ffi::OsString;
+        let bin = std::path::PathBuf::from("/home/t/.ddl/bin");
+        let expected: OsString = std::env::join_paths(["/home/t/.ddl/bin", "/usr/bin"]).unwrap();
+        assert_eq!(
+            prepend_path(&bin, Some(&OsString::from("/usr/bin"))),
+            expected
+        );
+        assert_eq!(prepend_path(&bin, None), OsString::from("/home/t/.ddl/bin"));
+        assert_eq!(
+            prepend_path(&bin, Some(&OsString::new())),
+            OsString::from("/home/t/.ddl/bin")
+        );
+    }
+
+    #[test]
+    fn resume_summary_lists_exact_finish_commands() {
+        let failures = vec![
+            InitFailure {
+                tool: "dont".into(),
+                detail: "exited with code 1".into(),
+            },
+            InitFailure {
+                tool: "ah".into(),
+                detail: "openspec/ directory not found".into(),
+            },
+        ];
+        let summary = resume_summary(&failures).join("\n");
+        assert!(
+            summary.contains("dont init"),
+            "missing tool's own init cmd: {summary}"
+        );
+        assert!(
+            summary.contains("ddl init --tools dont"),
+            "missing re-run cmd: {summary}"
+        );
+        assert!(summary.contains("ah init"));
+        assert!(summary.contains("openspec/ directory not found"));
     }
 
     #[test]

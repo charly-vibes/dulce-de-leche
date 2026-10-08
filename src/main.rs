@@ -184,8 +184,18 @@ fn cmd_init(
         }
     };
 
+    let mut init_candidates: Vec<String> = Vec::new();
+
     if no_install {
         output::print_success("Skipping installation (--no-install)", args.is_json());
+        // Configure-only mode still runs the init cascade for the selected
+        // tools (DDL-6zn.3): absent tools are skipped gracefully by
+        // run_tool_init's PATH/dest probe.
+        init_candidates = selected_tools
+            .iter()
+            .filter(|t| t.as_str() != "wai")
+            .cloned()
+            .collect();
     } else if selected_tools.is_empty() {
         // All tools already installed and configured
         output::print_success("All tools are already installed.", args.is_json());
@@ -238,29 +248,16 @@ fn cmd_init(
             );
         }
 
-        // Run init commands for successfully installed tools.
+        // Tools whose init cascade should run: successfully installed tools.
         // wai is skipped here — it's force-initialized below so that
         // `ddl init` always guarantees the .wai/ structure, even when
         // wai was already installed before this run.
-        // In gates mode the order is normalized: openspec init runs BEFORE
-        // ah init (ah init exits 1 when openspec/ does not exist yet — the
-        // bajan 9/28 cascade failure). Otherwise install order is kept.
-        let mut init_candidates: Vec<&str> = results
+        init_candidates = results
             .iter()
             .filter(|r| r.success && r.tool != "wai")
             .map(|r| r.tool)
+            .map(|s| s.to_string())
             .collect();
-        if gates {
-            init_candidates = dulce_de_leche::gates::gates_init_order(&init_candidates);
-        }
-        for tool_name in init_candidates {
-            if let Some(t) = dulce_de_leche::platform::find_tool(tool_name) {
-                let _ = dulce_de_leche::installer::run_tool_init(
-                    t,
-                    args.verbose_quiet.raw_count() >= 1,
-                );
-            }
-        }
 
         // Summary and error reporting for non-interactive / CI mode
         if !args.is_json() && !no_install {
@@ -286,6 +283,67 @@ fn cmd_init(
         if fail_count > 0 {
             return Err(DdlError::PartialFailure);
         }
+    }
+
+    // Tool-init cascade (DDL-6zn.3): prerequisite-ordered (openspec init
+    // BEFORE ah init — ah exits 1 without openspec/, the bajan 9/28 failure),
+    // tools without init commands are skipped, freshly downloaded binaries
+    // are reachable via the .ddl/bin PATH prepend, and failures propagate:
+    // the run exits with a resume summary listing the exact finish commands
+    // instead of silently leaving the repo half-configured.
+    let ordered: Vec<&str> = dulce_de_leche::gates::tool_init_order(
+        &init_candidates
+            .iter()
+            .map(|s| s.as_str())
+            .collect::<Vec<_>>(),
+    );
+    let non_interactive = args.yes || args.is_json();
+    let mut init_failures: Vec<dulce_de_leche::installer::InitFailure> = Vec::new();
+    for tool_name in ordered {
+        // Idempotent-until-green (DDL-6zn.3): skip tools whose init already
+        // succeeded in a previous run — they may refuse re-init (dont/bd).
+        if ddl_dir.manifest.is_inited(tool_name) {
+            continue;
+        }
+        if let Some(t) = dulce_de_leche::platform::find_tool(tool_name) {
+            match dulce_de_leche::installer::run_tool_init(
+                t,
+                args.verbose_quiet.raw_count() >= 1,
+                non_interactive,
+            ) {
+                Ok(()) => {
+                    if let Err(e) = ddl_dir.record_inited(tool_name) {
+                        eprintln!("  ⚠ could not record init state for {tool_name}: {e}");
+                    }
+                }
+                Err(e) => init_failures.push(dulce_de_leche::installer::InitFailure {
+                    tool: tool_name.to_string(),
+                    detail: e.to_string(),
+                }),
+            }
+        }
+    }
+    if !init_failures.is_empty() {
+        if !args.is_json() {
+            println!();
+            println!(
+                "Init cascade failed for {} tool(s) — finish manually or re-run:",
+                init_failures.len()
+            );
+            for line in dulce_de_leche::installer::resume_summary(&init_failures) {
+                println!("{line}");
+            }
+        } else {
+            // JSON mode: buffer failure events into the collected envelope
+            // and put the resume summary on stderr (stdout is machine-only).
+            for f in &init_failures {
+                output::print_install_result(false, &f.tool, &f.detail, true);
+            }
+            for line in dulce_de_leche::installer::resume_summary(&init_failures) {
+                eprintln!("{line}");
+            }
+        }
+        return Err(DdlError::PartialFailure);
     }
 
     ddl_dir.add_gitignore_entries(args.yes)?;
@@ -328,6 +386,7 @@ fn cmd_init(
             let _ = dulce_de_leche::installer::run_tool_init(
                 wai_tool,
                 args.verbose_quiet.raw_count() >= 1,
+                non_interactive,
             );
         }
     } else if !args.is_json() {
@@ -521,7 +580,11 @@ fn cmd_install(tool_name: &str, args: &dulce_de_leche::cli::Args) -> Result<()> 
     if result.success {
         ddl_dir.record_installed(result.tool, &result.version, &result.method.to_string())?;
         output::print_install_result(true, result.tool, &result.message, args.is_json());
-        let _ = dulce_de_leche::installer::run_tool_init(tool, args.verbose_quiet.raw_count() >= 1);
+        let _ = dulce_de_leche::installer::run_tool_init(
+            tool,
+            args.verbose_quiet.raw_count() >= 1,
+            args.yes || args.is_json(),
+        );
         Ok(())
     } else {
         ddl_dir.record_failed(result.tool, &result.method.to_string())?;

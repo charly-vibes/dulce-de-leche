@@ -12,6 +12,11 @@ pub struct Manifest {
     pub ddl_version: String,
     pub migration_state: String,
     pub tools: HashMap<String, ToolEntry>,
+    /// Tools whose init cascade ran successfully (DDL-6zn.3, idempotent-
+    /// until-green): re-runs skip these instead of failing on tools that
+    /// refuse re-init (e.g. `dont init` guards against overwriting state).
+    #[serde(default)]
+    pub inited: Vec<String>,
 }
 
 /// A single tool entry in the manifest.
@@ -30,6 +35,7 @@ impl Manifest {
             ddl_version: crate::VERSION.to_string(),
             migration_state: "none".to_string(),
             tools: HashMap::new(),
+            inited: Vec::new(),
         }
     }
 
@@ -72,6 +78,11 @@ impl Manifest {
         self.tools.get(name)
     }
 
+    /// Check if a tool's init cascade already ran successfully (DDL-6zn.3).
+    pub fn is_inited(&self, name: &str) -> bool {
+        self.inited.iter().any(|t| t == name)
+    }
+
     /// Check if a tool is installed (status == "installed").
     pub fn is_installed(&self, name: &str) -> bool {
         self.tools
@@ -100,3 +111,24 @@ pub const EMBEDDED_COMPATIBILITY: &str = r#"{
     "bd": ">=0.0.0",
     "openspec": ">=0.0.0"
 }"#;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn old_manifest_json_without_inited_field_parses_with_empty_default() {
+        // 0.7.0-era manifest (DDL-6zn.3 added `inited`) — must stay loadable.
+        let old = r#"{
+            "ddl_version": "0.7.0",
+            "migration_state": "none",
+            "tools": {
+                "wai": {"installed": "2026.10.3", "source": "binary download", "status": "installed", "compatible": ">=2026.3.0"}
+            }
+        }"#;
+        let m = Manifest::parse(old).unwrap();
+        assert!(m.is_installed("wai"));
+        assert!(!m.is_inited("wai"));
+        assert!(m.inited.is_empty());
+    }
+}
