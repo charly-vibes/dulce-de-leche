@@ -8,6 +8,10 @@
 //! - .gitignore entries for tool data dirs (.testaruda/, .pretender/)
 //! - beads no-db stamping in .beads/config.yaml
 //! - init ordering: openspec init BEFORE ah init (ah needs openspec/)
+//!
+//! Read-only counterpart (DDL-6zn.5): `detect_lefthook_gates_problems`
+//! inspects the on-disk wiring without mutating it — the repo-aware doctor
+//! uses it as the single source of truth for "gates wired".
 
 use crate::error::{DdlError, Result};
 
@@ -331,6 +335,72 @@ pub fn apply_gates_wiring(repo_root: &std::path::Path) -> Result<WiringReport> {
     })
 }
 
+/// Read-only inspection of the on-disk lefthook gates wiring (DDL-6zn.5).
+/// Returns one problem message per defect; an empty Vec means the gates are
+/// fully wired: both managed blocks present, inside `commands:`, no
+/// duplicates, no mangled markers. This is the single source of truth for
+/// "gates wired" shared by `init --gates` and the repo-aware doctor.
+pub fn detect_lefthook_gates_problems(content: Option<&str>) -> Vec<String> {
+    const HOOKS: &[&str] = &["pre-commit", "pre-push"];
+    let Some(text) = content else {
+        return vec!["lefthook.yml not found — run `ddl init --gates`".to_string()];
+    };
+    let lines: Vec<&str> = text.lines().collect();
+    let mut problems = Vec::new();
+    for hook in HOOKS {
+        let start_marker = format!("{MARKER_START_PREFIX}{hook})");
+        let end_marker = format!("{MARKER_END_PREFIX}{hook})");
+        let starts: Vec<usize> = lines
+            .iter()
+            .enumerate()
+            .filter(|(_, l)| l.contains(&start_marker))
+            .map(|(i, _)| i)
+            .collect();
+        let ends: Vec<usize> = lines
+            .iter()
+            .enumerate()
+            .filter(|(_, l)| l.contains(&end_marker))
+            .map(|(i, _)| i)
+            .collect();
+        if starts.is_empty() {
+            problems.push(format!("{hook} managed block missing"));
+            continue;
+        }
+        if starts.len() > 1 {
+            problems.push(format!(
+                "{hook} managed block duplicated ({} blocks)",
+                starts.len()
+            ));
+        }
+        if ends.len() != starts.len() {
+            problems.push(format!(
+                "{hook} managed block has mismatched start/end markers"
+            ));
+            continue;
+        }
+        // The block must sit inside the hook's `commands:` — there must be a
+        // two-space `commands:` line between the hook section start and the
+        // first start marker (the espectacular mangle class glues the block
+        // directly under the hook line, outside commands:).
+        let hook_line = format!("{hook}:");
+        let Some(h) = lines.iter().position(|l| l.trim_end() == hook_line) else {
+            problems.push(format!(
+                "{hook} managed block present but no '{hook}:' section"
+            ));
+            continue;
+        };
+        let commands_before = lines[h..starts[0]]
+            .iter()
+            .any(|l| l.trim_end() == "  commands:");
+        if !commands_before {
+            problems.push(format!(
+                "{hook} managed block is outside commands: (mangled) — run `ddl init --gates`"
+            ));
+        }
+    }
+    problems
+}
+
 /// Canonical tool-init order (always applied): openspec before ah (ah init
 /// exits 1 without openspec/ — the bajan 9/28 cascade failure), everything
 /// else stable.
@@ -493,6 +563,70 @@ pre-commit:
         let (out3, change3) = ensure_beads_nodb(Some("# Beads Configuration File\nno-db: true\n"));
         assert_eq!(change3, BeadsChange::Unchanged);
         assert_eq!(out3, "# Beads Configuration File\nno-db: true\n");
+    }
+
+    #[test]
+    fn detect_flags_missing_file_and_clean_wiring() {
+        assert_eq!(
+            detect_lefthook_gates_problems(None),
+            vec!["lefthook.yml not found — run `ddl init --gates`"]
+        );
+        // The fixture fixture has the managed blocks wired by hand? No — the
+        // plain COMMANDS_HOOK fixture has no managed blocks at all.
+        let problems = detect_lefthook_gates_problems(Some(COMMANDS_HOOK));
+        assert_eq!(problems.len(), 2, "both hooks missing: {problems:?}");
+        assert!(problems[0].contains("pre-commit managed block missing"));
+        assert!(problems[1].contains("pre-push managed block missing"));
+
+        // Fully wired (idempotent output of ensure) → no problems.
+        let (wired, _) = ensure_lefthook_gates(Some(COMMANDS_HOOK)).unwrap();
+        assert!(detect_lefthook_gates_problems(Some(&wired)).is_empty());
+
+        // A file that merely exists but has no managed blocks still counts
+        // as unwired — existence alone is not "gates wired".
+        let bare_header = "# lefthook.yml — ddl-managed gates (created by `ddl init --gates`)\n";
+        assert_eq!(
+            detect_lefthook_gates_problems(Some(bare_header)).len(),
+            2,
+            "both hooks flagged"
+        );
+    }
+
+    #[test]
+    fn detect_flags_mangled_duplicate_and_mismatched_blocks() {
+        // Block glued outside commands: (espectacular mangle class)
+        let mangled = "pre-commit:\n# ddl:managed:start (pre-commit)\n  ah-check:\n    run: ah check\n# ddl:managed:end (pre-commit)\n\n  commands:\n    spec-gates:\n      run: spk lint openspec\n";
+        let problems = detect_lefthook_gates_problems(Some(mangled));
+        assert!(
+            problems.iter().any(|p| p.contains("outside commands:")),
+            "mangled block flagged: {problems:?}"
+        );
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("pre-push managed block missing"))
+        );
+
+        // Duplicate blocks
+        let (once, _) = ensure_lefthook_gates(Some(COMMANDS_HOOK)).unwrap();
+        let duplicated = format!("{once}\n{}\n", PRE_COMMIT_BLOCK);
+        let problems = detect_lefthook_gates_problems(Some(&duplicated));
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("pre-commit managed block duplicated")),
+            "duplicate flagged: {problems:?}"
+        );
+
+        // Mismatched markers: start without end
+        let mismatched = format!("{once}\n# ddl:managed:start (pre-commit)\n");
+        let problems = detect_lefthook_gates_problems(Some(&mismatched));
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("pre-commit managed block has mismatched start/end")),
+            "mismatch flagged: {problems:?}"
+        );
     }
 
     #[test]
