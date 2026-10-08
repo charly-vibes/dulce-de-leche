@@ -548,6 +548,80 @@ impl DdlDir {
         Ok(())
     }
 
+    /// Undo migration for all migrated tools at once (bulk `--undo`).
+    ///
+    /// Non-destructive: each legacy symlink is replaced by a real copy of
+    /// the current `.ddl/<tool>/` contents, but the `.ddl/` backing store is
+    /// left untouched — so the undo can never lose tool state, and a
+    /// subsequent `ddl migrate` re-links losslessly.
+    ///
+    /// Returns the `(tool, legacy_path)` pairs that were restored.
+    pub fn unmigrate_all(&self) -> Result<Vec<(String, PathBuf)>> {
+        let migrated = migrated_tools(self);
+        for (tool_name, legacy_path) in &migrated {
+            let ddl_tool_path = self.tool_path(tool_name);
+
+            // Read the symlink target type BEFORE removing it — single-file
+            // configs (symlink → a file inside .ddl/<tool>/) restore as a
+            // single file; directory configs restore the whole tree.
+            let is_single_file = std::fs::read_link(legacy_path)
+                .ok()
+                .map(|target| {
+                    let resolved = if target.is_relative() {
+                        legacy_path.parent().unwrap_or(Path::new(".")).join(&target)
+                    } else {
+                        target
+                    };
+                    resolved.is_file()
+                })
+                .unwrap_or(false);
+
+            // Remove the legacy symlink (not its target).
+            std::fs::remove_file(legacy_path)
+                .or_else(|_| std::fs::remove_dir(legacy_path))
+                .map_err(DdlError::Io)?;
+
+            // Copy the current .ddl/<tool>/ contents back to the legacy
+            // location. Copy (not move) keeps the backing store intact.
+            if is_single_file {
+                let file_in_tool_dir =
+                    ddl_tool_path.join(legacy_path.file_name().unwrap_or_default());
+                std::fs::copy(&file_in_tool_dir, legacy_path).map_err(DdlError::Io)?;
+            } else if ddl_tool_path.is_dir() {
+                std::fs::create_dir_all(legacy_path).map_err(DdlError::Io)?;
+                for entry in std::fs::read_dir(&ddl_tool_path).map_err(DdlError::Io)? {
+                    let entry = entry.map_err(DdlError::Io)?;
+                    Self::copy_entry(&entry.path(), &legacy_path.join(entry.file_name()))?;
+                }
+            } else if ddl_tool_path.is_file() {
+                std::fs::copy(&ddl_tool_path, legacy_path).map_err(DdlError::Io)?;
+            }
+        }
+        // Return absolute paths — migrated_tools() yields CWD-relative legacy
+        // paths, which are ambiguous outside the migrating process.
+        Ok(migrated
+            .into_iter()
+            .map(|(tool, path)| {
+                let abs = std::fs::canonicalize(&path).unwrap_or(path);
+                (tool, abs)
+            })
+            .collect())
+    }
+
+    /// Recursively copy a file or directory tree.
+    fn copy_entry(src: &Path, dst: &Path) -> Result<()> {
+        if src.is_dir() {
+            std::fs::create_dir_all(dst).map_err(DdlError::Io)?;
+            for entry in std::fs::read_dir(src).map_err(DdlError::Io)? {
+                let entry = entry.map_err(DdlError::Io)?;
+                Self::copy_entry(&entry.path(), &dst.join(entry.file_name()))?;
+            }
+        } else {
+            std::fs::copy(src, dst).map_err(DdlError::Io)?;
+        }
+        Ok(())
+    }
+
     /// Detect broken symlinks in the .ddl/ directory.
     pub fn detect_broken_symlinks(&self) -> Vec<PathBuf> {
         let mut broken = Vec::new();
@@ -721,6 +795,24 @@ pub fn migrated_tools(ddl_dir: &DdlDir) -> Vec<(String, PathBuf)> {
         }
     }
     result
+}
+
+/// Best-effort check whether a path is tracked by git (staged or committed).
+///
+/// Shells out to `git ls-files --error-unmatch`. Returns false when git is
+/// unavailable, the path is outside a repository, or the path is untracked —
+/// in which case symlink migration is safe (git does not follow symlinks,
+/// but untracked content has no history to corrupt).
+pub fn is_git_tracked(path: &Path) -> bool {
+    let parent = path.parent().unwrap_or(Path::new("."));
+    std::process::Command::new("git")
+        .arg("-C")
+        .arg(parent)
+        .args(["ls-files", "--error-unmatch"])
+        .arg(path)
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
 }
 
 /// Check if a path is a symlink.

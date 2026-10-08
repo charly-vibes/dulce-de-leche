@@ -99,12 +99,28 @@ ddl upgrade wai      # upgrade a single tool
 
 ## `ddl migrate`
 
-Move existing configs under `.ddl/`.
+Move existing configs under `.ddl/` (phase-1 symlink farm). To unify
+disparate per-tool config dirs into one managed place, this is the path:
+run `ddl migrate` at the repo root; each tool's legacy config dir
+(`.wai/`, `.testaruda/`, …) is moved under `.ddl/<tool>/` and replaced by
+a symlink.
 
 ```bash
 ddl migrate
 ddl migrate --undo   # restore previous layout
 ```
+
+Safety semantics (gh#30):
+
+- **Git-tracked configs are skipped with guidance.** Git does not follow
+  symlinks, so replacing a tracked dir would make every tracked file
+  vanish from other clones. `ddl migrate` detects tracked paths
+  (`git ls-files`) and leaves them in place, telling you how to untrack
+  first if you really want them under `.ddl/`.
+- **`--undo` is non-destructive.** Each legacy path is restored as a copy
+  of the current `.ddl/<tool>/` contents; the `.ddl/` backing store is
+  kept, so the undo can never lose tool state and a re-migrate is
+  lossless. The manifest's `migration_state` is reset to `none`.
 
 ## `ddl scope`
 

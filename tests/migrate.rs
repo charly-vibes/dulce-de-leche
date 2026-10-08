@@ -379,3 +379,99 @@ fn test_migrate_idempotent_single_file() {
     let content = std::fs::read_to_string(&legacy_path).expect("read through symlink");
     assert_eq!(content, r#"theme = "idempotent""#);
 }
+
+// ===== DDL-6zn.7: unmigrate_all (bulk --undo) is non-destructive =====
+
+#[test]
+#[serial]
+fn test_unmigrate_all_preserves_state_json_verbatim() {
+    let (tmp, ddl_dir) = setup_ddl_dir();
+
+    // migrated_tools() resolves LEGACY_CONFIGS relative to CWD
+    with_cwd(tmp.path(), || {
+        // Migrate two tools: wai (directory config) and pretender (single-file config)
+        let wai_path = tmp.path().join(".wai");
+        create_directory_legacy(&wai_path, &[("config.toml", "key = true")]);
+        ddl_dir.migrate_tool("wai", &wai_path).expect("migrate wai");
+
+        let pretender_path = tmp.path().join(".pretender.toml");
+        create_single_file_legacy(&pretender_path, r#"theme = "light""#);
+        ddl_dir
+            .migrate_tool("pretender", &pretender_path)
+            .expect("migrate pretender");
+
+        // Write a custom state.json into the wai tool dir — this is what
+        // unmigrate_all must NOT delete
+        let state_path = ddl_dir.tool_path("wai").join("state.json");
+        let state_content = r#"{"plugins":["core","flow"],"last_sync":"2026-02-14T10:00:00Z"}"#;
+        std::fs::write(&state_path, state_content).expect("write state.json");
+
+        // Run the bulk undo
+        let restored = ddl_dir.unmigrate_all().expect("unmigrate_all");
+
+        assert_eq!(restored.len(), 2, "both tools should be restored");
+        assert!(restored.contains(&("wai".to_string(), wai_path.clone())));
+        assert!(restored.contains(&("pretender".to_string(), pretender_path.clone())));
+
+        // state.json must survive verbatim
+        assert!(
+            state_path.exists(),
+            "state.json should not be deleted by unmigrate_all"
+        );
+        let content = std::fs::read_to_string(&state_path).expect("read state.json");
+        assert_eq!(
+            content, state_content,
+            "state.json content must be preserved verbatim"
+        );
+
+        // Legacy configs restored correctly
+        assert!(wai_path.is_dir(), "wai legacy dir restored");
+        assert!(pretender_path.is_file(), "pretender legacy file restored");
+    });
+}
+
+#[test]
+#[serial]
+fn test_unmigrate_all_skips_state_json_when_restoring() {
+    let (tmp, ddl_dir) = setup_ddl_dir();
+
+    with_cwd(tmp.path(), || {
+        // Even when the legacy dir contains state.json originally (it was symlinked
+        // in), unmigrate_all must not delete it from the .ddl/<tool>/ side after restore.
+        let wai_path = tmp.path().join(".wai");
+        create_directory_legacy(
+            &wai_path,
+            &[
+                ("config.toml", "key = true"),
+                ("state.json", r#"{"plugins":["core"]}"#),
+            ],
+        );
+        ddl_dir.migrate_tool("wai", &wai_path).expect("migrate wai");
+
+        // Overwrite state.json in the .ddl side to simulate an update since migration
+        let state_path = ddl_dir.tool_path("wai").join("state.json");
+        let updated = r#"{"plugins":["core","flow"]}"#;
+        std::fs::write(&state_path, updated).expect("update state.json in .ddl side");
+
+        let restored = ddl_dir.unmigrate_all().expect("unmigrate_all");
+        assert_eq!(restored.len(), 1);
+
+        // The .ddl side must still hold its copy — unmigrate_all only restores
+        // the symlink, it does not touch the backing store.
+        assert!(
+            state_path.exists(),
+            "state.json in .ddl/<tool>/ must survive unmigrate_all"
+        );
+        let content = std::fs::read_to_string(&state_path).expect("read state.json");
+        assert_eq!(content, updated, "state.json unchanged in .ddl side");
+
+        // Legacy dir restored with its original content (via symlink restore)
+        let legacy_state = wai_path.join("state.json");
+        let legacy_content =
+            std::fs::read_to_string(&legacy_state).expect("read legacy state.json");
+        assert_eq!(
+            legacy_content, updated,
+            "legacy path sees updated state.json"
+        );
+    });
+}
