@@ -1,0 +1,8 @@
+- 2026-10-08T16:39:43Z [id:270a8a353b3b976256fe8a26f25cbd452d3fc5c154ac5fba4987a3b9955617a1] (#ddl) ### 2026-10-08 — DDL-6zn.5 shipped (PR #52)
+  - Repo-aware doctor: 4 repo-scope DoctorChecks (ddl.repo.gates/blocks/gitignore/pins) answering "is THIS repo ddl-initialized" — gates via new read-only gates::detect_lefthook_gates_problems (single source of truth, reused by init --gates and doctor)
+  - Design decision: checks registered ONLY inside a git repo — genesis renders empty check results as pass entries, so registration-time gating prevents fabricated "repo gates wired" claims in machine-scope runs; presence/absence of ddl.repo.* items IS the signal
+  - Rust walk-up gotcha: Path::new(".").parent() == Some("") terminates directory walks at the cwd — fs::canonicalize first (test: doctor from subdirectory)
+  - gh#46 inversion pinned in envelope contract: "no issues found" detail must be level pass; platform check structurally pass
+  - Dogfood honest: ddl own repo flagged — lefthook.yml has NO ddl-managed blocks (hand-wired §8 style) and .testaruda/ not gitignored; dogfood wiring decision (add managed blocks to ddl own hooks) open
+  - Tests: doctor_command 12, envelope_contract inversion guard, gates detector units; suite 21/21 green, clippy+fmt clean; ticket closed, beads exported, PR #52
+  - **Next:** DDL-6zn.6 (feedback subcommand → gh#31) then 6zn.7/6zn.8; DDL-2um still blocked on TAP_GITHUB_TOKEN

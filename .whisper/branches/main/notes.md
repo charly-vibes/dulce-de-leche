@@ -1,0 +1,20 @@
+- 2026-10-08T16:17:44Z [id:35cc2faa06c888c1ca866bf6ca0b0fb2f5c688539b47e61036147e60768f9dd3] ### 2026-10-08 13:17 — snap
+  - DDL-6zn init-UX epic: 3 of 7 children shipped end-to-end via wai orchestration (project init-ux [implement]): 6zn.2 ddl init --gates (PR #49), 6zn.3 init cascade (PR #50), 6zn.4 envelope contract (PR #51) — all merged to main with green CI, tickets closed, beads exported
+  - Key gotchas banked: Rust string-literal \\ continuation strips next-line indentation (glued lefthook markers); genesis maps Severity::Advisory→Warn so informational lines must NOT be emitted as Advisory (root cause of pass:0/warn:37 vs '10 healthy' contradictions — checks now emit only real issues); JsonCollectorGuard::abort() kills the two-envelope ok:true+error failure mode; dont init refuses re-init → manifest inited: Vec<String> marker for idempotent-until-green
+  - Conformance suite tests/envelope_contract.rs now pins the JSON schema in CI (envelope_version 0.1, doctor data keys, level domain, summary==roll-up, no-null scan)
+  - CI flake: test_probe_version_at_finds_version_in_ddl_bin failed on PR #51 merge commit once, passed on rerun (runner flake, unchanged test) — watch for recurrence
+  - **Next:** claim DDL-6zn.5 (repo-aware doctor + pass/warn inversion per gh#46; absorbs the repo-manifest piece deferred from 6zn.2), then 6zn.6/6zn.7, 6zn.8 last
+- 2026-10-08T16:48:02Z [id:cbafa7ac7ece319e9ee0c1f2f1f80049bd98e839a9873f7e5bee6e8bc4db86bf] (#ddl) ### 2026-10-08 13:47 — snap (quick stash)
+  - DDL-6zn.5 fully shipped: PR #52 merged to main (CI green on PR + merge commit), ticket closed, beads exported (828aedc); repo-aware doctor live — 4 repo-scope checks (gates/blocks/gitignore/pins) register only inside git repos
+  - Dogfood findings recorded: ddl own repo has NO ddl-managed lefthook blocks (hand-wired §8 style) and .testaruda/ not gitignored — wiring decision open (would add ah check/pretender gate/spk lint to ddl own hooks)
+  - **Next:** DDL-6zn.6 (feedback subcommand → gh#31) — claim via `bd update DDL-6zn.6 --claim`; then 6zn.7 (migrate symlinks), 6zn.8 last; DDL-2um still blocked on TAP_GITHUB_TOKEN; /renew to resume
+- 2026-10-08T17:02:16Z [id:afd134b5632b124ab0669760e0d964bdd850a86ca1d9b48362c84e41409c8f04] ### 2026-10-08 ~now — snap (DDL-6zn.6 closed)
+  - DDL-6zn.6 shipped: discovered the feedback subcommand was ALREADY implemented (PR #36 / DDL-isi, 9/29) — ticket filed from stale session reports (finanzas 9/29, REPLy 10/1 predate the merge). Verified all gh#31 behaviors live: kinds, --dry-run, --from-last-error, stdin body, --title, JSON envelope, compile-time repo URL, env prefill, offline fallback
+  - Remaining acceptance gap closed in PR #53: 'ddl feedback' section in docs/src/commands.md + ddl-vs-dulce-de-leche crate-name note (kills the charly-vibes/ddl 404 class without a new repo/info subcommand). PR merged, main CI green, ticket closed + exported
+  - Untracked .whisper/ dir in repo root (turu workspace artifact — left alone)
+  - **Next:** DDL-6zn.7 (migrate phase-1 symlinks break git-tracked dirs, gh#30) then 6zn.8 (aliases, trivial); DDL-2um still blocked on TAP_GITHUB_TOKEN; DDL-3av in_progress (exec-bit tarballs) — verify staleness before touching
+- 2026-10-08T18:22:21Z [id:2ebf6080e8bb071a37b93926bdcf54261608b259ee9c60e7c887108fbf64f920] ### 2026-10-08 — DDL-6zn.7 closed (PR #54)
+  - Generalizable rule: 'undo' that moves-and-deletes destroys state; non-destructive undo copies back and keeps the backing store, making undo provably lossless and re-apply trivial
+  - migrate now refuses git-tracked legacy paths via git ls-files --error-unmatch (git does not follow symlinks — tracked content vanishes for other clones); guidance = untrack first
+  - Migration-state fields must be reset on undo paths, not only set on forward paths — residue is a two-way invariant
+  - **Next:** DDL-6zn.8 (aliases, trivial) closes the epic; DDL-2um still blocked on TAP_GITHUB_TOKEN
