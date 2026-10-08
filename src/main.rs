@@ -990,16 +990,17 @@ fn cmd_migrate(undo: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
     let ddl_dir = DdlDir::find_or_create()?;
 
     if undo {
-        let migrated = dulce_de_leche::dot_ddl::migrated_tools(&ddl_dir);
-        if migrated.is_empty() {
+        // Bulk undo is non-destructive: legacy paths are restored as copies
+        // of the .ddl/ backing store, which is left untouched (DDL-6zn.7).
+        let restored = ddl_dir.unmigrate_all()?;
+        if restored.is_empty() {
             output::print_success("No migrated configs found.", args.is_json());
             return Ok(());
         }
-        for (tool_name, legacy_path) in &migrated {
+        for (tool_name, legacy_path) in &restored {
             if !args.is_json() {
                 println!("  Restoring {}...", tool_name);
             }
-            ddl_dir.unmigrate_tool(tool_name, legacy_path)?;
             output::print_install_result(
                 true,
                 tool_name,
@@ -1007,6 +1008,11 @@ fn cmd_migrate(undo: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
                 args.is_json(),
             );
         }
+        // Clear the migration residue: the manifest must not keep claiming
+        // phase1 once every symlink has been restored (gh#30).
+        let mut ddl_dir = ddl_dir;
+        ddl_dir.manifest.migration_state = "none".to_string();
+        ddl_dir.save_manifest()?;
         return Ok(());
     }
 
@@ -1023,7 +1029,23 @@ fn cmd_migrate(undo: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
         println!("Phase 1 migration — moving configs under .ddl/...");
     }
 
+    let mut skipped_tracked = Vec::new();
     for (tool_name, legacy_path) in &legacy_configs {
+        // Safety guard (gh#30): git does not follow symlinks, so replacing a
+        // tracked path with one makes every tracked file under it vanish from
+        // the repo. Skip with guidance instead of corrupting the checkout.
+        if dulce_de_leche::dot_ddl::is_git_tracked(legacy_path) {
+            skipped_tracked.push((*tool_name, legacy_path.clone()));
+            if !args.is_json() {
+                println!(
+                    "  Skipping {}: {} is git-tracked — symlinking it would break the repo for other clones. To migrate anyway, untrack it first (git rm -r --cached {}) and commit.",
+                    tool_name,
+                    legacy_path.display(),
+                    legacy_path.display()
+                );
+            }
+            continue;
+        }
         if !args.is_json() {
             println!(
                 "  Migrating {} from {}...",
@@ -1042,6 +1064,14 @@ fn cmd_migrate(undo: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
             ),
             args.is_json(),
         );
+    }
+
+    if skipped_tracked.len() == legacy_configs.len() {
+        output::print_success(
+            "All legacy configs are git-tracked — nothing migrated. Untrack them first if you want them under .ddl/.",
+            args.is_json(),
+        );
+        return Ok(());
     }
 
     let mut ddl_dir = ddl_dir;
