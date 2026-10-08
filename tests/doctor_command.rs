@@ -169,3 +169,181 @@ fn test_doctor_works_without_ddl_dir() {
     cmd.timeout(CMD_TIMEOUT);
     cmd.assert().success();
 }
+
+// ===================== DDL-6zn.5: repo-aware doctor =====================
+
+/// Helper: parse the doctor JSON envelope's diagnostics array.
+fn doctor_diagnostics(cmd: &mut Command) -> Vec<serde_json::Value> {
+    let out = cmd.assert().success().get_output().stdout.clone();
+    let envelope: serde_json::Value = serde_json::from_slice(&out).unwrap();
+    envelope["data"]["diagnostics"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+}
+
+fn repo_items(items: &[serde_json::Value]) -> Vec<&serde_json::Value> {
+    items
+        .iter()
+        .filter(|i| {
+            i["check"]
+                .as_str()
+                .unwrap_or_default()
+                .starts_with("ddl.repo.")
+        })
+        .collect()
+}
+
+#[test]
+fn test_doctor_repo_checks_absent_outside_git_repo() {
+    // In a plain temp dir (no .git) the repo-scope section must not fire —
+    // repo conformance is only meaningful inside a repository.
+    let (mut cmd, _temp) = ddl_cmd();
+    cmd.args(["doctor", "--json"]);
+    let items = doctor_diagnostics(&mut cmd);
+    assert!(
+        repo_items(&items).is_empty(),
+        "repo checks must be skipped outside a git repo: {:?}",
+        repo_items(&items)
+    );
+}
+
+/// Wire a git repo fully: managed lefthook blocks, AGENTS.md blocks,
+/// gitignore coverage, version pins. Returns the temp dir.
+fn git_init(path: &std::path::Path) {
+    let out = std::process::Command::new("git")
+        .args(["init", "-q"])
+        .current_dir(path)
+        .output()
+        .expect("git init runs");
+    assert!(out.status.success(), "git init failed: {:?}", out.stderr);
+}
+
+fn wired_git_repo() -> tempfile::TempDir {
+    use dulce_de_leche::gates::{PRE_COMMIT_BLOCK, PRE_PUSH_BLOCK, ensure_gitignore_tool_dirs};
+    let temp = tempfile::tempdir().unwrap();
+    git_init(temp.path());
+    let lefthook = format!(
+        "pre-commit:\n  commands:\n{PRE_COMMIT_BLOCK}\n\npre-push:\n  commands:\n{PRE_PUSH_BLOCK}\n"
+    );
+    std::fs::write(temp.path().join("lefthook.yml"), &lefthook).unwrap();
+    let (gitignore, _) = ensure_gitignore_tool_dirs(Some(""));
+    std::fs::write(temp.path().join(".gitignore"), &gitignore).unwrap();
+    std::fs::write(
+        temp.path().join("AGENTS.md"),
+        "<!-- WAI:START -->\n<!-- WAI:END -->\n<!-- OPENSPEC:START -->\n<!-- OPENSPEC:END -->\n<!-- BEGIN BEADS INTEGRATION -->\n<!-- END BEADS INTEGRATION -->\n",
+    )
+    .unwrap();
+    std::fs::write(temp.path().join("Cargo.toml"), "[package]\nname = \"x\"\n").unwrap();
+    std::fs::write(
+        temp.path().join("versions.ddl.toml"),
+        "[tools]\nwai = \"latest\"\n",
+    )
+    .unwrap();
+    temp
+}
+
+#[test]
+fn test_doctor_repo_checks_found_from_subdirectory() {
+    // The repo-scope checks walk up to the repo root — doctor run from a
+    // nested directory still answers "is THIS repo initialized?".
+    let temp = wired_git_repo();
+    std::fs::create_dir_all(temp.path().join("src/deep/nested")).unwrap();
+
+    let mut cmd = Command::cargo_bin("ddl").unwrap();
+    cmd.current_dir(temp.path().join("src/deep/nested"));
+    cmd.timeout(CMD_TIMEOUT);
+    cmd.args(["doctor", "--json"]);
+    let items = doctor_diagnostics(&mut cmd);
+    let repo = repo_items(&items);
+    assert!(
+        repo.iter()
+            .any(|i| i["check"] == serde_json::json!("ddl.repo.gates")),
+        "gates check must fire from a subdirectory of a git repo"
+    );
+    for item in &repo {
+        assert_eq!(
+            item["level"],
+            serde_json::json!("pass"),
+            "wired repo passes: {item}"
+        );
+    }
+}
+
+#[test]
+fn test_doctor_repo_checks_pass_in_fully_wired_repo() {
+    let temp = wired_git_repo();
+    let manifest_dir = temp.path().join(".ddl");
+    std::fs::create_dir_all(&manifest_dir).unwrap();
+    std::fs::write(
+        manifest_dir.join("manifest.json"),
+        serde_json::to_string_pretty(&serde_json::json!({
+            "ddl_version": "0.3.0",
+            "migration_state": "none",
+            "tools": {}
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    let mut cmd = Command::cargo_bin("ddl").unwrap();
+    cmd.current_dir(temp.path());
+    cmd.timeout(CMD_TIMEOUT);
+    cmd.args(["doctor", "--json"]);
+    let items = doctor_diagnostics(&mut cmd);
+    let repo = repo_items(&items);
+    // All four repo-scope checks present and attributed to ddl
+    let checks: Vec<&str> = repo.iter().map(|i| i["check"].as_str().unwrap()).collect();
+    for expected in [
+        "ddl.repo.gates",
+        "ddl.repo.blocks",
+        "ddl.repo.gitignore",
+        "ddl.repo.pins",
+    ] {
+        assert!(
+            checks.contains(&expected),
+            "missing repo check '{expected}' in {checks:?}"
+        );
+    }
+    for item in &repo {
+        assert_eq!(
+            item["tool"],
+            serde_json::json!("ddl"),
+            "repo checks attribute to ddl"
+        );
+        assert_eq!(
+            item["level"],
+            serde_json::json!("pass"),
+            "wired repo passes: {item}"
+        );
+    }
+}
+
+#[test]
+fn test_doctor_repo_checks_warn_in_unwired_git_repo() {
+    let temp = tempfile::tempdir().unwrap();
+    git_init(temp.path());
+
+    let mut cmd = Command::cargo_bin("ddl").unwrap();
+    cmd.current_dir(temp.path());
+    cmd.timeout(CMD_TIMEOUT);
+    cmd.args(["doctor", "--json"]);
+    let items = doctor_diagnostics(&mut cmd);
+    let repo = repo_items(&items);
+    assert!(
+        !repo.is_empty(),
+        "unwired git repo must produce repo findings"
+    );
+    let gates = repo
+        .iter()
+        .find(|i| i["check"] == serde_json::json!("ddl.repo.gates"))
+        .expect("gates finding");
+    assert_eq!(gates["level"], serde_json::json!("warn"));
+    assert!(
+        gates["fix"]
+            .as_str()
+            .unwrap_or("")
+            .contains("ddl init --gates"),
+        "gates findings carry the fix command: {gates}"
+    );
+}

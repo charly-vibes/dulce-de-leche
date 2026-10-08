@@ -103,6 +103,31 @@ fn doctor_envelope_matches_pinned_contract() {
     assert_eq!(summary["pass"], serde_json::json!(count("pass")));
     assert_eq!(summary["warn"], serde_json::json!(count("warn")));
     assert_eq!(summary["fail"], serde_json::json!(count("fail")));
+
+    // gh#46 inversion guard: a healthy check is pass, never warn. Any
+    // "no issues found" detail (genesis's empty-result pass message) must
+    // carry level "pass" — warn means an actual problem.
+    for item in diagnostics.iter() {
+        if item["detail"] == serde_json::json!("no issues found") {
+            assert_eq!(
+                item["level"],
+                serde_json::json!("pass"),
+                "healthy check rendered as warn (gh#46 inversion): {item}"
+            );
+        }
+    }
+    // The platform check is structurally pass on any supported platform —
+    // it must never contribute a warn/fail to healthy-machine output.
+    if let Some(platform) = diagnostics
+        .iter()
+        .find(|i| i["check"] == serde_json::json!("ddl.platform"))
+    {
+        assert_eq!(
+            platform["level"],
+            serde_json::json!("pass"),
+            "platform check on supported platform must be pass: {platform}"
+        );
+    }
 }
 
 #[test]

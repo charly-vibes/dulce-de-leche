@@ -391,6 +391,185 @@ pub fn status_summary(sections: &[StatusSection]) -> String {
     }
 }
 
+// ── DDL-6zn.5: repo-scope conformance checks ─────────────────────────
+//
+// These answer "is THIS repo fully ddl-initialized/conformant?" — the
+// question every init session answered by hand-probing (ls .ddl, git
+// status). They only run inside a git repository; outside one they emit
+// nothing (repo conformance is meaningless there).
+
+/// Walk up from `start` looking for a `.git` entry — the repo root.
+fn find_git_root(start: &Path) -> Option<std::path::PathBuf> {
+    // Canonicalize first: `Path::new(".").parent()` is `Some("")`, which
+    // would terminate the walk at the cwd instead of ascending.
+    let mut dir = Some(std::fs::canonicalize(start).unwrap_or_else(|_| start.to_path_buf()));
+    while let Some(d) = dir {
+        if d.join(".git").exists() {
+            return Some(d);
+        }
+        dir = d.parent().map(|p| p.to_path_buf());
+    }
+    None
+}
+
+/// Managed blocks expected in the repo's AGENTS.md (the "this repo is
+/// agent-instrumented" definition): wai, openspec, beads.
+const AGENT_BLOCKS: &[(&str, &str)] = &[
+    ("<!-- WAI:START -->", "wai"),
+    ("OPENSPEC:START", "openspec"),
+    ("BEGIN BEADS INTEGRATION", "beads"),
+];
+
+/// Check the repo's lefthook gates wiring (DDL-6zn.5).
+pub struct RepoGatesCheck;
+
+impl DoctorCheck for RepoGatesCheck {
+    fn name(&self) -> &'static str {
+        "ddl.repo.gates"
+    }
+    fn description(&self) -> &'static str {
+        "Check that commit/push gates are wired in this repo"
+    }
+    fn run(
+        &self,
+        repo_root: &Path,
+    ) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
+        let Some(root) = find_git_root(repo_root) else {
+            return Ok(vec![]);
+        };
+        let path = root.join("lefthook.yml");
+        let content = path
+            .exists()
+            .then(|| std::fs::read_to_string(&path))
+            .transpose()
+            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+        Ok(
+            crate::gates::detect_lefthook_gates_problems(content.as_deref())
+                .into_iter()
+                .map(|problem| LintResult::with_fix(problem, Severity::Warning, "ddl init --gates"))
+                .collect(),
+        )
+    }
+}
+
+/// Check the repo's AGENTS.md managed blocks (DDL-6zn.5).
+pub struct RepoAgentBlocksCheck;
+
+impl DoctorCheck for RepoAgentBlocksCheck {
+    fn name(&self) -> &'static str {
+        "ddl.repo.blocks"
+    }
+    fn description(&self) -> &'static str {
+        "Check that AGENTS.md carries the ecosystem managed blocks"
+    }
+    fn run(
+        &self,
+        repo_root: &Path,
+    ) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
+        let Some(root) = find_git_root(repo_root) else {
+            return Ok(vec![]);
+        };
+        let path = root.join("AGENTS.md");
+        if !path.exists() {
+            return Ok(vec![LintResult::with_fix(
+                "AGENTS.md missing — tool managed blocks absent",
+                Severity::Warning,
+                "ddl init",
+            )]);
+        }
+        let text = std::fs::read_to_string(&path)
+            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+        Ok(AGENT_BLOCKS
+            .iter()
+            .filter(|(marker, _)| !text.contains(marker))
+            .map(|(_, label)| {
+                LintResult::with_fix(
+                    format!("AGENTS.md missing managed block for {label}"),
+                    Severity::Warning,
+                    "ddl init",
+                )
+            })
+            .collect())
+    }
+}
+
+/// Check the repo's .gitignore coverage of tool data dirs (DDL-6zn.5).
+pub struct RepoGitignoreCheck;
+
+impl DoctorCheck for RepoGitignoreCheck {
+    fn name(&self) -> &'static str {
+        "ddl.repo.gitignore"
+    }
+    fn description(&self) -> &'static str {
+        "Check that tool data dirs are gitignored in this repo"
+    }
+    fn run(
+        &self,
+        repo_root: &Path,
+    ) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
+        let Some(root) = find_git_root(repo_root) else {
+            return Ok(vec![]);
+        };
+        let path = root.join(".gitignore");
+        let text = path
+            .exists()
+            .then(|| std::fs::read_to_string(&path))
+            .transpose()
+            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+        let existing: Vec<String> = text
+            .unwrap_or_default()
+            .lines()
+            .map(|l| l.trim().to_string())
+            .collect();
+        Ok(crate::gates::GITIGNORE_TOOL_DIR_ENTRIES
+            .iter()
+            .filter(|e| !existing.contains(&e.to_string()))
+            .map(|e| {
+                LintResult::with_fix(
+                    format!("{e} not gitignored"),
+                    Severity::Warning,
+                    "ddl init --gates",
+                )
+            })
+            .collect())
+    }
+}
+
+/// Check the repo's version pins (DDL-6zn.5).
+///
+/// Only meaningful for Rust repos (a `Cargo.toml` at the repo root):
+/// the standardization policy pins ecosystem CI installs in
+/// `versions.ddl.toml`. Non-Rust repos emit nothing.
+pub struct RepoPinsCheck;
+
+impl DoctorCheck for RepoPinsCheck {
+    fn name(&self) -> &'static str {
+        "ddl.repo.pins"
+    }
+    fn description(&self) -> &'static str {
+        "Check that ecosystem CI installs are pinned in this repo"
+    }
+    fn run(
+        &self,
+        repo_root: &Path,
+    ) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
+        let Some(root) = find_git_root(repo_root) else {
+            return Ok(vec![]);
+        };
+        if !root.join("Cargo.toml").exists() {
+            return Ok(vec![]);
+        }
+        if !root.join("versions.ddl.toml").exists() {
+            return Ok(vec![LintResult::with_fix(
+                "versions.ddl.toml missing — CI installs are unpinned",
+                Severity::Warning,
+                "add versions.ddl.toml (docs/standardization.md §pins)",
+            )]);
+        }
+        Ok(vec![])
+    }
+}
+
 /// Check that incitaciones skills are installed globally.
 pub struct IncitacionesSkillsCheck;
 
@@ -444,6 +623,9 @@ pub fn run_full_diagnostic(ddl_dir: Option<&DdlDir>, fix: bool) -> Result<Vec<St
         runner.register(Box::new(ToolCheck::new(tool, ddl_dir.cloned())));
     }
     runner.register(Box::new(IncitacionesSkillsCheck));
+    if find_git_root(Path::new(".")).is_some() {
+        register_repo_checks(&mut runner);
+    }
 
     // Build report
     let report = runner
@@ -688,6 +870,19 @@ pub fn classify_nested_doctor(
     (sev, detail)
 }
 
+/// Register the repo-scope checks (DDL-6zn.5) on a doctor runner.
+///
+/// Skipped entirely outside a git repository: genesis renders an empty
+/// check result as a pass entry, so registering the checks outside a repo
+/// would fabricate "repo gates wired" claims in machine-scope runs. The
+/// presence/absence of `ddl.repo.*` items in the report IS the signal.
+fn register_repo_checks(runner: &mut genesis::doctor::DoctorRunner) {
+    runner.register(Box::new(RepoGatesCheck));
+    runner.register(Box::new(RepoAgentBlocksCheck));
+    runner.register(Box::new(RepoGitignoreCheck));
+    runner.register(Box::new(RepoPinsCheck));
+}
+
 /// Build the structured `ddl doctor` report (JSON path, DDL-6zn.4).
 ///
 /// Same checks as [`run_full_diagnostic`], but machine-shaped: items plus a
@@ -702,6 +897,9 @@ pub fn run_full_report(ddl_dir: Option<&DdlDir>, fix: bool) -> Result<Diagnostic
         runner.register(Box::new(ToolCheck::new(tool, ddl_dir.cloned())));
     }
     runner.register(Box::new(IncitacionesSkillsCheck));
+    if find_git_root(Path::new(".")).is_some() {
+        register_repo_checks(&mut runner);
+    }
     let report = runner
         .run(Path::new("."), fix)
         .map_err(|e| crate::error::DdlError::Other(e.to_string()))?;
