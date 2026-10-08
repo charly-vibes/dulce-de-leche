@@ -49,6 +49,13 @@ pub enum Commands {
         /// Skip tool installation, only configure existing tools
         #[arg(long)]
         no_install: bool,
+
+        /// Wire the end state users actually ask for: lefthook hard gates
+        /// (pre-commit: ah check, pretender gate, spk lint; pre-push: ah
+        /// check), tool-data .gitignore entries, beads no-db stamping, and
+        /// openspec-init-before-ah ordering. Idempotent — safe to re-run.
+        #[arg(long)]
+        gates: bool,
     },
 
     /// Install a single tool by name

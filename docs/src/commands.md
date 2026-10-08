@@ -16,6 +16,16 @@ ddl init --tools wai,dont
 
 ddl init --no-install
 # Configure only — skip installation, just set up .ddl/
+
+ddl init --gates
+# Wire the end state users actually ask for: lefthook hard gates
+# (pre-commit: ah check, pretender gate, spk lint; pre-push: ah check),
+# .gitignore entries for tool data dirs (.testaruda/, .pretender/), and
+# beads no-db stamping. Also orders tool inits so openspec runs before ah.
+# Idempotent — safe to re-run. Follow with `lefthook install`.
+
+ddl init --yes --gates
+# Full bootstrap with gates wiring — the one-shot setup
 ```
 
 ## `ddl install <tool>`

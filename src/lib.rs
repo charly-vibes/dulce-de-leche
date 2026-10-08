@@ -9,6 +9,7 @@ pub mod compat;
 pub mod diagnostics;
 pub mod dot_ddl;
 pub mod error;
+pub mod gates;
 pub mod installer;
 pub mod manifest;
 pub mod output;

@@ -45,7 +45,8 @@ fn run(args: dulce_de_leche::cli::Args) -> Result<()> {
         Some(Commands::Init {
             ref tools,
             no_install,
-        }) => cmd_init(tools.clone(), no_install, &args),
+            gates,
+        }) => cmd_init(tools.clone(), no_install, gates, &args),
         Some(Commands::Install { ref tool }) => cmd_install(tool, &args),
         Some(Commands::Catalog) => cmd_catalog(&args),
         Some(Commands::Feedback {
@@ -82,6 +83,7 @@ fn run(args: dulce_de_leche::cli::Args) -> Result<()> {
 fn cmd_init(
     tools: Option<String>,
     no_install: bool,
+    gates: bool,
     args: &dulce_de_leche::cli::Args,
 ) -> Result<()> {
     let platform = dulce_de_leche::platform::Platform::detect()
@@ -240,15 +242,23 @@ fn cmd_init(
         // wai is skipped here — it's force-initialized below so that
         // `ddl init` always guarantees the .wai/ structure, even when
         // wai was already installed before this run.
-        for result in &results {
-            if result.success && result.tool != "wai" {
-                let tool = dulce_de_leche::platform::find_tool(result.tool);
-                if let Some(t) = tool {
-                    let _ = dulce_de_leche::installer::run_tool_init(
-                        t,
-                        args.verbose_quiet.raw_count() >= 1,
-                    );
-                }
+        // In gates mode the order is normalized: openspec init runs BEFORE
+        // ah init (ah init exits 1 when openspec/ does not exist yet — the
+        // bajan 9/28 cascade failure). Otherwise install order is kept.
+        let mut init_candidates: Vec<&str> = results
+            .iter()
+            .filter(|r| r.success && r.tool != "wai")
+            .map(|r| r.tool)
+            .collect();
+        if gates {
+            init_candidates = dulce_de_leche::gates::gates_init_order(&init_candidates);
+        }
+        for tool_name in init_candidates {
+            if let Some(t) = dulce_de_leche::platform::find_tool(tool_name) {
+                let _ = dulce_de_leche::installer::run_tool_init(
+                    t,
+                    args.verbose_quiet.raw_count() >= 1,
+                );
             }
         }
 
@@ -280,6 +290,34 @@ fn cmd_init(
 
     ddl_dir.add_gitignore_entries(args.yes)?;
 
+    // Gates wiring: lefthook managed blocks, tool-data .gitignore entries,
+    // beads no-db stamping. Idempotent on re-run. File-level ops only —
+    // tool inits above handle the binary side.
+    if gates {
+        let report = dulce_de_leche::gates::apply_gates_wiring(std::path::Path::new("."))?;
+        if !args.is_json() {
+            print_gates_report(&report);
+        } else {
+            output::print_success(
+                &format!(
+                    "gates wired: lefthook {}, gitignore +{} entries, beads {}",
+                    match report.lefthook {
+                        dulce_de_leche::gates::Change::Created => "created",
+                        dulce_de_leche::gates::Change::Updated => "updated",
+                        dulce_de_leche::gates::Change::Unchanged => "unchanged",
+                    },
+                    report.gitignore_added.len(),
+                    match report.beads {
+                        dulce_de_leche::gates::BeadsChange::Created => "created",
+                        dulce_de_leche::gates::BeadsChange::FlippedToNoDb => "flipped to no-db",
+                        dulce_de_leche::gates::BeadsChange::Unchanged => "unchanged",
+                    }
+                ),
+                args.is_json(),
+            );
+        }
+    }
+
     // Force the wai way — every `ddl init` ensures the .wai/ PARA structure
     // exists, even when wai was already installed (wai init is idempotent).
     // This runs regardless of the install phase above. Init failures are
@@ -309,6 +347,34 @@ fn cmd_init(
     }
 
     Ok(())
+}
+
+fn print_gates_report(report: &dulce_de_leche::gates::WiringReport) {
+    use dulce_de_leche::gates::{BeadsChange, Change};
+    let label = |c: Change| match c {
+        Change::Created => "created",
+        Change::Updated => "updated",
+        Change::Unchanged => "already wired",
+    };
+    let beads_label = |c: BeadsChange| match c {
+        BeadsChange::Created => "created with no-db: true",
+        BeadsChange::FlippedToNoDb => "set to no-db: true",
+        BeadsChange::Unchanged => "already no-db",
+    };
+    println!(
+        "  ✓ lefthook.yml: {} (pre-commit: ah check, pretender gate, spk lint; pre-push: ah check)",
+        label(report.lefthook)
+    );
+    if report.gitignore_added.is_empty() {
+        println!("  ✓ .gitignore: tool data dirs already ignored");
+    } else {
+        println!(
+            "  ✓ .gitignore: added {}",
+            report.gitignore_added.join(", ")
+        );
+    }
+    println!("  ✓ .beads/config.yaml: {}", beads_label(report.beads));
+    println!("  → run `lefthook install` to activate the hooks (core.hooksPath shim)");
 }
 
 /// Check that incitaciones skills are installed globally.

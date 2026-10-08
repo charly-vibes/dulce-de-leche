@@ -32,13 +32,6 @@ phase: implement
 
 ## Context
 
-### git_status
-
-```
- M CLAUDE.md
-?? .genesis/
-```
-
 ### open_issues
 
 ```
