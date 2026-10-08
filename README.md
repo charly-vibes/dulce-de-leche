@@ -165,7 +165,7 @@ Full documentation is available at [charly-vibes.github.io/dulce-de-leche](https
 
 ## Status
 
-**v0.7.0** — orchestrator shipped and published (crates.io, GitHub releases).
+**v0.8.0** — orchestrator shipped and published (crates.io, GitHub releases).
 Installs are binary-first on every platform with `cargo install` fallback;
 the homebrew tap and scoop bucket remain as ecosystem infrastructure for
 manual installs but no longer influence ddl's install decisions ([DDL-ei3]).
