@@ -342,11 +342,53 @@ pub const MANAGED_TOOLS: &[Tool] = &[
     },
 ];
 
-/// Find a tool by name (case-insensitive).
+/// Find a tool by name (case-insensitive; matches the canonical name or
+/// the crate/binary alias — e.g. both `ah` and `espectacular` resolve to
+/// the espectacular tool).
 pub fn find_tool(name: &str) -> Option<&'static Tool> {
-    MANAGED_TOOLS
-        .iter()
-        .find(|t| t.name == name || t.crate_name == name)
+    MANAGED_TOOLS.iter().find(|t| {
+        t.name.eq_ignore_ascii_case(name)
+            || (!t.crate_name.is_empty() && t.crate_name.eq_ignore_ascii_case(name))
+    })
+}
+
+/// Names that refer to ddl itself rather than a managed tool. Agents type
+/// these after 404ing on `charly-vibes/ddl` — the alias must resolve to a
+/// teachable error, not a bare "Unknown tool" (DDL-6zn.8).
+pub const SELF_NAMES: &[&str] = &["ddl", "dulce", "dulce-de-leche"];
+
+/// Is `name` a user-supplied spelling of ddl itself?
+pub fn is_self_name(name: &str) -> bool {
+    SELF_NAMES.iter().any(|n| n.eq_ignore_ascii_case(name))
+}
+
+/// The error message for a self-name lookup — the teachable moment that
+/// names the canonical repository and the real update path.
+pub fn self_name_message(name: &str) -> String {
+    format!(
+        "'{name}' is this tool (ddl), not a managed tool. ddl's canonical \
+         repository is charly-vibes/dulce-de-leche (binary: ddl, crate: \
+         dulce-de-leche) — looking up charly-vibes/ddl returns 404. Update \
+         ddl itself with `cargo install dulce-de-leche` or the binary \
+         download from the repository releases."
+    )
+}
+
+/// Resolve a user-supplied tool name: case-insensitive, accepts the
+/// canonical name or its crate/binary alias. Self-names (`ddl`, `dulce`,
+/// `dulce-de-leche`) and unknown names produce a teachable error message
+/// (single source of truth shared by `install`, `upgrade`, and `--tools`).
+pub fn resolve_tool(name: &str) -> Result<&'static Tool, String> {
+    if is_self_name(name) {
+        return Err(self_name_message(name));
+    }
+    find_tool(name).ok_or_else(|| {
+        let names: Vec<&str> = MANAGED_TOOLS.iter().map(|t| t.name).collect();
+        match did_you_mean(name, &names) {
+            Some(s) => format!("Unknown tool '{name}'. Did you mean '{s}'?"),
+            None => format!("Unknown tool '{name}'"),
+        }
+    })
 }
 
 /// Simple "did you mean?" suggestion using genesis SuggestionEngine.
@@ -361,5 +403,64 @@ pub fn did_you_mean(input: &str, candidates: &[&str]) -> Option<String> {
     match engine.suggest_typo(input, &registry) {
         Some(genesis::suggestions::Suggestion::DidYouMean { suggestion, .. }) => Some(suggestion),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod alias_tests {
+    use super::*;
+
+    /// DDL-6zn.8: binary-vs-crate confusion (ah⇄espectacular) caused a real
+    /// CI exit-127 — both names must resolve to the same tool.
+    #[test]
+    fn find_tool_matches_crate_name() {
+        assert_eq!(find_tool("espectacular").map(|t| t.name), Some("ah"));
+        assert_eq!(find_tool("whisper-vibes").map(|t| t.name), Some("turu"));
+    }
+
+    /// The docstring always claimed case-insensitivity; the implementation
+    /// was exact-match. Pin the promised behavior.
+    #[test]
+    fn find_tool_is_case_insensitive() {
+        assert_eq!(find_tool("AH").map(|t| t.name), Some("ah"));
+        assert_eq!(find_tool("Espectacular").map(|t| t.name), Some("ah"));
+        assert_eq!(find_tool("WAI").map(|t| t.name), Some("wai"));
+    }
+
+    /// 'ddl'/'dulce'/'dulce-de-leche' refer to ddl itself — agents typed
+    /// them into `ddl install` after 404ing on charly-vibes/ddl (finanzas
+    /// 9/29, REPLy 10/1). They must be recognized, not "unknown".
+    #[test]
+    fn self_names_are_recognized() {
+        for name in ["ddl", "dulce", "dulce-de-leche", "DDL", "Dulce"] {
+            assert!(is_self_name(name), "{name} should resolve to ddl itself");
+        }
+        assert!(!is_self_name("wai"));
+        assert!(!is_self_name(""));
+    }
+
+    /// The self-name error is the teachable moment: it must name the
+    /// canonical repo so agents stop guessing `charly-vibes/ddl`.
+    #[test]
+    fn resolve_tool_self_names_explain() {
+        for name in ["ddl", "dulce", "dulce-de-leche", "DULCE"] {
+            let err = resolve_tool(name).unwrap_err();
+            assert!(
+                err.contains("charly-vibes/dulce-de-leche"),
+                "error for {name} must name the canonical repo: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn resolve_tool_unknown_suggests_closest() {
+        let err = resolve_tool("waii").unwrap_err();
+        assert!(err.contains("Did you mean"), "got: {err}");
+    }
+
+    #[test]
+    fn resolve_tool_accepts_aliases_and_case() {
+        assert_eq!(resolve_tool("espectacular").unwrap().name, "ah");
+        assert_eq!(resolve_tool("ESPECTACULAR").unwrap().name, "ah");
     }
 }

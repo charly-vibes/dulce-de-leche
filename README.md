@@ -38,6 +38,21 @@ Run `ddl version` for the full picture. Additions and removals must update this 
 (enforced by `tests/tool_registry_drift.rs`).
 <!-- MANAGED-TOOLS:END -->
 
+Canonical names and aliases — binary vs crate vs repo (agents: install by either
+spelling, but the repo is always the third column):
+
+| binary | crate | repository |
+|---|---|---|
+| `wai` | `wai-cli` | `charly-vibes/wai` |
+| `dont` | `dont-cli` | `charly-vibes/dont` |
+| `ah` | `espectacular` | `charly-vibes/espectacular` |
+| `turu` | `whisper-vibes` | `charly-vibes/whisper` |
+| `openspec` | `@fission-ai/openspec` (npm) | `fission-ai/openspec` |
+| `ddl` (this tool) | `dulce-de-leche` | `charly-vibes/dulce-de-leche` |
+
+`charly-vibes/ddl` does not exist — the repository is `charly-vibes/dulce-de-leche`.
+This table is drift-tested in `tests/tool_registry_drift.rs`.
+
 ## Installation
 
 ```bash

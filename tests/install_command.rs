@@ -58,6 +58,39 @@ fn test_install_unknown_tool_fails() {
         .stderr(predicate::str::contains("not found").or(predicate::str::contains("Unknown")));
 }
 
+/// DDL-6zn.8: help examples are GENERATED from MANAGED_TOOLS — every
+/// registered tool must appear in `ddl install --help` (no hardcoded,
+/// drifting example lists).
+#[test]
+fn test_install_help_lists_every_registry_tool() {
+    let mut cmd = Command::cargo_bin("ddl").unwrap();
+    cmd.arg("install").arg("--help");
+    cmd.timeout(CMD_TIMEOUT);
+    let output = cmd.assert().success().get_output().stdout.clone();
+    let stdout = String::from_utf8(output).unwrap();
+    for tool in dulce_de_leche::platform::MANAGED_TOOLS {
+        assert!(
+            stdout.contains(tool.name),
+            "install --help is missing registry tool `{}`",
+            tool.name
+        );
+    }
+}
+
+/// DDL-6zn.8: 'ddl'/'dulce'/'dulce-de-leche' refer to ddl itself — the
+/// error must teach the canonical repo instead of a bare "Unknown tool".
+#[test]
+fn test_install_self_name_gives_teachable_error() {
+    for name in ["ddl", "dulce", "dulce-de-leche"] {
+        let mut cmd = Command::cargo_bin("ddl").unwrap();
+        cmd.arg("install").arg(name);
+        cmd.timeout(CMD_TIMEOUT);
+        cmd.assert()
+            .failure()
+            .stderr(predicate::str::contains("charly-vibes/dulce-de-leche"));
+    }
+}
+
 #[test]
 fn test_install_unknown_tool_suggests_closest() {
     let mut cmd = Command::cargo_bin("ddl").unwrap();

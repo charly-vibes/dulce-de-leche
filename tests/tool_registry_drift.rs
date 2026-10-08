@@ -255,3 +255,38 @@ fn readme_category_blocks_match_registry() {
         "README category blocks drift from MANAGED_TOOLS"
     );
 }
+
+/// DDL-6zn.8: binary-vs-crate confusion (ah vs espectacular) caused a real
+/// CI exit-127 (cargo install espectacular@0.9.2 has no `ah` binary), and
+/// 'ddl' vs 'dulce-de-leche' 404'd `gh repo view charly-vibes/ddl` twice.
+/// Every tool whose crate name differs from its binary must appear with
+/// BOTH spellings in the alias documentation (README + book commands page).
+#[test]
+fn docs_document_binary_crate_alias_pairs() {
+    const COMMANDS: &str = include_str!("../docs/src/commands.md");
+
+    let mismatched: Vec<(&str, &str)> = MANAGED_TOOLS
+        .iter()
+        .filter(|t| !t.crate_name.is_empty() && t.crate_name != t.name)
+        .map(|t| (t.name, t.crate_name))
+        .collect();
+    assert!(
+        mismatched.contains(&("ah", "espectacular")),
+        "the ah⇄espectacular pair must exist in the registry for this test"
+    );
+
+    for (doc_name, doc_src) in [("README.md", README), ("docs/src/commands.md", COMMANDS)] {
+        for (name, crate_name) in &mismatched {
+            assert!(
+                doc_src.contains(name) && doc_src.contains(crate_name),
+                "{doc_name} must document the binary/crate alias pair {name}⇄{crate_name}"
+            );
+        }
+        // The most-confused name of all is ddl itself: the canonical repo
+        // path must be stated so agents stop guessing charly-vibes/ddl.
+        assert!(
+            doc_src.contains("charly-vibes/dulce-de-leche"),
+            "{doc_name} must state ddl's canonical repository"
+        );
+    }
+}

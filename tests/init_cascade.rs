@@ -7,6 +7,79 @@
 //! - tools not on PATH but present at the .ddl/bin destination still init
 //! - tools without an init command are skipped silently
 
+/// DDL-6zn.8: --tools accepts aliases (espectacular→ah) and fails loudly
+/// on unknown names instead of silently dropping them.
+#[test]
+fn tools_flag_accepts_crate_alias() {
+    let (mut cmd, temp) = ddl_cmd();
+    // Hermetic: stub `ah` so the resolved alias never hits the real binary
+    // (which would fail without an openspec/ dir).
+    stub_tools(&mut cmd, &temp, &[("ah", "echo 'ah stub init'")]);
+    cmd.args(["init", "--tools", "espectacular", "--no-install", "--human"]);
+    cmd.timeout(CMD_TIMEOUT);
+    cmd.assert()
+        .stdout(predicates::str::contains("Skipping installation"))
+        .stderr(predicates::str::contains("ah initialized"));
+}
+
+#[test]
+fn tools_flag_tolerates_stray_commas() {
+    let (mut cmd, temp) = ddl_cmd();
+    // Hermetic: stub both resolved tools so the cascade can't hit real
+    // binaries on the dev machine.
+    stub_tools(&mut cmd, &temp, &[("dont", "exit 0"), ("ah", "exit 0")]);
+    cmd.args([
+        "init",
+        "--tools",
+        "dont,,espectacular,",
+        "--no-install",
+        "--human",
+    ]);
+    cmd.timeout(CMD_TIMEOUT);
+    cmd.assert()
+        .success()
+        .stderr(predicates::str::contains("dont initialized"))
+        .stderr(predicates::str::contains("ah initialized"));
+}
+
+#[test]
+fn tools_flag_unknown_name_fails_loudly() {
+    let (mut cmd, _temp) = ddl_cmd();
+    cmd.args(["init", "--tools", "ddd", "--no-install", "--human"]);
+    cmd.timeout(CMD_TIMEOUT);
+    cmd.assert().failure();
+    cmd.assert()
+        .stderr(predicates::str::contains("Unknown tool 'ddd'"));
+}
+
+#[test]
+fn tools_flag_self_name_names_the_repo() {
+    let (mut cmd, _temp) = ddl_cmd();
+    cmd.args(["init", "--tools", "dulce", "--no-install", "--human"]);
+    cmd.timeout(CMD_TIMEOUT);
+    cmd.assert().failure();
+    cmd.assert()
+        .stderr(predicates::str::contains("charly-vibes/dulce-de-leche"));
+}
+
+/// DDL-6zn.8: init help examples are GENERATED from MANAGED_TOOLS —
+/// `ddl init --help` must show every registered tool as a valid --tools value.
+#[test]
+fn init_help_lists_every_registry_tool() {
+    let mut cmd = Command::cargo_bin("ddl").unwrap();
+    cmd.arg("init").arg("--help");
+    cmd.timeout(CMD_TIMEOUT);
+    let output = cmd.assert().success().get_output().stdout.clone();
+    let stdout = String::from_utf8(output).unwrap();
+    for tool in dulce_de_leche::platform::MANAGED_TOOLS {
+        assert!(
+            stdout.contains(tool.name),
+            "init --help is missing registry tool `{}`",
+            tool.name
+        );
+    }
+}
+
 use assert_cmd::Command;
 use std::path::Path;
 use std::time::Duration;
