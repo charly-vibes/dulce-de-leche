@@ -114,6 +114,30 @@ Show which `.ddl/` is active.
 ddl scope
 ```
 
+## `ddl feedback <kind>`
+
+File a feedback issue against ddl's own repository
+(`charly-vibes/dulce-de-leche`) via `gh`. The repository URL is compiled
+into the binary, so this works from any directory — no repo spelunking.
+
+> Note: the binary is `ddl`, but the crate is `dulce-de-leche`
+> (`cargo install dulce-de-leche`). Looking for `charly-vibes/ddl` on
+> GitHub returns 404 — the canonical repository is
+> `charly-vibes/dulce-de-leche`.
+
+```bash
+ddl feedback bug                  # kind: bug|feature|question|chore
+ddl feedback bug --dry-run        # print issue body + gh command, don't submit
+ddl feedback bug --from-last-error  # prefill body from the last failed ddl command
+echo "what happened" | ddl feedback bug  # pipe body content via stdin
+ddl feedback bug --title "custom title"  # override the derived title
+```
+
+The issue body is pre-filled with environment context automatically: ddl
+version, OS/arch, shell, `gh` version, current git remote/branch/dirty
+state, repo tooling state, and a repro hash. Without network access, the
+body is saved to a local file so nothing is lost.
+
 ## Global flags
 
 | Flag | Description |
