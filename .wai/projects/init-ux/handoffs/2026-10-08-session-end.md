@@ -37,7 +37,6 @@ phase: implement
 ```
 ○ DDL-6zn P1 [epic] Init UX rough edges: ddl init must reach the end state users actually ask for
 ├── ○ DDL-6zn.5 P1 Repo-aware doctor: answer 'is THIS repo fully ddl-initialized/conformant?' (plus fix pass/warn inversion per gh#46)
-├── ○ DDL-6zn.4 P2 [bug] Envelope schema drift: doctor/status/init JSON shapes changed 0.3→0.5 and don't parse — agents write throwaway parsers every session
 ├── ○ DDL-6zn.6 P2 ddl feedback subcommand that knows its own repo URL — kills the repo-discovery treasure hunt
 ├── ○ DDL-6zn.7 P2 [bug] ddl migrate phase-1 symlinks break git-tracked config dirs; --undo leaves residue; no 'unify configs' feature exists
 └── ○ DDL-6zn.8 P3 Canonical names/aliases: stale install help examples, ah↔espectacular mapping, ddl↔dulce-de-leche
@@ -49,7 +48,7 @@ phase: implement
 ○ DDL-hsn P3 Add networked-mock integration test for checksum mismatch abort
 
 --------------------------------------------------------------------------------
-Total: 12 issues (12 open, 0 in progress)
+Total: 11 issues (11 open, 0 in progress)
 
 Status: ○ open  ◐ in_progress  ● blocked  ✓ closed  ❄ deferred
 Priority: P0–P4 (label only; not a status icon)
