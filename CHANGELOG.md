@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-08
+
+### Added
+
+- **`ddl init --gates`** — wires lefthook pre-commit/pre-push managed blocks
+  (`ah check`, `pretender check --mode gate`, `spk lint openspec`), `.gitignore`
+  entries, and beads no-db mode; idempotent and self-repairing against the
+  espectacular managed-block mangle class ([DDL-6zn.2])
+- **Versioned structured envelope contract for `doctor`/`status`/`init` JSON**
+  — `data = {summary, diagnostics: [{tool, check, level, detail, fix?}]}`;
+  summary is recomputed from the items so counts can never contradict them,
+  `fix` is omitted-never-null, and informational detail moved out of doctor
+  into `ddl status` (envelope_version 0.1, pinned by CI contract tests)
+  ([DDL-6zn.4])
+- **Repo-aware doctor** — four machine-checkable repo-scope checks
+  (`ddl.repo.gates`, `ddl.repo.blocks`, `ddl.repo.gitignore`, `ddl.repo.pins`)
+  defining "this repo is ddl-initialized/conformant"; checks register only
+  inside a git repo so their presence is the signal ([DDL-6zn.5])
+- **Generated help examples + canonical tool alias resolution** —
+  install/init help examples are generated from the registry (no more stale
+  hand-written lists); one shared resolution entry point accepts canonical
+  names and aliases uniformly across `init` and `install`, with guidance when
+  ddl self-references are passed as tools ([DDL-6zn.8])
+
+### Fixed
+
+- **Init cascade failures are hard failures** — a failed tool-init step no
+  longer exits 0; the run fails with a resume summary naming the exact
+  finish command and selective re-run (`ddl init --tools <failed>`), with
+  prerequisite ordering (openspec before ah) and idempotent-until-green
+  semantics ([DDL-6zn.3])
+- **`ddl migrate` git-tracked safety** — phase-1 symlink migration no longer
+  corrupts git-tracked config dirs (tracked files no longer show as deleted);
+  `--undo` is non-destructive and clears stuck `migration_state: "phase1"`
+  residue ([DDL-6zn.7])
+
+### Documentation
+
+- Book documents the `ddl feedback` subcommand ([DDL-6zn.6])
+
 ## [0.7.0] - 2026-09-29
 
 ### Added
@@ -221,3 +261,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [DDL-x0m]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-x0m
 [DDL-zw4]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-zw4
 [DDL-gap]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-gap
+[DDL-6zn.2]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-6zn.2
+[DDL-6zn.3]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-6zn.3
+[DDL-6zn.4]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-6zn.4
+[DDL-6zn.5]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-6zn.5
+[DDL-6zn.6]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-6zn.6
+[DDL-6zn.7]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-6zn.7
+[DDL-6zn.8]: https://github.com/charly-vibes/dulce-de-leche/issues/DDL-6zn.8

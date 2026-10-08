@@ -178,7 +178,7 @@ fn test_init_yes_creates_manifest() {
     assert!(manifest_path.exists(), "manifest.json should exist");
     let content = std::fs::read_to_string(manifest_path).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
-    assert_eq!(parsed["ddl_version"], "0.7.0");
+    assert_eq!(parsed["ddl_version"], "0.8.0");
 }
 
 // ===================== Selective install tests =====================
