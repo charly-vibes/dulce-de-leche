@@ -91,7 +91,7 @@ fn cmd_init(
 
     // In JSON mode, collect all output data and emit a single envelope
     // on drop (handles all return paths including early returns).
-    let _json_guard = if args.is_json() {
+    let mut json_guard = if args.is_json() {
         Some(output::JsonCollectorGuard::start(
             dulce_de_leche::VERSION,
             genesis::envelope::EnvelopeKind::List,
@@ -274,6 +274,11 @@ fn cmd_init(
 
         // Return error if all tools failed
         if fail_count > 0 && success_count == 0 {
+            // DDL-6zn.4: on error, discard the collected ok:true list — the
+            // error envelope must be the only envelope on stdout.
+            if let Some(g) = json_guard.take() {
+                g.abort();
+            }
             return Err(DdlError::InstallFailed(format!(
                 "All {fail_count} tool(s) failed to install"
             )));
@@ -281,6 +286,9 @@ fn cmd_init(
 
         // Return PartialFailure if some tools failed
         if fail_count > 0 {
+            if let Some(g) = json_guard.take() {
+                g.abort();
+            }
             return Err(DdlError::PartialFailure);
         }
     }
@@ -342,6 +350,10 @@ fn cmd_init(
             for line in dulce_de_leche::installer::resume_summary(&init_failures) {
                 eprintln!("{line}");
             }
+        }
+        // DDL-6zn.4: error envelope must be the only envelope on stdout.
+        if let Some(g) = json_guard.take() {
+            g.abort();
         }
         return Err(DdlError::PartialFailure);
     }
@@ -708,8 +720,8 @@ fn cmd_doctor(fix: bool, args: &dulce_de_leche::cli::Args) -> Result<()> {
     let ddl_dir = DdlDir::find();
 
     if args.is_json() {
-        let messages = diagnostics::run_full_diagnostic(ddl_dir.as_ref(), fix)?;
-        let data = serde_json::json!({ "diagnostics": messages });
+        let report = diagnostics::run_full_report(ddl_dir.as_ref(), fix)?;
+        let data = serde_json::json!(report);
         let json_str = output::json_output(
             dulce_de_leche::VERSION,
             true,
