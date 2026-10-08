@@ -14,7 +14,7 @@
 //! The `Completions` subcommand ignores the format flags — completions are
 //! always plain shell script text.
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use genesis::guide::{CliFormat, CliVerbosity};
 
 /// dulce-de-leche (ddl) — orchestrate the charly-vibes tool ecosystem.
@@ -60,8 +60,8 @@ pub enum Commands {
 
     /// Install a single tool by name
     Install {
-        /// Name of the tool to install (e.g., wai, dont, ah, pretender,
-        /// testaruda, bd, openspec, incitaciones, turu)
+        /// Name of the tool to install (all managed tools are listed below;
+        /// crate-name aliases like 'espectacular' also resolve)
         tool: String,
     },
 
@@ -129,9 +129,40 @@ pub enum Commands {
 }
 
 impl Args {
+    /// Comma-separated canonical tool names from MANAGED_TOOLS — the single
+    /// source of truth for help examples (DDL-6zn.8). Hardcoded example
+    /// lists drifted twice (fotos-mcp/fabbro stale, vampiro/specodelic
+    /// missing); generated lines cannot drift.
+    pub fn managed_tools_line() -> String {
+        let names: Vec<&str> = crate::platform::MANAGED_TOOLS
+            .iter()
+            .map(|t| t.name)
+            .collect();
+        names.join(", ")
+    }
+
     /// Parse CLI args and return the parsed structure.
+    ///
+    /// Builds the command so the install/init help text is GENERATED from
+    /// MANAGED_TOOLS instead of hand-maintained doc comments.
     pub fn parse_or_exit() -> Self {
-        Self::parse()
+        let mut cmd = Args::command();
+        let tools_line = Self::managed_tools_line();
+        cmd = cmd.mut_subcommand("install", |c| {
+            c.after_help(format!(
+                "Managed tools: {tools_line}\n\
+                 Crate-name aliases resolve to their tool (e.g. \
+                 'espectacular' → ah). Run `ddl catalog` for descriptions \
+                 and install methods."
+            ))
+        });
+        cmd = cmd.mut_subcommand("init", |c| {
+            c.after_help(format!(
+                "--tools accepts a comma-separated subset (default: all): {tools_line}"
+            ))
+        });
+        let matches = cmd.get_matches();
+        Args::from_arg_matches(&matches).unwrap_or_else(|e| e.exit())
     }
 
     /// Convenience: is JSON output requested or auto-detected?

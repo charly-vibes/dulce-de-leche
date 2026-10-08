@@ -118,8 +118,14 @@ fn cmd_init(
 
     // Determine which tools to install
     let selected_tools: Vec<String> = if let Some(ref tools_str) = tools {
-        // Explicit list from --tools flag
-        tools_str.split(',').map(|s| s.trim().to_string()).collect()
+        // Explicit list from --tools flag (empty entries from stray commas
+        // are dropped, not resolved as tool names)
+        tools_str
+            .split(',')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .collect()
     } else if args.yes || args.is_json() {
         // Non-interactive: install all tools
         // Already initialized: retry failed tools, skip existing
@@ -183,6 +189,21 @@ fn cmd_init(
             selected.into_iter().map(|s| s.to_string()).collect()
         }
     };
+
+    // DDL-6zn.8: every --tools name must resolve — a typo (or a self-name
+    // like 'dulce') must fail loudly instead of vanishing silently from the
+    // install list.
+    if tools.is_some() {
+        let mut errors = Vec::new();
+        for name in &selected_tools {
+            if let Err(msg) = dulce_de_leche::platform::resolve_tool(name) {
+                errors.push(msg);
+            }
+        }
+        if !errors.is_empty() {
+            return Err(DdlError::ToolNotFound(errors.join("; ")));
+        }
+    }
 
     let mut init_candidates: Vec<String> = Vec::new();
 
@@ -544,18 +565,7 @@ fn cmd_install(tool_name: &str, args: &dulce_de_leche::cli::Args) -> Result<()> 
     let platform = dulce_de_leche::platform::Platform::detect()
         .ok_or_else(|| DdlError::UnsupportedPlatform("Could not detect platform".to_string()))?;
 
-    let tool = dulce_de_leche::platform::find_tool(tool_name).ok_or_else(|| {
-        let names: Vec<&str> = dulce_de_leche::platform::MANAGED_TOOLS
-            .iter()
-            .map(|t| t.name)
-            .collect();
-        let suggestion = dulce_de_leche::platform::did_you_mean(tool_name, &names);
-        DdlError::ToolNotFound(if let Some(s) = suggestion {
-            format!("Unknown tool '{tool_name}'. Did you mean '{s}'?")
-        } else {
-            format!("Unknown tool '{tool_name}'")
-        })
-    })?;
+    let tool = dulce_de_leche::platform::resolve_tool(tool_name).map_err(DdlError::ToolNotFound)?;
 
     let mut ddl_dir = DdlDir::find_or_create()?;
 
@@ -909,8 +919,9 @@ fn cmd_upgrade(tool_name: Option<&str>, args: &dulce_de_leche::cli::Args) -> Res
     let mut ddl_dir = DdlDir::find_or_create()?;
 
     if let Some(name) = tool_name {
-        let tool = dulce_de_leche::platform::find_tool(name)
-            .ok_or_else(|| DdlError::ToolNotFound(name.to_string()))?;
+        // DDL-6zn.8: shared resolver — aliases (espectacular→ah) and
+        // self-names (dulce→teachable repo error) behave like `install`.
+        let tool = dulce_de_leche::platform::resolve_tool(name).map_err(DdlError::ToolNotFound)?;
         if !args.is_json() {
             println!("Upgrading {}...", tool.name);
         }

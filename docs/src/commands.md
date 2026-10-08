@@ -58,7 +58,30 @@ ddl install bd
 ddl install openspec
 ddl install incitaciones
 ddl install turu
+ddl install specodelic
 ```
+
+`ddl install`, `ddl init --tools`, and `ddl upgrade <tool>` accept both the
+binary name and the crate name, case-insensitive.
+
+### Canonical names and aliases
+
+Binary names and crate names don't always match — and agents repeatedly
+`cargo install` the crate expecting the binary, or `gh repo view` the
+binary name expecting the repo. The mapping:
+
+| binary | crate | repository |
+|---|---|---|
+| `wai` | `wai-cli` | `charly-vibes/wai` |
+| `dont` | `dont-cli` | `charly-vibes/dont` |
+| `ah` | `espectacular` | `charly-vibes/espectacular` |
+| `turu` | `whisper-vibes` | `charly-vibes/whisper` |
+| `openspec` | `@fission-ai/openspec` (npm) | `fission-ai/openspec` |
+| `ddl` (this tool) | `dulce-de-leche` | `charly-vibes/dulce-de-leche` |
+
+So `ddl install espectacular` installs `ah`. Typing `ddl`, `dulce`, or
+`dulce-de-leche` into `ddl install` / `--tools` produces an error naming
+the canonical repository — ddl manages every tool except itself.
 
 ## `ddl status`
 
