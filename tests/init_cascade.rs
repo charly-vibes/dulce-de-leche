@@ -85,6 +85,26 @@ fn failing_tool_init_json_mode_puts_summary_on_stderr() {
     cmd.assert().failure();
     cmd.assert()
         .stderr(predicates::str::contains("finish with: dont init"));
+
+    // DDL-6zn.4: NO ok:true list envelope on stdout; the error envelope is
+    // the single JSON envelope, on stderr (the old two-envelope failure mode
+    // printed a misleading ok:true list on stdout before the error).
+    let binding = cmd.assert().failure();
+    let out = binding.get_output();
+    let stdout = String::from_utf8(out.stdout.clone()).unwrap();
+    let stdout_envelopes: Vec<&str> = stdout.lines().filter(|l| l.starts_with('{')).collect();
+    assert!(
+        stdout_envelopes.is_empty(),
+        "no envelopes on stdout: {stdout}"
+    );
+    let stderr = String::from_utf8(out.stderr.clone()).unwrap();
+    // The error envelope is pretty-printed JSON embedded in stderr text:
+    // extract from its first '{' to its last '}'.
+    let start = stderr.find('{').expect("error envelope on stderr");
+    let end = stderr.rfind('}').expect("error envelope closed");
+    let env: serde_json::Value = serde_json::from_str(&stderr[start..=end]).unwrap();
+    assert_eq!(env["ok"], serde_json::json!(false));
+    assert_eq!(env["envelope_version"], serde_json::json!("0.1"));
 }
 
 #[test]

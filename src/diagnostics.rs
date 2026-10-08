@@ -79,10 +79,10 @@ impl DoctorCheck for PlatformCheck {
         _repo_root: &Path,
     ) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
         match crate::platform::Platform::detect() {
-            Some(p) => Ok(vec![LintResult::new(
-                format!("Platform: {} ({})", p.os, p.arch),
-                Severity::Advisory,
-            )]),
+            // DDL-6zn.4: informational lines are not issues — empty results
+            // yield a genesis pass entry. Advisory→Warn mapping would
+            // otherwise poison the summary (pass: 0 warn: 37).
+            Some(_) => Ok(vec![]),
             None => Ok(vec![LintResult::new(
                 "Could not detect platform",
                 Severity::Error,
@@ -107,10 +107,17 @@ impl DoctorCheck for PrerequisitesCheck {
     ) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
         let mut results = Vec::new();
         for prereq in &["curl", "git", "cargo"] {
-            if which(prereq).is_some() {
+            if which(prereq).is_none() {
+                // DDL-6zn.4: missing prerequisites were never reported —
+                // only their presence was (as Advisory→Warn noise).
+                let severity = if *prereq == "cargo" {
+                    Severity::Warning // cargo is only the install fallback
+                } else {
+                    Severity::Error
+                };
                 results.push(LintResult::new(
-                    format!("{prereq} found on PATH"),
-                    Severity::Advisory,
+                    format!("{prereq} not found on PATH"),
+                    severity,
                 ));
             }
         }
@@ -143,39 +150,19 @@ impl DoctorCheck for DdlDirCheck {
         let mut results = Vec::new();
         match &self.ddl_dir {
             Some(d) => {
-                results.push(LintResult::new(
-                    format!(".ddl/ at {}", d.path.display()),
-                    Severity::Advisory,
-                ));
-                if d.manifest_path().exists() {
-                    let tool_count = d.manifest.tools.len();
-                    let installed_count = d
-                        .manifest
-                        .tools
-                        .values()
-                        .filter(|e| e.status == "installed")
-                        .count();
-                    results.push(LintResult::new(
-                        format!(
-                            "manifest.json: {tool_count} tools tracked, {installed_count} installed"
-                        ),
-                        Severity::Advisory,
-                    ));
-                } else {
+                // DDL-6zn.4: presence lines are informational, not warnings —
+                // only actual problems produce results.
+                if !d.manifest_path().exists() {
                     results.push(LintResult::new("manifest.json not found", Severity::Error));
                 }
-                if d.config_path().exists() {
-                    results.push(LintResult::new("config.toml found", Severity::Advisory));
-                } else {
+                if !d.config_path().exists() {
                     results.push(LintResult::new(
                         "config.toml not found (created on next init)",
                         Severity::Warning,
                     ));
                 }
                 let broken = d.detect_broken_symlinks();
-                if broken.is_empty() {
-                    results.push(LintResult::new("no broken symlinks", Severity::Advisory));
-                } else {
+                if !broken.is_empty() {
                     for symlink in &broken {
                         results.push(LintResult::with_fix(
                             format!("broken symlink: {}", symlink.display()),
@@ -232,21 +219,21 @@ impl DoctorCheck for ToolCheck {
             return Ok(results);
         }
 
-        let version = get_tool_version(self.tool).unwrap_or_else(|| "?".to_string());
-        results.push(LintResult::new(format!("v{version}"), Severity::Advisory));
-
-        // Config check
-        if let Some(d) = &self.ddl_dir {
-            let config_ok = d.manifest.is_installed(self.tool.name);
-            if !config_ok {
-                results.push(LintResult::new(
-                    format!("{} not tracked in manifest", self.tool.name),
-                    Severity::Warning,
-                ));
-            }
+        // Config check — untracked tools are a real warning
+        if let Some(d) = &self.ddl_dir
+            && !d.manifest.is_installed(self.tool.name)
+        {
+            results.push(LintResult::new(
+                format!("{} not tracked in manifest", self.tool.name),
+                Severity::Warning,
+            ));
         }
 
-        // Run doctor/diagnostic subcommand
+        // Run doctor/diagnostic subcommand. DDL-6zn.4: version lines are NOT
+        // emitted as Advisory LintResults — genesis maps Advisory→Warn, which
+        // is why doctor used to report `pass: 0 warn: 37` while status said
+        // "10 healthy". Only real issues produce results; nested tool-doctor
+        // outcomes are classified structurally (never raw envelope text).
         for cmd in &["doctor", "diagnostic", "check"] {
             let output = Command::new(self.tool.name).args([cmd, "--json"]).output();
             if let Ok(out) = output
@@ -254,10 +241,9 @@ impl DoctorCheck for ToolCheck {
             {
                 let stdout = String::from_utf8_lossy(&out.stdout);
                 let first_line = stdout.lines().next().unwrap_or("");
-                results.push(LintResult::new(
-                    format!("doctor: {first_line}"),
-                    Severity::Advisory,
-                ));
+                let (severity, detail) =
+                    crate::diagnostics::classify_nested_doctor(first_line, out.status.success());
+                results.push(LintResult::new(detail, severity));
                 return Ok(results);
             }
         }
@@ -420,11 +406,9 @@ impl DoctorCheck for IncitacionesSkillsCheck {
         _repo_root: &Path,
     ) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
         let status = crate::skills::skill_status();
-        if let Some(ver) = status.global_version {
-            Ok(vec![LintResult::new(
-                format!("incitaciones skills installed globally (npm:{ver})"),
-                Severity::Advisory,
-            )])
+        if status.global_version.is_some() {
+            // DDL-6zn.4: installed-globally is a pass, not an Advisory→Warn.
+            Ok(vec![])
         } else if let Some(ver) = status.local_version {
             Ok(vec![LintResult::new(
                 format!(
@@ -497,4 +481,257 @@ pub fn run_full_diagnostic(ddl_dir: Option<&DdlDir>, fix: bool) -> Result<Vec<St
     }
 
     Ok(messages)
+}
+
+// ── DDL-6zn.4: versioned structured diagnostics contract ────────────────
+
+#[cfg(test)]
+mod contract_tests {
+    use super::*;
+    use genesis::doctor::{CheckEntry, DoctorReport};
+
+    #[test]
+    fn classify_nested_doctor_is_structured_never_raw() {
+        use genesis::suite_linter::Severity;
+        // nested failure → Error, no raw envelope text
+        let (sev, detail) = classify_nested_doctor(r#"{"ok":false}"#, false);
+        assert_eq!(sev, Severity::Error);
+        assert_eq!(detail, "doctor: failed");
+        // nested warnings roll up as Warning with a count, not the envelope
+        let (sev, detail) = classify_nested_doctor(
+            r#"{"ok":true,"warnings":[{"message":"a"},{"message":"b"}]}"#,
+            true,
+        );
+        assert_eq!(sev, Severity::Warning);
+        assert_eq!(detail, "doctor: ok (2 warnings)");
+        assert!(!detail.contains("warnings\":["));
+        // clean nested run → advisory (pass)
+        let (sev, detail) = classify_nested_doctor(r#"{"ok":true}"#, true);
+        assert_eq!(sev, Severity::Advisory);
+        assert_eq!(detail, "doctor: ok");
+        // legacy non-JSON first line → advisory, detail stays compact
+        let (sev, detail) = classify_nested_doctor("initialized: 3 specs", true);
+        assert_eq!(sev, Severity::Advisory);
+        assert_eq!(detail, "doctor: ran");
+    }
+
+    #[test]
+    fn report_to_diagnostics_maps_items_and_rolls_up_summary() {
+        let report = DoctorReport::new(
+            "ddl",
+            vec![
+                CheckEntry::pass("platform", "d", "ok"),
+                {
+                    let mut e = CheckEntry::fail("wai", "d", "wai not installed", None);
+                    e.fix = Some("ddl install wai".to_string());
+                    e
+                },
+                CheckEntry::warn("bd", "d", "doctor: ok (1 warning)"),
+                CheckEntry::pass("wai", "d", "no issues found"),
+            ],
+        );
+        let dr = report_to_diagnostics(&report);
+        // tool attribution: managed-tool check names → that tool, else ddl
+        assert_eq!(dr.diagnostics[0].tool, "ddl");
+        assert_eq!(dr.diagnostics[1].tool, "wai");
+        assert_eq!(dr.diagnostics[2].tool, "bd");
+        // fix surfaces as the optional field
+        assert_eq!(dr.diagnostics[1].fix.as_deref(), Some("ddl install wai"));
+        assert!(dr.diagnostics[0].fix.is_none());
+        // summary is a roll-up of the items — single source
+        assert_eq!(dr.summary.pass, 2);
+        assert_eq!(dr.summary.warn, 1);
+        assert_eq!(dr.summary.fail, 1);
+        // levels are the lowercase strings of the contract
+        assert_eq!(dr.diagnostics[1].level, "fail");
+        assert_eq!(dr.diagnostics[2].level, "warn");
+        assert_eq!(dr.diagnostics[0].level, "pass");
+    }
+}
+
+/// One structured diagnostic item (DDL-6zn.4 contract).
+///
+/// JSON shape (pinned by tests/envelope_contract.rs):
+/// `{ "tool", "check", "level": "pass|warn|fail", "detail", "fix"? }`
+/// — `fix` is omitted, never null; no other keys; no null values.
+#[derive(Debug, Clone, serde::Serialize, PartialEq)]
+pub struct DiagnosticItem {
+    /// Owning tool — `"ddl"` for ddl's own checks.
+    pub tool: String,
+    /// Check identifier (genesis check name).
+    pub check: String,
+    /// Severity level: `"pass"`, `"warn"`, or `"fail"`.
+    pub level: String,
+    /// Human-readable detail — structured, never a raw nested envelope.
+    pub detail: String,
+    /// Exact fix command when one exists.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fix: Option<String>,
+}
+
+/// Roll-up of every item's level — the single source for summary counts.
+#[derive(Debug, Clone, serde::Serialize, PartialEq)]
+pub struct DiagnosticSummary {
+    pub pass: usize,
+    pub warn: usize,
+    pub fail: usize,
+}
+
+/// The `ddl doctor --json` data payload.
+#[derive(Debug, Clone, serde::Serialize, PartialEq)]
+pub struct DiagnosticReport {
+    pub summary: DiagnosticSummary,
+    pub diagnostics: Vec<DiagnosticItem>,
+}
+
+/// Map a genesis doctor report onto the structured diagnostics contract.
+///
+/// Check names that match a managed tool are attributed to that tool;
+/// everything else belongs to `"ddl"`. The summary is recomputed from the
+/// items so counts can never contradict the item list.
+pub fn report_to_diagnostics(report: &genesis::doctor::DoctorReport) -> DiagnosticReport {
+    let tool_names: Vec<&str> = crate::platform::MANAGED_TOOLS
+        .iter()
+        .map(|t| t.name)
+        .collect();
+    let mut summary = DiagnosticSummary {
+        pass: 0,
+        warn: 0,
+        fail: 0,
+    };
+    let mut diagnostics = Vec::new();
+    for check in &report.checks {
+        let level = match check.status {
+            genesis::doctor::CheckStatus::Pass => "pass",
+            genesis::doctor::CheckStatus::Warn => "warn",
+            genesis::doctor::CheckStatus::Fail => "fail",
+        };
+        match level {
+            "pass" => summary.pass += 1,
+            "warn" => summary.warn += 1,
+            _ => summary.fail += 1,
+        }
+        let tool = if tool_names.contains(&check.name.as_str()) {
+            check.name.clone()
+        } else {
+            "ddl".to_string()
+        };
+        diagnostics.push(DiagnosticItem {
+            tool,
+            check: check.name.clone(),
+            level: level.to_string(),
+            detail: check.message.clone(),
+            fix: check.fix.clone(),
+        });
+    }
+    DiagnosticReport {
+        summary,
+        diagnostics,
+    }
+}
+
+/// Interpret a nested tool-doctor envelope into `(severity, detail)`.
+/// Never embeds the raw envelope line — that is the mangle class that made
+/// 0.3-era doctor output unparseable (DDL-6zn.4).
+///
+/// - non-zero exit or `ok:false` → `(Error, "doctor: failed")`
+/// - `ok:true` with N warnings → `(Warning, "doctor: ok (N warnings)")`
+/// - `ok:true` clean → `(Advisory, "doctor: ok")`
+/// - non-JSON legacy output → `(Advisory, "doctor: ran")`
+pub fn classify_nested_doctor(
+    first_line: &str,
+    exit_ok: bool,
+) -> (genesis::suite_linter::Severity, String) {
+    use genesis::suite_linter::Severity;
+    let sev = if !exit_ok {
+        Severity::Error
+    } else {
+        let parsed: std::result::Result<serde_json::Value, _> = serde_json::from_str(first_line);
+        match parsed {
+            Ok(v) => {
+                if v.get("ok").and_then(|o| o.as_bool()) != Some(true) {
+                    Severity::Error
+                } else if v
+                    .get("warnings")
+                    .and_then(|w| w.as_array())
+                    .is_some_and(|a| !a.is_empty())
+                {
+                    Severity::Warning
+                } else {
+                    Severity::Advisory
+                }
+            }
+            Err(_) => Severity::Advisory,
+        }
+    };
+    let detail = match sev {
+        Severity::Error => "doctor: failed".to_string(),
+        Severity::Warning => {
+            let warnings = serde_json::from_str::<serde_json::Value>(first_line)
+                .ok()
+                .and_then(|v| {
+                    v.get("warnings")
+                        .and_then(|w| w.as_array())
+                        .map(|a| a.len())
+                })
+                .unwrap_or(0);
+            format!("doctor: ok ({warnings} warnings)")
+        }
+        Severity::Advisory => {
+            if serde_json::from_str::<serde_json::Value>(first_line).is_ok() {
+                "doctor: ok".to_string()
+            } else {
+                "doctor: ran".to_string()
+            }
+        }
+    };
+    (sev, detail)
+}
+
+/// Build the structured `ddl doctor` report (JSON path, DDL-6zn.4).
+///
+/// Same checks as [`run_full_diagnostic`], but machine-shaped: items plus a
+/// roll-up summary computed from those items.
+pub fn run_full_report(ddl_dir: Option<&DdlDir>, fix: bool) -> Result<DiagnosticReport> {
+    let mut runner = DoctorRunner::new(vec![
+        Box::new(PlatformCheck),
+        Box::new(PrerequisitesCheck),
+        Box::new(DdlDirCheck::new(ddl_dir.cloned())),
+    ]);
+    for tool in crate::platform::MANAGED_TOOLS {
+        runner.register(Box::new(ToolCheck::new(tool, ddl_dir.cloned())));
+    }
+    runner.register(Box::new(IncitacionesSkillsCheck));
+    let report = runner
+        .run(Path::new("."), fix)
+        .map_err(|e| crate::error::DdlError::Other(e.to_string()))?;
+    let mut mapped = report_to_diagnostics(&report);
+
+    // Apply DdlDir fixes when requested (create missing manifest, remove
+    // broken symlinks) — same as the human path — and surface the fix
+    // messages as structured `ddl/fixes` items so JSON consumers see them.
+    if fix && let Some(d) = ddl_dir {
+        let fix_messages = d.doctor(true)?;
+        for msg in fix_messages {
+            let level = if msg.starts_with("✗") {
+                "fail"
+            } else {
+                "pass"
+            };
+            if level == "fail" {
+                mapped.summary.fail += 1;
+            } else {
+                mapped.summary.pass += 1;
+            }
+            mapped.diagnostics.push(DiagnosticItem {
+                tool: "ddl".to_string(),
+                check: "fixes".to_string(),
+                level: level.to_string(),
+                detail: msg.trim().to_string(),
+                fix: None,
+            });
+        }
+    }
+
+    Ok(mapped)
 }

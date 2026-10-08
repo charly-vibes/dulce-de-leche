@@ -46,6 +46,18 @@ impl JsonCollectorGuard {
     }
 }
 
+impl JsonCollectorGuard {
+    /// Discard the collected events WITHOUT printing an envelope
+    /// (DDL-6zn.4): use before returning an error in JSON mode, so the
+    /// error envelope is the only envelope on stdout instead of the
+    /// misleading `ok: true` list followed by a second error envelope.
+    pub fn abort(self) {
+        // Collector consumed here; the subsequent Drop finds it empty and
+        // prints nothing.
+        let _ = finish_json_collection();
+    }
+}
+
 impl Drop for JsonCollectorGuard {
     fn drop(&mut self) {
         if let Some(results) = finish_json_collection() {
