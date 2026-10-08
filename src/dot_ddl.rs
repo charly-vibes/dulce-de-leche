@@ -329,6 +329,19 @@ impl DdlDir {
         )
     }
 
+    /// Record that a tool's init cascade ran successfully (DDL-6zn.3).
+    ///
+    /// Idempotent-until-green: re-runs of `ddl init` skip tools listed here
+    /// instead of failing on tools that refuse re-init (e.g. `dont init`
+    /// errors when project state already exists).
+    pub fn record_inited(&mut self, name: &str) -> Result<()> {
+        if !self.manifest.is_inited(name) {
+            self.manifest.inited.push(name.to_string());
+            self.save_manifest()?;
+        }
+        Ok(())
+    }
+
     /// Record a tool as failed.
     pub fn record_failed(&mut self, name: &str, source: &str) -> Result<()> {
         self.record_tool(

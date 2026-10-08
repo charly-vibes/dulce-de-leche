@@ -331,9 +331,10 @@ pub fn apply_gates_wiring(repo_root: &std::path::Path) -> Result<WiringReport> {
     })
 }
 
-/// Canonical init order for gates mode: openspec before ah (ah init exits 1
-/// without openspec/), everything else stable.
-pub fn gates_init_order<'a>(tools: &[&'a str]) -> Vec<&'a str> {
+/// Canonical tool-init order (always applied): openspec before ah (ah init
+/// exits 1 without openspec/ — the bajan 9/28 cascade failure), everything
+/// else stable.
+pub fn tool_init_order<'a>(tools: &[&'a str]) -> Vec<&'a str> {
     let has_openspec = tools.contains(&"openspec");
     let has_ah = tools.contains(&"ah");
     if !has_openspec || !has_ah {
@@ -496,15 +497,12 @@ pre-commit:
 
     #[test]
     fn openspec_inits_before_ah() {
+        assert_eq!(tool_init_order(&["ah", "openspec"]), vec!["openspec", "ah"]);
+        assert_eq!(tool_init_order(&["ah"]), vec!["ah"]);
         assert_eq!(
-            gates_init_order(&["ah", "openspec"]),
-            vec!["openspec", "ah"]
-        );
-        assert_eq!(gates_init_order(&["ah"]), vec!["ah"]);
-        assert_eq!(
-            gates_init_order(&["bd", "ah", "openspec", "wai"]),
+            tool_init_order(&["bd", "ah", "openspec", "wai"]),
             vec!["bd", "openspec", "ah", "wai"]
         );
-        assert!(gates_init_order(&[]).is_empty());
+        assert!(tool_init_order(&[]).is_empty());
     }
 }

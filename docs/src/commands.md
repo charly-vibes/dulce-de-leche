@@ -28,6 +28,21 @@ ddl init --yes --gates
 # Full bootstrap with gates wiring — the one-shot setup
 ```
 
+### Init cascade semantics
+
+Tool inits run in a prerequisite order (openspec before ah), with the
+`.ddl/bin` directory on the PATH so freshly downloaded binaries can be
+initialized, and tools without an init command are skipped silently.
+
+- A failing tool init **fails the run** with a resume summary listing the
+  exact command to finish manually (e.g. `dont init`) or the selective
+  re-run (`ddl init --tools dont`). No more exit-0 half-configured repos.
+- Successful inits are recorded in `.ddl/manifest.json`; re-runs skip them
+  (idempotent-until-green) instead of failing on tools that refuse
+  re-initialization.
+- Non-interactive mode (`--yes`/`--json`) passes prompt-free flags to tools
+  with wizards (e.g. `pretender init --non-interactive`).
+
 ## `ddl install <tool>`
 
 Install a single tool by name.
