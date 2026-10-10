@@ -7,6 +7,7 @@
 //! - `ddl init --yes` when all tools fail — clear error
 //! - `ddl init --help` displays correct flags
 
+mod common;
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::path::Path;
@@ -41,6 +42,7 @@ fn stub_incytestes_on_path(cmd: &mut Command, temp: &tempfile::TempDir) {
 fn ddl_cmd() -> (Command, tempfile::TempDir) {
     let temp = tempfile::tempdir().unwrap();
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.current_dir(temp.path());
     stub_incytestes_on_path(&mut cmd, &temp);
     (cmd, temp)
@@ -74,6 +76,7 @@ fn create_failed_manifest(ddl_dir: &Path) {
 #[test]
 fn test_init_help_has_yes_flag() {
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.arg("init").arg("--help");
     cmd.assert()
         .success()
@@ -84,6 +87,7 @@ fn test_init_help_has_yes_flag() {
 #[test]
 fn test_init_help_has_no_install_flag() {
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.arg("init").arg("--help");
     cmd.assert()
         .success()

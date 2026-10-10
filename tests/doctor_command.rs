@@ -2,6 +2,7 @@
 //!
 //! Covers DDL-9ge: `doctor --fix` silently does nothing.
 //! Covers DDL-1n7: `doctor` without `--fix` lists diagnostics.
+mod common;
 
 use assert_cmd::Command;
 use predicates::prelude::*;
@@ -27,6 +28,7 @@ fn ddl_cmd() -> (Command, tempfile::TempDir) {
     )
     .unwrap();
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.current_dir(temp.path());
     cmd.timeout(CMD_TIMEOUT);
     (cmd, temp)
@@ -40,6 +42,7 @@ fn test_doctor_fix_creates_missing_manifest() {
 
     // Run ddl doctor --fix
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.current_dir(temp.path());
     cmd.arg("doctor").arg("--fix");
     cmd.timeout(CMD_TIMEOUT);
@@ -60,6 +63,7 @@ fn test_doctor_without_fix_does_not_create_manifest() {
 
     // Run ddl doctor (without --fix)
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.current_dir(temp.path());
     cmd.arg("doctor");
     cmd.timeout(CMD_TIMEOUT);
@@ -99,6 +103,7 @@ fn test_doctor_fix_removes_broken_symlink() {
 
     // Run ddl doctor --fix
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.current_dir(temp.path());
     cmd.arg("doctor").arg("--fix");
     cmd.timeout(CMD_TIMEOUT);
@@ -119,6 +124,7 @@ fn test_doctor_fix_reports_fix_messages() {
 
     // Run ddl doctor --fix
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.current_dir(temp.path());
     cmd.arg("doctor").arg("--fix");
     cmd.timeout(CMD_TIMEOUT);
@@ -164,6 +170,7 @@ fn test_doctor_works_without_ddl_dir() {
     // Running doctor in a dir with no .ddl/ should succeed and report it.
     let temp = tempfile::tempdir().unwrap();
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.current_dir(temp.path());
     cmd.arg("doctor").arg("--human");
     cmd.timeout(CMD_TIMEOUT);
@@ -251,6 +258,8 @@ fn test_doctor_repo_checks_found_from_subdirectory() {
     std::fs::create_dir_all(temp.path().join("src/deep/nested")).unwrap();
 
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+
+    common::clean_git_env(&mut cmd);
     cmd.current_dir(temp.path().join("src/deep/nested"));
     cmd.timeout(CMD_TIMEOUT);
     cmd.args(["doctor", "--json"]);
@@ -287,6 +296,8 @@ fn test_doctor_repo_checks_pass_in_fully_wired_repo() {
     .unwrap();
 
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+
+    common::clean_git_env(&mut cmd);
     cmd.current_dir(temp.path());
     cmd.timeout(CMD_TIMEOUT);
     cmd.args(["doctor", "--json"]);
@@ -325,6 +336,8 @@ fn test_doctor_repo_checks_warn_in_unwired_git_repo() {
     git_init(temp.path());
 
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+
+    common::clean_git_env(&mut cmd);
     cmd.current_dir(temp.path());
     cmd.timeout(CMD_TIMEOUT);
     cmd.args(["doctor", "--json"]);

@@ -3,6 +3,7 @@
 //! Wires `ddl feedback <kind>` through `genesis::feedback::handle_feedback`,
 //! with error-scratch recording so `--from-last-error` works.
 
+mod common;
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::time::Duration;
@@ -12,6 +13,7 @@ const CMD_TIMEOUT: Duration = Duration::from_secs(10);
 #[test]
 fn test_feedback_help_shows_kinds() {
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.arg("feedback").arg("--help");
     cmd.timeout(CMD_TIMEOUT);
     cmd.assert()
@@ -24,6 +26,7 @@ fn test_feedback_help_shows_kinds() {
 fn test_feedback_invalid_kind_fails() {
     let temp = tempfile::tempdir().unwrap();
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.current_dir(temp.path());
     cmd.arg("feedback")
         .arg("bugz")
@@ -39,6 +42,7 @@ fn test_feedback_invalid_kind_fails() {
 fn test_feedback_no_content_fails() {
     let temp = tempfile::tempdir().unwrap();
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.current_dir(temp.path());
     cmd.arg("feedback")
         .arg("bug")
@@ -54,6 +58,7 @@ fn test_feedback_no_content_fails() {
 fn test_feedback_dry_run_from_stdin() {
     let temp = tempfile::tempdir().unwrap();
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.current_dir(temp.path());
     cmd.arg("feedback")
         .arg("bug")
@@ -73,6 +78,7 @@ fn test_feedback_dry_run_from_stdin() {
 fn test_feedback_dry_run_multi_line_promotes_title() {
     let temp = tempfile::tempdir().unwrap();
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.current_dir(temp.path());
     cmd.arg("feedback")
         .arg("feature")
@@ -98,6 +104,8 @@ fn test_feedback_from_last_error_after_failing_command() {
     fail.assert().failure();
 
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+
+    common::clean_git_env(&mut cmd);
     cmd.env("HOME", temp.path());
     cmd.env("XDG_CACHE_HOME", temp.path().join(".cache"));
     cmd.current_dir(temp.path());

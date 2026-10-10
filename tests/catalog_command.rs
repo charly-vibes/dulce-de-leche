@@ -3,6 +3,7 @@
 //! The catalog answers "what tools exist, what does each do, how to invoke"
 //! from the ONE registry (MANAGED_TOOLS) — no second source of truth.
 
+mod common;
 use assert_cmd::Command;
 use dulce_de_leche::platform::MANAGED_TOOLS;
 use predicates::prelude::*;
@@ -14,6 +15,7 @@ const CMD_TIMEOUT: Duration = Duration::from_secs(10);
 #[test]
 fn test_catalog_help_shows_description() {
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.arg("catalog").arg("--help");
     cmd.timeout(CMD_TIMEOUT);
     cmd.assert()
@@ -24,6 +26,7 @@ fn test_catalog_help_shows_description() {
 #[test]
 fn test_catalog_human_lists_every_registry_tool() {
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.arg("catalog").arg("--human");
     cmd.timeout(CMD_TIMEOUT);
     let output = cmd.assert().success().get_output().stdout.clone();
@@ -46,6 +49,7 @@ fn test_catalog_human_lists_every_registry_tool() {
 fn test_catalog_json_envelope() {
     let temp = tempfile::tempdir().unwrap();
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.current_dir(temp.path());
     cmd.arg("catalog").arg("--json");
     cmd.timeout(CMD_TIMEOUT);

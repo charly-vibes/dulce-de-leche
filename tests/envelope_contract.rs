@@ -9,6 +9,7 @@
 //!   with the item levels
 //! - no null values anywhere inside `data`
 
+mod common;
 use assert_cmd::Command;
 use serde_json::Value;
 use std::time::Duration;
@@ -18,6 +19,7 @@ const CMD_TIMEOUT: Duration = Duration::from_secs(20);
 fn ddl_json(args: &[&str]) -> Value {
     let temp = tempfile::tempdir().unwrap();
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.current_dir(temp.path());
     cmd.args(args).timeout(CMD_TIMEOUT);
     let out = cmd.assert().success().get_output().stdout.clone();

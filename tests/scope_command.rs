@@ -2,6 +2,7 @@
 //!
 //! The scope command shows the active .ddl/ directory by walking up from CWD.
 
+mod common;
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::time::Duration;
@@ -25,6 +26,7 @@ fn ddl_cmd() -> (Command, tempfile::TempDir) {
     )
     .unwrap();
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.current_dir(temp.path());
     cmd.timeout(CMD_TIMEOUT);
     (cmd, temp)
@@ -33,6 +35,7 @@ fn ddl_cmd() -> (Command, tempfile::TempDir) {
 #[test]
 fn test_scope_help_shows_description() {
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.arg("scope").arg("--help");
     cmd.timeout(CMD_TIMEOUT);
     cmd.assert()
@@ -54,6 +57,7 @@ fn test_scope_with_ddl_dir_shows_path() {
 fn test_scope_without_ddl_dir_shows_message() {
     let temp = tempfile::tempdir().unwrap();
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.current_dir(temp.path());
     cmd.arg("scope").arg("--human");
     cmd.timeout(CMD_TIMEOUT);
@@ -77,6 +81,7 @@ fn test_scope_json_with_ddl_dir() {
 fn test_scope_json_without_ddl_dir() {
     let temp = tempfile::tempdir().unwrap();
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.current_dir(temp.path());
     cmd.arg("scope").arg("--json");
     cmd.timeout(CMD_TIMEOUT);
@@ -89,6 +94,7 @@ fn test_scope_json_without_ddl_dir() {
 #[test]
 fn test_scope_unknown_flag_errors() {
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.arg("scope").arg("--unknown-flag");
     cmd.timeout(CMD_TIMEOUT);
     cmd.assert().failure();

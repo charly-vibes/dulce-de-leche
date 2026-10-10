@@ -7,6 +7,7 @@
 //! - tools not on PATH but present at the .ddl/bin destination still init
 //! - tools without an init command are skipped silently
 
+mod common;
 /// DDL-6zn.8: --tools accepts aliases (espectacular→ah) and fails loudly
 /// on unknown names instead of silently dropping them.
 #[test]
@@ -67,6 +68,8 @@ fn tools_flag_self_name_names_the_repo() {
 #[test]
 fn init_help_lists_every_registry_tool() {
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
+    common::clean_git_env(&mut cmd);
     cmd.arg("init").arg("--help");
     cmd.timeout(CMD_TIMEOUT);
     let output = cmd.assert().success().get_output().stdout.clone();
@@ -121,6 +124,8 @@ fn stub_tools(cmd: &mut Command, temp: &tempfile::TempDir, stubs: &[(&str, &str)
 fn ddl_cmd() -> (Command, tempfile::TempDir) {
     let temp = tempfile::tempdir().unwrap();
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
+    common::clean_git_env(&mut cmd);
     cmd.current_dir(temp.path());
     (cmd, temp)
 }
@@ -229,6 +234,9 @@ fn init_reaches_tool_only_at_ddl_bin_destination() {
     }
 
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+
+    common::clean_git_env(&mut cmd);
+    common::clean_git_env(&mut cmd);
     cmd.current_dir(temp.path());
     stub_tools(&mut cmd, &temp, &[]); // incitaciones stub only
     // Note: `dont` is deliberately NOT in stub-bin here — it lives only at

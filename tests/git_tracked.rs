@@ -13,6 +13,7 @@
 //!
 //! Tests do not mutate the process environment; each case builds its own
 //! throwaway git repository under a tempdir.
+mod common;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;

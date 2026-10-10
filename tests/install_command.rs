@@ -4,6 +4,7 @@
 //! parsing, help text, error handling, and fast-path detection here.
 //! The install logic is tested via unit tests in the installer module.
 
+mod common;
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::time::Duration;
@@ -16,6 +17,7 @@ const CMD_TIMEOUT: Duration = Duration::from_secs(10);
 #[test]
 fn test_install_help_has_tool_arg() {
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.arg("install").arg("--help");
     cmd.timeout(CMD_TIMEOUT);
     cmd.assert()
@@ -27,6 +29,7 @@ fn test_install_help_has_tool_arg() {
 #[test]
 fn test_install_help_shows_description() {
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.arg("install").arg("--help");
     cmd.timeout(CMD_TIMEOUT);
     cmd.assert()
@@ -37,6 +40,7 @@ fn test_install_help_shows_description() {
 #[test]
 fn test_install_help_lists_known_tools() {
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.arg("install").arg("--help");
     cmd.timeout(CMD_TIMEOUT);
     cmd.assert()
@@ -51,6 +55,7 @@ fn test_install_help_lists_known_tools() {
 #[test]
 fn test_install_unknown_tool_fails() {
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.arg("install").arg("nonexistent-tool");
     cmd.timeout(CMD_TIMEOUT);
     cmd.assert()
@@ -64,6 +69,7 @@ fn test_install_unknown_tool_fails() {
 #[test]
 fn test_install_help_lists_every_registry_tool() {
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.arg("install").arg("--help");
     cmd.timeout(CMD_TIMEOUT);
     let output = cmd.assert().success().get_output().stdout.clone();
@@ -83,6 +89,7 @@ fn test_install_help_lists_every_registry_tool() {
 fn test_install_self_name_gives_teachable_error() {
     for name in ["ddl", "dulce", "dulce-de-leche"] {
         let mut cmd = Command::cargo_bin("ddl").unwrap();
+        common::clean_git_env(&mut cmd);
         cmd.arg("install").arg(name);
         cmd.timeout(CMD_TIMEOUT);
         cmd.assert()
@@ -94,6 +101,7 @@ fn test_install_self_name_gives_teachable_error() {
 #[test]
 fn test_install_unknown_tool_suggests_closest() {
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     // "wai" is a known tool — "waii" should suggest "wai"
     cmd.arg("install").arg("waii");
     cmd.timeout(CMD_TIMEOUT);
@@ -105,6 +113,7 @@ fn test_install_unknown_tool_suggests_closest() {
 #[test]
 fn test_install_no_args_fails() {
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.arg("install");
     cmd.timeout(CMD_TIMEOUT);
     cmd.assert()
@@ -115,6 +124,7 @@ fn test_install_no_args_fails() {
 #[test]
 fn test_install_unknown_flag_errors() {
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.arg("install").arg("wai").arg("--unknown-flag");
     cmd.timeout(CMD_TIMEOUT);
     cmd.assert().failure();
@@ -138,6 +148,7 @@ fn ddl_cmd() -> (Command, tempfile::TempDir) {
     )
     .unwrap();
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.current_dir(temp.path());
     cmd.timeout(CMD_TIMEOUT);
     (cmd, temp)
@@ -189,6 +200,8 @@ fn test_install_on_path_untracked_records_in_manifest() {
     .unwrap();
 
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+
+    common::clean_git_env(&mut cmd);
     cmd.current_dir(temp.path());
     cmd.env("PATH", std::env::join_paths(paths).unwrap());
     cmd.arg("install").arg("turu");
@@ -223,6 +236,7 @@ fn test_install_json_parses() {
 fn test_install_global_verbose_flag_works() {
     // --verbose is a global flag, so it should work before the subcommand
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.arg("--verbose").arg("install").arg("--help");
     cmd.timeout(CMD_TIMEOUT);
     cmd.assert()
