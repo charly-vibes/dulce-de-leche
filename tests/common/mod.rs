@@ -32,6 +32,7 @@ extern "C" fn strip_hook_git_env() {
 
 /// Strip hook-exported git env from a spawned tool command (assert_cmd) —
 /// children of `ddl` (git init, bd init) must not target the OUTER repo.
+#[allow(dead_code)] // not every test binary that includes this module spawns ddl
 pub fn clean_git_env(cmd: &mut assert_cmd::Command) {
     for var in [
         "GIT_DIR",
