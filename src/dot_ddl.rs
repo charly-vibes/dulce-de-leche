@@ -799,20 +799,32 @@ pub fn migrated_tools(ddl_dir: &DdlDir) -> Vec<(String, PathBuf)> {
 
 /// Best-effort check whether a path is tracked by git (staged or committed).
 ///
-/// Shells out to `git ls-files --error-unmatch`. Returns false when git is
-/// unavailable, the path is outside a repository, or the path is untracked —
-/// in which case symlink migration is safe (git does not follow symlinks,
-/// but untracked content has no history to corrupt).
+/// Delegates to `genesis::git::tracked` (`git ls-files --error-unmatch`),
+/// resolving the repository root explicitly from the path's parent so the
+/// invocation never relies on the current working directory. Returns false
+/// when git is unavailable, the path is outside a repository, or the path is
+/// untracked — in which case symlink migration is safe (git does not follow
+/// symlinks, but untracked content has no history to corrupt).
 pub fn is_git_tracked(path: &Path) -> bool {
-    let parent = path.parent().unwrap_or(Path::new("."));
-    std::process::Command::new("git")
-        .arg("-C")
-        .arg(parent)
-        .args(["ls-files", "--error-unmatch"])
-        .arg(path)
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+    // `Path::parent` of a bare relative name (e.g. ".wai") is Some(""); the
+    // previous `git -C ""` invocation treated that as a cwd no-op, so map it
+    // to "." to keep the same effective directory.
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    match genesis::git::repo_root_from(parent) {
+        Ok(root) => {
+            // Whole-repo probe: `tracked` relativizes path == root to an
+            // empty pathspec, which git rejects (exit 128). The previous
+            // `ls-files --error-unmatch <abs root>` matched whenever the
+            // repo knew any path, so use "." for that case.
+            let probe = if path == root { Path::new(".") } else { path };
+            genesis::git::tracked(&root, probe).unwrap_or(false)
+        }
+        // Outside any repository: best-effort degradation, same as untracked.
+        Err(_) => false,
+    }
 }
 
 /// Check if a path is a symlink.

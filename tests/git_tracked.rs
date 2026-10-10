@@ -58,6 +58,46 @@ fn seed_repo(dir: &Path) -> (PathBuf, PathBuf) {
 }
 
 #[test]
+fn tracked_directory_path_is_tracked() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    // gh#30 shape: a legacy config DIRECTORY under the repo root, like the
+    // `.wai` paths `ddl migrate` probes.
+    let repo = tmp.path().join("repo");
+    std::fs::create_dir_all(repo.join(".wai")).expect("create .wai");
+    std::fs::write(repo.join(".wai/resources.toml"), "shared = true").expect("write");
+    let git = |args: &[&str]| {
+        let out = Command::new("git")
+            .arg("-C")
+            .arg(&repo)
+            .args(args)
+            .output()
+            .expect("spawn git");
+        assert!(
+            out.status.success(),
+            "git {:?} failed: {}",
+            args,
+            String::from_utf8_lossy(&out.stderr)
+        );
+    };
+    git(&["init", "--quiet"]);
+    git(&["add", ".wai/resources.toml"]);
+    git(&[
+        "-c",
+        "user.email=ddl-test@example.com",
+        "-c",
+        "user.name=DDL Test",
+        "commit",
+        "--quiet",
+        "-m",
+        "seed",
+    ]);
+    assert!(
+        is_git_tracked(&repo.join(".wai")),
+        "a tracked config directory must report tracked"
+    );
+}
+
+#[test]
 fn committed_path_is_tracked() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let (committed, _untracked) = seed_repo(tmp.path());
