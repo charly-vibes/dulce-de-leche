@@ -15,11 +15,13 @@
 
 - [Architecture](./architecture.md)
 - [Implementation Status](./status.md)
+- [Glossary](./glossary.md)
 
 # Contributing
 
 - [Development](./development.md)
 - [Ecosystem Development](./ecosystem.md)
+- [Fleet Incident Records](./fleet-incidents.md)
 
 # Design Specs
 

@@ -95,8 +95,8 @@ All Rust tools depend on `genesis-vibes = "0.6"`. Genesis provides:
 | Channel | Tools | Maintainer |
 |---------|-------|------------|
 | crates.io | All Rust tools | Individual repos |
-| Homebrew | wai, ah, dont, pretender, testaruda, vampiro, fotos-mcp, turu, dulce-de-leche, fotos (cask) — dont formula still a placeholder stub; bd and openspec ship in homebrew-core | `homebrew-charly` tap |
-| Scoop | wai, ah, dont, pretender, testaruda, vampiro, fotos-mcp, fotos, turu, dulce-de-leche | `scoop-charly` bucket |
+| Homebrew | wai, ah, dont, pretender, testaruda, vampiro, turu, dulce-de-leche — dont formula still a placeholder stub; bd and openspec ship in homebrew-core | `homebrew-charly` tap |
+| Scoop | wai, ah, dont, pretender, testaruda, vampiro, turu, dulce-de-leche | `scoop-charly` bucket |
 | GitHub Releases | All Rust tools; bd (`gastownhall/beads`); openspec (`fission-ai/openspec`) | Individual repos |
 | npm | incitaciones; openspec (`@fission-ai/openspec`) | Individual repos |
 
@@ -107,7 +107,6 @@ From `homebrew-charly/`:
 | Formula | Version | Has real SHA? | Notes |
 |---------|---------|---------------|-------|
 | `wai.rb` | 2026.8.5 | ✓ | Real release |
-| `fotos-mcp.rb` | 0.3.0 | ✓ | Real release |
 | `testaruda.rb` | 0.4.0 | ✓ | Real release (engine + rust/python adapters) |
 | `vampiro.rb` | 0.4.0 | ✓ | Real release |
 | `turu.rb` | 0.3.0 | ✓ | Real release (auto-updated by whisper's release workflow) |
@@ -115,7 +114,6 @@ From `homebrew-charly/`:
 | `pretender.rb` | 0.5.0 | ✓ | Real release |
 | `dulce-de-leche.rb` | 0.3.0 | ✓ | Real release |
 | `dont.rb` | 0.0.0 | ✗ placeholder | Blocked: no GitHub release for dont yet (tag v0.3.0 exists locally) |
-| `fotos.rb` (cask) | — | ✓ | Real release |
 
 Scoop mirrors the same versions for Windows. All formula hashes were computed from downloaded release assets and cross-verified against each release's published `checksums.txt`.
 

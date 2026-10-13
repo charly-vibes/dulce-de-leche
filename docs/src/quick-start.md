@@ -22,8 +22,8 @@ ddl init
 ✓ created .gitignore entries for .ddl/ data files
 ```
 
-`fotos-mcp`, `incitaciones`, and `turu` are install-only — they don't keep
-config under `.ddl/`.
+Four tools are **install-only** — they don't keep config under `.ddl/`:
+`bd`, `openspec`, `incitaciones`, and `turu`.
 
 ## Check the ecosystem
 
@@ -62,5 +62,13 @@ ddl migrate
 ```bash
 ddl scope
 ```
+
+Shows which `.ddl/` is active (walks up from CWD like git).
+
+## Where to go next
+
+- Every command and flag: [Commands](./commands.md)
+- Something not working: [Troubleshooting](./troubleshooting.md)
+- What the tools do: [Ecosystem Development](./ecosystem.md)
 
 Shows which `.ddl/` is active (walks up from CWD like git).

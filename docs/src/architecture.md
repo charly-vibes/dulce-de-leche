@@ -27,9 +27,12 @@ Brew/scoop are not used by ddl for installs (see DDL-ei3).
 
 ### Phase 1: Symlink farm
 
-Before deep genesis integration, ddl uses a symlink farm:
-- `.ddl/wai/` → `.wai/` (symlink)
-- `.ddl/dont/` → `.dont/` (symlink)
+Before deep genesis integration, ddl uses a symlink farm: each tool's
+legacy config directory stays at its old path but becomes a symlink into
+`.ddl/` (the backing store):
+
+- `.wai/` → `.ddl/wai/` (symlink)
+- `.dont/` → `.ddl/dont/` (symlink)
 - etc.
 
 No tool patches needed. Zero risk — symlinks are transparent to file reads.
