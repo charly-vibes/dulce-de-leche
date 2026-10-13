@@ -152,6 +152,7 @@ Rows are in-org repos only; external consumers (bd, openspec, turu) appear as
 | incitaciones | ✅ | ✅ | ✅ | — | ◻ opt | — | ✅ |
 | espectacular (`ah`) | ✅ | ✅ | ✅ | ✅ | ◻ opt | ◻ opt | ✅ |
 | whisper (`turu`) | ✅ | ✅ | ✅ | — | ◻ opt | — | ✅ |
+| funkalization | ✅ | ✅ | ✅ | ✅ | ◻ opt | — | ✅ |
 | ddl          | ✅ | ✅ | ✅ | ✅ | ◻ opt | — | — |
 
 `✅` = required in `ci.yml` (unless the section says otherwise); `◻ opt` = opt-in;

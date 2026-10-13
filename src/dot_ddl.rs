@@ -158,6 +158,7 @@ const LEGACY_CONFIGS: &[(&str, &str)] = &[
     ("testaruda", ".testaruda"),
     ("vampiro", ".vampiro"),
     ("specodelic", ".specs"),
+    ("funkalization", ".funkalization"),
     // Note: bd, openspec, incitaciones, and turu are intentionally absent —
     // they are install-only (bd manages repo-local `.beads/` itself, openspec
     // manages `openspec/` itself, skills land in `~/.agents/skills/`, and

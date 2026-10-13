@@ -108,6 +108,7 @@ pub const EMBEDDED_COMPATIBILITY: &str = r#"{
     "incitaciones": ">=0.8.0",
     "turu": ">=0.3.0",
     "specodelic": ">=0.1.0",
+    "funkalization": ">=0.1.0",
     "bd": ">=0.0.0",
     "openspec": ">=0.0.0"
 }"#;

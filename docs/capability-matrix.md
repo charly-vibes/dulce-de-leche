@@ -16,5 +16,6 @@ Intent → tool mapping for the charly-vibes ecosystem, generated from ddl's too
 | incitaciones | `incitaciones` | Reusable prompts and skills for CLI LLM tools | extension | experimental |
 | turu | `turu` | Deterministic knowledge workspace management (whisper-vibes) | recommended | beta |
 | specodelic | `specodelic` | Markdown spec format (Intent/Constraints/Model/Properties) and the CLI that lints, compiles, verifies, and refactors it | extension | experimental |
+| funkalization | `funkalization` | Visual semantic design workspace — versioned design semantics, obligations, scoped evidence, loss-reporting adapters | extension | experimental |
 
-Install any of these with `ddl install <name>` — 11 tools total.
+Install any of these with `ddl install <name>` — 12 tools total.

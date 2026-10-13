@@ -34,10 +34,10 @@ topics — browse the whole set at
 [topic:charly-vibes topic:dulce-de-leche](https://github.com/search?q=topic%3Acharly-vibes+topic%3Adulce-de-leche&type=repositories).
 
 <!-- MANAGED-TOOLS:START -->
-Managed tools (11):
+Managed tools (12):
 - Core (2): wai, testaruda.
 - Recommended (3): turu, dont, ah.
-- Extension (6): pretender, vampiro, incitaciones, bd, openspec, specodelic.
+- Extension (7): pretender, vampiro, incitaciones, bd, openspec, specodelic, funkalization.
 Run `ddl version` for the full picture. Additions and removals must update this block
 (enforced by `tests/tool_registry_drift.rs`).
 <!-- MANAGED-TOOLS:END -->
@@ -164,7 +164,7 @@ Full documentation is available at [charly-vibes.github.io/dulce-de-leche](https
 
 **v0.8.0** — orchestrator shipped and published (crates.io, GitHub
 releases); installs are binary-first on every platform with `cargo install`
-fallback, and the registry holds 11 managed tools (bd and openspec joined).
+fallback, and the registry holds 12 managed tools (bd and openspec joined).
 Brew/scoop no longer influence ddl's install
 decisions ([DDL-ei3]). Upstream release coverage is tracked in
 [`docs/ecosystem-map.md`](docs/ecosystem-map.md). Notes:

@@ -41,6 +41,7 @@ const RUST_REPOS: &[&str] = &[
     "espectacular",
     "whisper",
     "dulce-de-leche",
+    "funkalization",
 ];
 const ALL_REPOS: &[&str] = &[
     "wai",
@@ -54,6 +55,7 @@ const ALL_REPOS: &[&str] = &[
     "dulce-de-leche",
     "incitaciones",
     "genesis",
+    "funkalization",
 ];
 
 const RELEASE_TARGETS: &[&str] = &[
@@ -342,6 +344,10 @@ const DOGFOOD_MATRIX: &[(&str, &[&str])] = &[
     (
         "dulce-de-leche",
         &["pretender", "wai", "bd", "openspec", "dont"],
+    ),
+    (
+        "funkalization",
+        &["pretender", "wai", "bd", "openspec", "dulce-de-leche"],
     ),
 ];
 

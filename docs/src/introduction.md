@@ -16,8 +16,9 @@ missing and how to install it. See [Troubleshooting](./troubleshooting.md).
 
 The charly-vibes ecosystem has **8 active Rust CLI tools** (wai, dont, ah,
 pretender, testaruda, vampiro, specodelic, turu/whisper), plus bd and
-openspec (workflow/issue tooling) and incitaciones (npm) — **11 managed
-tools** in total.
+openspec (workflow/issue tooling) and incitaciones (npm) — **12 managed
+tools** in total (funkalization, the visual semantic design workspace,
+joined as the newest experimental extension).
 Each tool has:
 
 - Its own config file or directory

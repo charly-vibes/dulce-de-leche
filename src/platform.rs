@@ -340,6 +340,16 @@ pub const MANAGED_TOOLS: &[Tool] = &[
         category: ToolCategory::Extension,
         maturity: Maturity::Experimental,
     },
+    Tool {
+        name: "funkalization",
+        description: "Visual semantic design workspace — versioned design semantics, obligations, scoped evidence, loss-reporting adapters",
+        crate_name: "funkalization",
+        formula_name: "funkalization",
+        repo: "charly-vibes/funkalization",
+        npm_package: None,
+        category: ToolCategory::Extension,
+        maturity: Maturity::Experimental,
+    },
 ];
 
 /// Find a tool by name (case-insensitive; matches the canonical name or

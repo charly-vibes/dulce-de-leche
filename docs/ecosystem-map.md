@@ -194,6 +194,7 @@ ddl manages a tool when all of the following hold:
 | **wild** | `wild` | `wild-vibes` | — | Machine-checked compatibility and composition of software components, modelled as a category of contracts. `wild extract` / `wild check`. |
 | **whisper** | `turu` (aliases: `turututu`, `whisper`) | `whisper-vibes` | ✓ | Deterministic knowledge workspace management. Repo-local `.whisper/` + global `~/.whisper/` routing. Install-only under ddl — its state is home-dir global, not repo-local legacy config. |
 | **specodelic** | `specodelic`, `spk` | `specodelic` | ✓ | Markdown spec format (Intent / Constraints / Model / Properties) with the CLI that lints, compiles, verifies, and refactors it. Repo-local `.specs/` corpus. |
+| **funkalization** | `funkalization` | `funkalization` | — | Visual semantic design workspace. Versioned design semantics with typed design edits, generated obligations, scoped evidence, and loss-reporting adapters toward Specodelic and OpenSpec. Planned repo-local `.funkalization/` workspace. |
 | **bajan** | `bajan` | `bajan` | ✓ | Spec-driven knowledge-graph pipeline CLI — ingest sources, extract claims, query the graph. SQLite-backed triple store, provenance as graph structure. |
 | **gently** | `gently` | not yet published | — | Rust port of Perl's Graph::Easy: build graphs, lay them out deterministically, render as ASCII art, boxart, HTML, or Graphviz DOT — plus parse Graph::Easy and DOT input. |
 
@@ -218,6 +219,7 @@ Before ddl:
 | testaruda | `.testaruda/` | SQLite + TOML | Dependency graph store |
 | vampiro | `.vampiro/` | TOML | Composition config (`config.toml`) |
 | specodelic | `.specs/` | Markdown corpus | Spec files |
+| funkalization | `.funkalization/` | JSON workspace (planned) | Design workspace |
 
 After ddl migration (Phase 1):
 
@@ -230,6 +232,7 @@ After ddl migration (Phase 1):
 | testaruda | `.ddl/testaruda/` → `.testaruda/` | ✓ symlink |
 | vampiro | `.ddl/vampiro/` → `.vampiro/` | ✓ symlink |
 | specodelic | `.ddl/specodelic/` → `.specs/` | ✓ symlink |
+| funkalization | `.ddl/funkalization/` → `.funkalization/` | ✓ symlink |
 
 `bd`, `openspec`, `incitaciones`, and `turu` are install-only — their state lives outside `.ddl/` (bd manages repo-local `.beads/` itself; openspec manages `openspec/` itself), so there is nothing to migrate.
 
