@@ -164,13 +164,13 @@ Full documentation is available at [charly-vibes.github.io/dulce-de-leche](https
 
 **v0.8.0** — orchestrator shipped and published (crates.io, GitHub
 releases); installs are binary-first on every platform with `cargo install`
-fallback, and the registry holds 11 managed tools (bd and openspec joined;
-fotos-mcp and fabbro removed). Brew/scoop no longer influence ddl's install
+fallback, and the registry holds 11 managed tools (bd and openspec joined).
+Brew/scoop no longer influence ddl's install
 decisions ([DDL-ei3]). Upstream release coverage is tracked in
 [`docs/ecosystem-map.md`](docs/ecosystem-map.md). Notes:
 
-- Real tap formulas exist for manual installs: wai, fotos-mcp, testaruda,
-  vampiro, turu — dont is still a placeholder.
+- Real tap formulas exist for manual installs: wai, testaruda, vampiro,
+  turu — dont is still a placeholder.
 - Tools without published release binaries fall back to `cargo install`
   automatically.
 - **`bd` has no cargo fallback** (the `beads` crate on crates.io is an
