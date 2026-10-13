@@ -7,7 +7,10 @@
 
 dulce-de-leche (`ddl`) is a thin orchestrator that bootstraps the entire
 [charly-vibes](https://github.com/charly-vibes) tool ecosystem on any platform
-— macOS, Linux, or Windows — with no prerequisites beyond the binary itself.
+— macOS, Linux, or Windows. `ddl` itself needs nothing but the binary; a few
+tools have prerequisites (npm for `incitaciones`, and a Rust toolchain for
+tools without published release binaries) — `ddl` tells you exactly what is
+missing and how to install it. See [Troubleshooting](./troubleshooting.md).
 
 ## The problem
 

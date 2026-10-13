@@ -29,6 +29,10 @@
 
 Repo root stays clean — everything lives under `.ddl/`.
 
+Every repo in the fleet carries the `charly-vibes` + `dulce-de-leche` GitHub
+topics — browse the whole set at
+[topic:charly-vibes topic:dulce-de-leche](https://github.com/search?q=topic%3Acharly-vibes+topic%3Adulce-de-leche&type=repositories).
+
 <!-- MANAGED-TOOLS:START -->
 Managed tools (11):
 - Core (2): wai, testaruda.
@@ -51,7 +55,8 @@ spelling, but the repo is always the third column):
 | `ddl` (this tool) | `dulce-de-leche` | `charly-vibes/dulce-de-leche` |
 
 `charly-vibes/ddl` does not exist — the repository is `charly-vibes/dulce-de-leche`.
-This table is drift-tested in `tests/tool_registry_drift.rs`.
+This table lists only the tools whose binary and crate names mismatch and is
+drift-tested in `tests/tool_registry_drift.rs`.
 
 ## Installation
 
@@ -96,29 +101,21 @@ ddl --help
 
 ## The problem
 
-The charly-vibes ecosystem has **8 active Rust CLI tools** (wai, dont,
-ah/espectacular, pretender, testaruda, vampiro, specodelic, turu/whisper),
-plus bd and openspec (workflow/issue tooling) and incitaciones (npm) —
-**11 managed tools** in total. Each tool
-has:
-
-- Its own config file or directory: `.wai/`, `.dont/`, `.espectacular/`, `.pretender.toml`, `.testaruda/`
-- Its own init command: `wai init`, `dont prime`, `ah init`, `pretender init`, `testaruda init`
-- Its own installation path: `cargo install`, `brew install`, `scoop install`
-
-Result: a new user runs **5+ install commands** and **5+ init commands** before seeing value. Configs are scattered across the repo root with no standard convention.
+Eleven independent CLI tools — each with its own config directory, init
+command, and install path — mean a new user runs 5+ install and 5+ init
+commands before seeing value, with configs scattered across the repo root.
+Full story: [Introduction](https://charly-vibes.github.io/dulce-de-leche/introduction.html).
 
 ## The solution
 
-**dulce-de-leche** (`ddl`) is a thin orchestrator that:
+**dulce-de-leche** (`ddl`) is a thin orchestrator — the "brew bundle" for
+charly-vibes — that **installs** every tool (prebuilt binaries first, cargo
+fallback, npm for incitaciones), **configures** them under a single `.ddl/`
+directory, **migrates** legacy configs into it, **reports** status in one
+command, and **upgrades** everything in one step.
 
-1. **Installs** all tools as prebuilt binaries from GitHub releases (primary path on every platform), falling back to `cargo install` when no release binary exists and cargo is available; incitaciones installs via npm
-2. **Configures** them under a single `.ddl/` directory — no root pollution
-3. **Migrates** existing configs from `.wai/`, `.dont/`, etc. into `.ddl/` (via symlinks in Phase 1)
-4. **Reports** status across the whole toolset in one command
-5. **Upgrades** everything to compatible versions in one step
-
-It is **not** a package manager, a reimplementation of any tool, or a CLI launcher that replaces `wai`/`dont`/`ah`. Each tool keeps its own identity and CLI grammar. `ddl` is just the **orchestrator** — the "brew bundle" for charly-vibes.
+It is **not** a package manager or a reimplementation of any tool: each tool
+keeps its own identity and CLI grammar; `ddl` just orchestrates them.
 
 ## The `.ddl/` directory
 
@@ -165,18 +162,20 @@ Full documentation is available at [charly-vibes.github.io/dulce-de-leche](https
 
 ## Status
 
-**v0.8.0** — orchestrator shipped and published (crates.io, GitHub releases).
-Installs are binary-first on every platform with `cargo install` fallback;
-the homebrew tap and scoop bucket remain as ecosystem infrastructure for
-manual installs but no longer influence ddl's install decisions ([DDL-ei3]).
-Registry as of this release: 11 managed tools — bd and openspec joined,
-fotos-mcp and fabbro removed. Upstream release coverage is tracked in
-[`docs/ecosystem-map.md`](docs/ecosystem-map.md);
-real tap formulas exist for wai, fotos-mcp, testaruda, vampiro, and turu —
-dont is still a placeholder, and ddl automatically falls back to
-`cargo install` for tools without published release binaries. Note: `bd`
-has no cargo fallback (the `beads` crate on crates.io is an unrelated
-package) — it installs strictly from gastownhall/beads release binaries.
+**v0.8.0** — orchestrator shipped and published (crates.io, GitHub
+releases); installs are binary-first on every platform with `cargo install`
+fallback, and the registry holds 11 managed tools (bd and openspec joined;
+fotos-mcp and fabbro removed). Brew/scoop no longer influence ddl's install
+decisions ([DDL-ei3]). Upstream release coverage is tracked in
+[`docs/ecosystem-map.md`](docs/ecosystem-map.md). Notes:
+
+- Real tap formulas exist for manual installs: wai, fotos-mcp, testaruda,
+  vampiro, turu — dont is still a placeholder.
+- Tools without published release binaries fall back to `cargo install`
+  automatically.
+- **`bd` has no cargo fallback** (the `beads` crate on crates.io is an
+  unrelated package) — it installs strictly from gastownhall/beads release
+  binaries.
 
 ## Commands
 
