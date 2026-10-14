@@ -270,9 +270,11 @@ fn hanging_init_child_killed_and_budget_identified() {
     cmd.env("DDL_CHILD_DEADLINE_SECS", "1");
     cmd.args(["init", "--yes", "--tools", "bd", "--no-install", "--human"]);
     let start = Instant::now();
+    // Human mode: the resume summary (naming the exhausted budget) is on
+    // stdout; the non-zero exit status identifies the budget exhaustion.
     cmd.assert()
         .failure()
-        .stderr(predicates::str::contains("budget"));
+        .stdout(predicates::str::contains("budget exceeded: child-runtime"));
     let elapsed = start.elapsed();
     assert!(
         elapsed < Duration::from_secs(2),

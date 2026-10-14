@@ -5,6 +5,11 @@
 //! `.agents/skills/`) where each skill's `SKILL.md` frontmatter carries the
 //! provenance marker `installed-from: incitaciones` and the installed
 //! npm version. Detection scans for that marker — no subprocess needed.
+//!
+//! Rationale (DDL-1z1, SEC-02): the npm child is a bootstrap subprocess, so
+//! it runs under the shared child runtime budget — a hung `npm install` is
+//! killed (with its process group) within the configured deadline and the
+//! exhausted budget is named in the failure.
 
 use std::path::PathBuf;
 
@@ -114,12 +119,15 @@ pub fn install_skills(global: bool, verbose: bool) -> Result<()> {
         eprintln!("  · running: {cmd} {}", base_args.join(" "));
     }
 
-    let status = crate::installer::npm_command(cmd)
-        .args(&base_args)
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .status()
-        .map_err(|e| DdlError::InstallFailed(format!("Failed to run {cmd}: {e}")))?;
+    // DDL-1z1: the npm child is bounded by the runtime budget; the budget
+    // error propagates unchanged so diagnostics name the exhausted budget.
+    let status = crate::installer::run_child_bounded(
+        crate::installer::npm_command(cmd)
+            .args(&base_args)
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit()),
+        crate::installer::child_deadline(),
+    )?;
 
     if status.success() {
         Ok(())
