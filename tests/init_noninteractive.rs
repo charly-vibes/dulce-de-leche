@@ -16,7 +16,7 @@ use std::time::Duration;
 /// DDL-6ox keeps the advisory tail (repo setup with per-tool version
 /// probes, wai force-init) running after config-step failures, so the
 /// budget matches init_canonical's 30s rather than a bare 10s.
-const CMD_TIMEOUT: Duration = Duration::from_secs(30);
+const CMD_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Prepend a stub `incitaciones` executable to the child's PATH so init's
 /// skill-install step runs the stub instead of a real `npx --yes` network

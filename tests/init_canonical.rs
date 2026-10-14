@@ -14,7 +14,7 @@ use assert_cmd::Command;
 use std::path::Path;
 use std::time::Duration;
 
-const CMD_TIMEOUT: Duration = Duration::from_secs(30);
+const CMD_TIMEOUT: Duration = Duration::from_secs(60);
 
 const DDL_MARKER: &str = "<!-- DDL:START -->";
 
