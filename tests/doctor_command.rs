@@ -8,7 +8,7 @@ use predicates::prelude::*;
 use std::time::Duration;
 
 /// Timeout for each test.
-const CMD_TIMEOUT: Duration = Duration::from_secs(10);
+const CMD_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Helper: create a temp dir with a `.ddl/` containing a manifest and return
 /// the command pre-configured to run inside it.

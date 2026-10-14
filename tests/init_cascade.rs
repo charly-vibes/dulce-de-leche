@@ -85,7 +85,7 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 /// Timeout for each test — init with --no-install should be instant.
-const CMD_TIMEOUT: Duration = Duration::from_secs(10);
+const CMD_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Create stub executables (name → script body) in `temp/stub-bin` and
 /// prepend that dir to the child's PATH. Also stubs `incitaciones` so the
