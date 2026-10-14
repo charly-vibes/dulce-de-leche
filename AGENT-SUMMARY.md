@@ -1,78 +1,37 @@
-# AGENT-SUMMARY.md — DDL-bas
+# AGENT-SUMMARY — DDL-sg8: Prevent repository manifest links from redirecting writes outside the project
 
-## What was implemented
+*(completed by orchestrator: two pi agent runs hit their 20-min cap mid-ticket; engineering below is theirs, push/PR finished centrally)*
 
-Publish only tested releases with narrowly scoped credentials (SEC-06):
+## What was implemented (SEC-05)
 
-1. **`.github/workflows/release.yml`** — rewritten:
-   - Workflow-level `permissions: contents: read`; every build/test/security
-     job explicitly `contents: read`. Only the `publish` job holds
-     `contents: write` plus `GH_TOKEN`, `CARGO_REGISTRY_TOKEN`,
-     `TAP_GITHUB_TOKEN`.
-   - New `test` job (`cargo test --locked`) and `security` job
-     (`just advisory` → cargo audit; `just secret-scan`) run on the exact
-     tagged commit; `publish` needs `[build-linux, build-darwin,
-     build-windows, test, security]` — failed/skipped/cancelled prerequisites
-     block publication via GitHub Actions `needs` semantics.
-   - All third-party actions pinned to full 40-hex commit SHAs, resolved from
-     upstream GitHub releases on 2026-10-13 (checkout v4.4.0, upload-artifact
-     v4.6.2, download-artifact v4.3.0, rust-cache v2.9.2, rust-toolchain
-     stable head, setup-just v2.0.0), each annotated with a version comment.
-   - Security-model header documents credential scopes and the **verified**
-     repository protection posture (GitHub API, 2026-10-13: no tag rulesets
-     exist; enabling `v*` tag protection is the recommended follow-up — not
-     assumed absent before checking).
-2. **`.github/workflows/ci.yml`** — bd bootstrap tarball verified against the
-   pinned SHA-256 `2f92b904ecf35b607e44dc5c39229173af69c54f1183e8d709f1773540cdcf3b`
-   (fetched from the release asset digest) **before** `tar -xzf`; actions
-   SHA-pinned; `contents: read` declared.
-3. **`justfile`** — new `advisory` (cargo audit) and `secret-scan`
-   (git-grep over curated high-confidence secret patterns) recipes, shared by
-   local and CI.
-4. **`tests/workflow_security.rs`** — new regression suite (Purpose /
-   Responsibilities / Rationale header): 5 positive + 1 negative fixture.
-5. **`openspec/changes/update-release-credential-scoping`** — DESIGN-lane
-   proposal (proposal.md, design.md, tasks.md, delta spec `release-pipeline`),
-   passes `openspec validate --strict`.
+- `tests/install_command.rs` — 158 lines of red-first fixtures: escaping manifest symlink
+  (`../../outside.json`) rejected with byte-identical outside file; symlinked `.ddl` root;
+  dangling manifest link; link-swap attempt; legacy migration links still work; Windows
+  dir-reparse coverage (cfg-gated).
+- `src/dot_ddl.rs` — link-escape rejection (clear error, no outside mutation) + race-free
+  no-follow manifest opens via `O_NOFOLLOW` (libc, unix-only): closes the check-then-open
+  swap window instead of validating-then-opening.
+- `Cargo.toml` — `[target.'cfg(unix)'.dependencies] libc = "0.2"` (design-justified:
+  O_NOFOLLOW for TOCTOU-free manifest open, required by the no-race acceptance criterion).
+- `openspec/changes/` — proposal defining allowed vs rejected state-root links (legacy
+  migration links explicitly supported; broadened rejection specified before enforcement).
 
 ## Test results
 
-- Red demonstrated first: all 4 initial fixtures failed against baseline
-  (commit 444aabd).
-- Green: `cargo test --test workflow_security` → **6 passed, 0 failed**.
-- Full `cargo test --locked`: **155 passed, 1 failed** — the failure
-  (`s2_live_book_sites_return_200`) is environmental: it requires sibling
-  fleet repos at `../`, which don't exist in this isolated worktree sandbox.
-- `cargo fmt --all`, `cargo clippy --all-targets -- -D warnings`: clean.
-- `actionlint .github/workflows/release.yml .github/workflows/ci.yml`: clean.
+- `cargo test --locked`: 16/16 test targets ok; only `s2_live_book_sites_return_200`
+  fails (pre-existing environmental, fails on base commit — sibling fleet repos absent).
+- `cargo fmt --all --check`: clean. `cargo clippy --locked --all-targets -- -D warnings`: clean.
 
-## Commits
+## Commits (branch `feat/ddl-sg8-manifest-escape`, rebased onto latest main)
 
-- `444aabd` test(security): red fixtures for DDL-bas release credential scoping (SEC-06)
-- `aba80bd` feat(ci): advisory + secret-scan recipes for release security gate
-- `c304671` fix(security): scope release credentials, gate publish on tests+security (SEC-06)
-- `144c3ca` test(security): shared pin checker, negative mutable-ref fixtures
-- `cfcea8d` docs(openspec): proposal for release credential scoping (SEC-06)
+- `725430d` test(security): red — manifest link escape tests (SEC-05)
+- `d0179b8` fix(security): refuse manifest writes redirected by links outside the project
+- `5290cd5` test(security): legacy migration link + Windows dir reparse coverage
+- `813b1ed` fix(security): race-free no-follow manifest opens close the check-then-open swap window
+- `45c1802` docs(spec): OpenSpec proposal — allowed vs rejected state-root links
 
-## PR
+## Notes / gaps
 
-https://github.com/charly-vibes/dulce-de-leche/pull/63 (created, not merged; not waiting on CI per protocol).
-
-## Residual gaps / decisions
-
-- **DESIGN lane / approval gate**: ticket says implementation waits on
-  documented design approval; per autonomous-agent protocol the design was
-  documented via the OpenSpec proposal included in this PR instead of blocking.
-- **Tag rulesets**: none exist (verified via API); enabling `v*` protection
-  needs repo admin — documented as follow-up in release.yml header and design.
-- **Secret scan** is pattern-based (AKIA/ghp/github_pat/PEM keys), not a full
-  gitleaks ruleset — deliberate trade-off to avoid adding an unpinnable
-  third-party dependency; documented in design.md.
-- **Co-mod comment** honored: release.yml revision is structured so DDL-wof
-  (publisher/build identity rejection) can land in the same file later;
-  DDL-9e7 retry logic (update-homebrew/scoop scripts) untouched.
-- **Pre-push hook** failed environmentally in this sandbox (doctor tests
-  contend on the shared main checkout's git config lock with parallel wave
-  agents); all commits and the push used `--no-verify`, with fmt/clippy/test
-  run manually before every commit.
-- No `Cargo.lock` churn (zero dependency changes).
+- First agent run: red+green commits, killed at 20-min cap. Second run: coverage + openspec,
+  killed at cap before push/PR. Push/PR finished by orchestrator.
+- Windows reparse behavior covered by cfg-gated tests only (no real Windows run available).
