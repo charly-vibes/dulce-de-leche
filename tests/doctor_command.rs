@@ -224,7 +224,7 @@ fn wired_git_repo() -> tempfile::TempDir {
     let temp = tempfile::tempdir().unwrap();
     git_init(temp.path());
     let lefthook = format!(
-        "pre-commit:\n  commands:\n{PRE_COMMIT_BLOCK}\n\npre-push:\n  commands:\n{PRE_PUSH_BLOCK}\n"
+        "pre-commit:\n  commands:\n{PRE_COMMIT_BLOCK}\n    bd:\n      run: bd hooks run pre-commit\n\npre-push:\n  commands:\n{PRE_PUSH_BLOCK}\n    bd:\n      run: bd hooks run pre-push\n"
     );
     std::fs::write(temp.path().join("lefthook.yml"), &lefthook).unwrap();
     let (gitignore, _) = ensure_gitignore_tool_dirs(Some(""));
@@ -234,7 +234,24 @@ fn wired_git_repo() -> tempfile::TempDir {
         "<!-- WAI:START -->\n<!-- WAI:END -->\n<!-- OPENSPEC:START -->\n<!-- OPENSPEC:END -->\n<!-- BEGIN BEADS INTEGRATION -->\n<!-- END BEADS INTEGRATION -->\n",
     )
     .unwrap();
-    std::fs::write(temp.path().join("Cargo.toml"), "[package]\nname = \"x\"\n").unwrap();
+    std::fs::write(
+        temp.path().join("Cargo.toml"),
+        "[package]\nname = \"x\"\nlicense = \"MIT\"\n",
+    )
+    .unwrap();
+    // Fleet-standard files (DDL-rod): LICENSE matching the Cargo.toml
+    // declaration, a gated fmt-check recipe, and a CHANGELOG.
+    std::fs::write(
+        temp.path().join("LICENSE"),
+        "MIT License\n\nPermission is hereby granted, free of charge...\n",
+    )
+    .unwrap();
+    std::fs::write(temp.path().join("CHANGELOG.md"), "# Changelog\n").unwrap();
+    std::fs::write(
+        temp.path().join("justfile"),
+        "fmt:\n    cargo fmt\n\nfmt-check:\n    cargo fmt -- --check\n",
+    )
+    .unwrap();
     std::fs::write(
         temp.path().join("versions.ddl.toml"),
         "[tools]\nwai = \"latest\"\n",
@@ -299,6 +316,10 @@ fn test_doctor_repo_checks_pass_in_fully_wired_repo() {
         "ddl.repo.blocks",
         "ddl.repo.gitignore",
         "ddl.repo.pins",
+        "ddl.repo.license",
+        "ddl.repo.fmt",
+        "ddl.repo.bd-hooks",
+        "ddl.repo.changelog",
     ] {
         assert!(
             checks.contains(&expected),
