@@ -381,6 +381,15 @@ fn cmd_init(
 
     ddl_dir.add_gitignore_entries(args.yes)?;
 
+    // Canonical per-repo setup entry point (DDL-fw7): write ddl's DDL
+    // managed block into AGENTS.md, reconcile pre-existing installs into
+    // the manifest, scaffold versions.ddl.toml from the fleet pin.
+    // Idempotent on re-run; failures are advisory, never fatal.
+    dulce_de_leche::installer::init_repo_setup(
+        &mut ddl_dir,
+        args.verbose_quiet.raw_count() >= 1 && !args.is_json(),
+    );
+
     // Gates wiring: lefthook managed blocks, tool-data .gitignore entries,
     // beads no-db stamping. Idempotent on re-run. File-level ops only —
     // tool inits above handle the binary side.

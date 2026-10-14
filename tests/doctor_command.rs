@@ -249,7 +249,7 @@ fn wired_git_repo() -> tempfile::TempDir {
     std::fs::write(temp.path().join(".gitignore"), &gitignore).unwrap();
     std::fs::write(
         temp.path().join("AGENTS.md"),
-        "<!-- WAI:START -->\n<!-- WAI:END -->\n<!-- OPENSPEC:START -->\n<!-- OPENSPEC:END -->\n<!-- BEGIN BEADS INTEGRATION -->\n<!-- END BEADS INTEGRATION -->\n",
+        "<!-- WAI:START -->\n<!-- WAI:END -->\n<!-- OPENSPEC:START -->\n<!-- OPENSPEC:END -->\n<!-- BEGIN BEADS INTEGRATION -->\n<!-- END BEADS INTEGRATION -->\n<!-- DDL:START -->\n<!-- DDL:END -->\n",
     )
     .unwrap();
     std::fs::write(

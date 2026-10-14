@@ -78,6 +78,7 @@ fn verbose_print(verbose: bool, msg: &str) {
     }
 }
 
+use crate::dot_ddl::DdlDir;
 use crate::error::{DdlError, Result};
 use crate::manifest::{InstallLock, LockEntry, Manifest, ToolEntry};
 use crate::platform::{MANAGED_TOOLS, Os, PackageManager, Platform, Tool};
@@ -1810,6 +1811,124 @@ pub fn resume_summary(failures: &[InitFailure]) -> Vec<String> {
             )
         })
         .collect()
+}
+
+// ── Init-side repo setup (DDL-fw7) ────────────────────────────────────
+
+/// Make `ddl init` the canonical per-repo setup entry point.
+///
+/// Three idempotent pieces the doctor used to only *hint* at (DDL-6zn.5):
+///
+/// 1. write ddl's own managed block into AGENTS.md (`agents_block()`,
+///    genesis::aix provenance-aware format) — agents_hand-wiring what init
+///    should wire was the dominant setup friction;
+/// 2. reconcile pre-existing tool installs into `.ddl/manifest.json` —
+///    doctor flagged "not tracked in manifest" with no fix;
+/// 3. scaffold `versions.ddl.toml` from the fleet pin
+///    ([`crate::manifest::FLEET_VERSIONS_PIN`]) when absent — doctor
+///    hinted "CI installs are unpinned" but never created it.
+///
+/// The repo root is the enclosing git root (the `ddl.repo.*` doctor checks
+/// key off the same boundary); a plain directory without git falls back to
+/// the cwd, matching `DdlDir::find_or_create`. Failures are reported but
+/// never abort the whole init: they are advisory setup gaps, not install
+/// failures.
+pub fn init_repo_setup(ddl_dir: &mut DdlDir, verbose: bool) {
+    let repo_root = repo_root();
+
+    match ensure_agents_block(&repo_root) {
+        Ok(true) => eprintln!("  ✓ AGENTS.md: DDL managed block written"),
+        Ok(false) => verbose_print(verbose, "AGENTS.md: DDL managed block already present"),
+        Err(e) => eprintln!("  ⚠ could not write DDL managed block to AGENTS.md: {e}"),
+    }
+
+    match scaffold_versions_pin(&repo_root) {
+        Ok(true) => eprintln!("  ✓ versions.ddl.toml: scaffolded from the fleet pin"),
+        Ok(false) => verbose_print(verbose, "versions.ddl.toml already present"),
+        Err(e) => eprintln!("  ⚠ could not scaffold versions.ddl.toml: {e}"),
+    }
+
+    match reconcile_existing_installs(ddl_dir) {
+        Ok(reconciled) if reconciled.is_empty() => {
+            verbose_print(verbose, "manifest: no pre-existing installs to reconcile")
+        }
+        Ok(reconciled) => eprintln!(
+            "  ✓ manifest: reconciled pre-existing installs ({})",
+            reconciled.join(", ")
+        ),
+        Err(e) => eprintln!("  ⚠ could not reconcile manifest: {e}"),
+    }
+}
+
+/// The repo root for init's repo-scoped setup files: the enclosing git
+/// root, or the cwd when there is none (same fallback semantics as
+/// `DdlDir::find_or_create`).
+fn repo_root() -> PathBuf {
+    crate::diagnostics::find_git_root(Path::new(".")).unwrap_or_else(|| PathBuf::from("."))
+}
+
+/// Write ddl's own managed block into AGENTS.md at `repo_root` if absent.
+/// Returns `Ok(false)` when the block is already present (idempotent);
+/// creates the file when missing. Returns `Ok(true)` when written.
+pub fn ensure_agents_block(repo_root: &Path) -> Result<bool> {
+    let path = repo_root.join("AGENTS.md");
+    let existing = path
+        .exists()
+        .then(|| std::fs::read_to_string(&path))
+        .transpose()
+        .map_err(DdlError::Io)?;
+    if existing
+        .as_deref()
+        .is_some_and(|text| text.contains(crate::DDL_AGENTS_MARKER))
+    {
+        return Ok(false);
+    }
+    let block = crate::agents_block();
+    let mut text = existing.unwrap_or_default();
+    if !text.is_empty() && !text.ends_with('\n') {
+        text.push('\n');
+    }
+    text.push_str(&block);
+    text.push('\n');
+    std::fs::write(&path, text).map_err(DdlError::Io)?;
+    Ok(true)
+}
+
+/// Scaffold `versions.ddl.toml` at `repo_root` from the fleet pin when the
+/// repo has none. Returns `Ok(false)` when a pins file already exists —
+/// a repo's committed pins are its own source of truth and are never
+/// overwritten by init.
+pub fn scaffold_versions_pin(repo_root: &Path) -> Result<bool> {
+    let path = repo_root.join("versions.ddl.toml");
+    if path.exists() {
+        return Ok(false);
+    }
+    std::fs::write(&path, crate::manifest::FLEET_VERSIONS_PIN).map_err(DdlError::Io)?;
+    Ok(true)
+}
+
+/// Reconcile pre-existing tool installs into the per-repo manifest.
+///
+/// For every managed tool that is installed (on PATH) but not tracked in
+/// `.ddl/manifest.json`, record an `installed` entry with the probed
+/// version and a reconciled source. Returns the reconciled tool names.
+/// This is inventory bookkeeping only — it never touches the install or
+/// verification protocol (DDL-yts/5bs/uu8 territory).
+pub fn reconcile_existing_installs(ddl_dir: &mut DdlDir) -> Result<Vec<String>> {
+    let mut reconciled = Vec::new();
+    for tool in MANAGED_TOOLS {
+        if !is_tool_installed(tool.name) || ddl_dir.manifest.is_installed(tool.name) {
+            continue;
+        }
+        let version = get_installed_version(tool.name).unwrap_or_else(|| "unknown".to_string());
+        ddl_dir.record_installed(
+            tool.name,
+            &version,
+            "pre-existing install (reconciled by ddl init)",
+        )?;
+        reconciled.push(tool.name.to_string());
+    }
+    Ok(reconciled)
 }
 
 /// Run a tool's init command after installation.

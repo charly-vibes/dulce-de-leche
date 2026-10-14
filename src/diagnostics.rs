@@ -399,7 +399,11 @@ pub fn status_summary(sections: &[StatusSection]) -> String {
 // nothing (repo conformance is meaningless there).
 
 /// Walk up from `start` looking for a `.git` entry — the repo root.
-fn find_git_root(start: &Path) -> Option<std::path::PathBuf> {
+///
+/// `pub(crate)` because the DDL-fw7 init-side repo setup writes to the
+/// same boundary the `ddl.repo.*` doctor checks key off — writer and
+/// checker must agree on what "the repo" is.
+pub(crate) fn find_git_root(start: &Path) -> Option<std::path::PathBuf> {
     // Canonicalize first: `Path::new(".").parent()` is `Some("")`, which
     // would terminate the walk at the cwd instead of ascending.
     let mut dir = Some(std::fs::canonicalize(start).unwrap_or_else(|_| start.to_path_buf()));
@@ -413,8 +417,10 @@ fn find_git_root(start: &Path) -> Option<std::path::PathBuf> {
 }
 
 /// Managed blocks expected in the repo's AGENTS.md (the "this repo is
-/// agent-instrumented" definition): wai, openspec, beads.
+/// agent-instrumented" definition): ddl's own block (DDL-fw7 — `ddl init`
+/// writes it), wai, openspec, beads.
 const AGENT_BLOCKS: &[(&str, &str)] = &[
+    (crate::DDL_AGENTS_MARKER, "ddl"),
     ("<!-- WAI:START -->", "wai"),
     ("OPENSPEC:START", "openspec"),
     ("BEGIN BEADS INTEGRATION", "beads"),
