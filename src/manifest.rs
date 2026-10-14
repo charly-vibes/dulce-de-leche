@@ -23,6 +23,16 @@ use std::path::Path;
 
 use crate::error::{DdlError, Result};
 
+/// The fleet-global version pins file, embedded from ddl's own
+/// `versions.ddl.toml` at build time (DDL-fw7).
+///
+/// Rationale: docs/standardization.md §pins makes ddl's own pins the
+/// canonical fleet source — per-repo CI installs are pinned to the same
+/// versions ddl itself dogfoods. `ddl init` scaffolds a repo's
+/// `versions.ddl.toml` from this constant when the repo has none; the
+/// repo then owns (and deliberately updates) its copy.
+pub const FLEET_VERSIONS_PIN: &str = include_str!("../versions.ddl.toml");
+
 /// The manifest file tracking installed tools and their versions.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Manifest {

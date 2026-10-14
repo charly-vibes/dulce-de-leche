@@ -338,9 +338,19 @@ fn gates_flag_still_works_alongside_cascade() {
 #[test]
 fn hanging_init_child_killed_and_budget_identified() {
     let (mut cmd, temp) = ddl_cmd();
-    stub_tools(&mut cmd, &temp, &[("bd", "sleep 60")]);
+    // "testaruda" (any managed tool works): "bd" is special-cased with a
+    // 300s heavyweight budget (embedded Dolt bootstrap), so the budget
+    // mechanism test needs a tool without an init-specific override.
+    stub_tools(&mut cmd, &temp, &[("testaruda", "sleep 60")]);
     cmd.env("DDL_CHILD_DEADLINE_SECS", "1");
-    cmd.args(["init", "--yes", "--tools", "bd", "--no-install", "--human"]);
+    cmd.args([
+        "init",
+        "--yes",
+        "--tools",
+        "testaruda",
+        "--no-install",
+        "--human",
+    ]);
     let start = Instant::now();
     // Human mode: the resume summary (naming the exhausted budget) is on
     // stdout; the non-zero exit status identifies the budget exhaustion.
@@ -357,9 +367,12 @@ fn hanging_init_child_killed_and_budget_identified() {
 #[test]
 fn hanging_init_child_budget_identified_in_json() {
     let (mut cmd, temp) = ddl_cmd();
-    stub_tools(&mut cmd, &temp, &[("bd", "sleep 60")]);
+    // "testaruda" (any managed tool works): "bd" is special-cased with a
+    // 300s heavyweight budget (embedded Dolt bootstrap), so the budget
+    // mechanism test needs a tool without an init-specific override.
+    stub_tools(&mut cmd, &temp, &[("testaruda", "sleep 60")]);
     cmd.env("DDL_CHILD_DEADLINE_SECS", "1");
-    cmd.args(["init", "--yes", "--tools", "bd", "--no-install"]);
+    cmd.args(["init", "--yes", "--tools", "testaruda", "--no-install"]);
     // Piped stdout auto-selects JSON mode; the error envelope must name the
     // exhausted budget.
     let start = Instant::now();
