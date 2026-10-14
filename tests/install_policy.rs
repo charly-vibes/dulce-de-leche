@@ -404,3 +404,297 @@ fn authorization_does_not_rescue_a_published_mismatch() {
         .expect_err("explicit authorization must not bypass a published mismatch");
     assert!(matches!(err, DdlError::ChecksumMismatch { .. }));
 }
+
+// =====================================================================
+// DDL-hsn (SEC-03 / CORR-002): networked-mock END-TO-END regression for
+// the checksum-mismatch abort.
+//
+// Fixture separation (CO-MOD): everything below is self-contained — a
+// std-only HTTP mock plus two subprocess tests driving the REAL `ddl`
+// binary against it. No shared state with the unit-policy tests above.
+//
+// Must criteria exercised here (against a local mock, no new deps):
+//   * mismatched download → nonzero exit, destination untouched,
+//     zero cargo fallback;
+//   * the valid counterpart (same shape, honest digest) installs
+//     verified.
+// =====================================================================
+mod checksum_mismatch_e2e {
+    use assert_cmd::Command;
+    use flate2::Compression;
+    use flate2::write::GzEncoder;
+    use sha2::{Digest, Sha256};
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::mpsc;
+    use std::thread;
+    use std::time::Duration;
+    use tempfile::TempDir;
+
+    const TOOL: &str = "wai";
+    const REPO: &str = "charly-vibes/wai";
+    const TAG: &str = "v9.9.9";
+    const ARCHIVE_NAME: &str = "wai_9.9.9_linux_amd64.tar.gz";
+
+    fn sha256_hex(bytes: &[u8]) -> String {
+        let digest = Sha256::digest(bytes);
+        let mut hex = String::with_capacity(64);
+        for byte in digest {
+            hex.push_str(&format!("{byte:02x}"));
+        }
+        hex
+    }
+
+    /// A minimal tar.gz whose member is named exactly like the tool, so
+    /// `extract_tar_gz` finds it and the installer writes it to `~/.ddl/bin`.
+    fn fake_archive() -> Vec<u8> {
+        let payload = b"#!/bin/sh\necho ddl-hsn-fake-wai\n";
+        let mut builder = tar::Builder::new(Vec::new());
+        let mut header = tar::Header::new_gnu();
+        header.set_size(payload.len() as u64);
+        header.set_mode(0o755);
+        header.set_cksum();
+        builder
+            .append_data(&mut header, TOOL, &payload[..])
+            .unwrap();
+        builder.finish().unwrap();
+        let tar_bytes = builder.into_inner().unwrap();
+        let mut gz = GzEncoder::new(Vec::new(), Compression::default());
+        gz.write_all(&tar_bytes).unwrap();
+        gz.finish().unwrap()
+    }
+
+    /// DDL-wof provenance manifest naming ddl's own trust roots, so the
+    /// valid counterpart passes identity checks and only the digest can
+    /// be the discriminator between the two scenarios.
+    fn provenance_json(digest: &str) -> String {
+        format!(
+            "{{\"repository\":\"{REPO}\",\"workflow\":\"Release\",\"tag\":\"{TAG}\",\"artifacts\":{{\"{ARCHIVE_NAME}\":\"{digest}\"}}}}"
+        )
+    }
+
+    /// Minimal std-only HTTP/1.1 mock serving the GitHub-release surface
+    /// (latest-release lookup, asset, checksums.txt, provenance.json).
+    /// Every served request path is sent over `requests` for assertions.
+    fn spawn_mock(
+        checksums: String,
+        provenance: String,
+        archive: Vec<u8>,
+    ) -> (String, mpsc::Receiver<String>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let (tx, rx) = mpsc::channel();
+        thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { break };
+                let mut buf = [0u8; 8192];
+                let mut data = Vec::new();
+                loop {
+                    match stream.read(&mut buf) {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => {
+                            data.extend_from_slice(&buf[..n]);
+                            if data.windows(4).any(|w| w == b"\r\n\r\n") {
+                                break;
+                            }
+                        }
+                    }
+                }
+                let first_line = data
+                    .split(|b| *b == b'\n')
+                    .next()
+                    .map(|l| String::from_utf8_lossy(l).into_owned())
+                    .unwrap_or_default();
+                let path = first_line
+                    .split_whitespace()
+                    .nth(1)
+                    .unwrap_or("")
+                    .to_string();
+                let _ = tx.send(path.clone());
+                let stripped = path.split('?').next().unwrap_or("");
+                let (ctype, body): (&str, Vec<u8>) = if stripped.contains("/releases/latest") {
+                    (
+                        "application/json",
+                        format!("{{\"tag_name\":\"{TAG}\"}}").into_bytes(),
+                    )
+                } else if stripped.ends_with("/checksums.txt") {
+                    ("text/plain", checksums.clone().into_bytes())
+                } else if stripped.ends_with("/provenance.json") {
+                    ("application/json", provenance.clone().into_bytes())
+                } else {
+                    ("application/gzip", archive.clone())
+                };
+                let head = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: {ctype}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let _ = stream.write_all(head.as_bytes());
+                let _ = stream.write_all(&body);
+                let _ = stream.flush();
+            }
+        });
+        (format!("http://127.0.0.1:{port}"), rx)
+    }
+
+    /// Run the real `ddl` binary in a hermetic sandbox: temp HOME (so the
+    /// install destination is isolated), temp CWD (so the .ddl manifest
+    /// dir is isolated), a stripped PATH (no preinstalled managed tools,
+    /// and structurally zero cargo available), and proxy vars removed so
+    /// the mock endpoint is always reached directly.
+    fn ddl_cmd(mock_base: &str, home: &TempDir, cwd: &TempDir) -> Command {
+        let mut cmd = Command::cargo_bin("ddl").unwrap();
+        cmd.arg("install")
+            .arg(TOOL)
+            .arg("--yes")
+            .env("DDL_TEST_RELEASE_BASE_URL", mock_base)
+            .env("HOME", home.path())
+            .env("PATH", "/usr/bin:/bin")
+            .env_remove("HTTP_PROXY")
+            .env_remove("http_proxy")
+            .env_remove("HTTPS_PROXY")
+            .env_remove("https_proxy")
+            .env_remove("ALL_PROXY")
+            .env_remove("all_proxy")
+            .current_dir(cwd.path())
+            .timeout(Duration::from_secs(30));
+        cmd
+    }
+
+    /// Drain every request the mock served during the child's run.
+    fn served_requests(rx: &mpsc::Receiver<String>) -> Vec<String> {
+        let mut served = Vec::new();
+        while let Ok(path) = rx.try_recv() {
+            served.push(path);
+        }
+        served
+    }
+
+    fn dest_path(home: &TempDir) -> std::path::PathBuf {
+        home.path().join(".ddl").join("bin").join(TOOL)
+    }
+
+    /// SEC-03: a mismatched download must abort the install end-to-end —
+    /// nonzero exit, destination never written, and NO cargo fallback —
+    /// when the release's own checksums.txt disagrees with the asset.
+    #[test]
+    fn mismatched_download_aborts_without_installing() {
+        if !matches!(
+            (std::env::consts::OS, std::env::consts::ARCH),
+            ("linux", "x86_64")
+        ) {
+            return; // fixture archive is built for the linux_amd64 target
+        }
+        let archive = fake_archive();
+        let honest_digest = sha256_hex(&archive);
+        let attacker_digest = "0".repeat(64); // well-formed, matches nothing
+        let (base, rx) = spawn_mock(
+            format!("{attacker_digest}  {ARCHIVE_NAME}\n"),
+            provenance_json(&honest_digest),
+            archive.clone(),
+        );
+
+        let home = TempDir::new().unwrap();
+        let cwd = TempDir::new().unwrap();
+        let output = ddl_cmd(&base, &home, &cwd).output().unwrap();
+        let combined = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        assert!(
+            !output.status.success(),
+            "mismatched download must exit nonzero; output:\n{combined}"
+        );
+        assert!(
+            combined.contains(&format!("Checksum verification failed for {TOOL}")),
+            "abort must be reported as a checksum rejection; output:\n{combined}"
+        );
+        assert!(
+            !dest_path(&home).exists(),
+            "destination must be untouched when the download is rejected"
+        );
+        assert!(
+            !combined.contains("cargo install"),
+            "checksum mismatch must not fall back to cargo; output:\n{combined}"
+        );
+
+        // The mock must have actually served the whole lookup chain —
+        // this is what distinguishes a routed mock run from an accident.
+        let served = served_requests(&rx);
+        assert!(
+            served
+                .iter()
+                .any(|p| p.contains(&format!("/repos/{REPO}/releases/latest"))),
+            "mock never saw the release lookup; requests: {served:?}"
+        );
+        assert!(
+            served.iter().any(|p| p.ends_with("/checksums.txt")),
+            "mock never saw the checksums.txt lookup; requests: {served:?}"
+        );
+        assert!(
+            served.iter().any(|p| p.ends_with(ARCHIVE_NAME)),
+            "mock never served the asset; requests: {served:?}"
+        );
+    }
+
+    /// The valid counterpart of the mismatch scenario: same shape, honest
+    /// digest in checksums.txt and provenance.json → install succeeds,
+    /// destination holds the extracted binary, and the run reports the
+    /// sha256-verified status.
+    #[test]
+    fn matching_download_installs_verified() {
+        if !matches!(
+            (std::env::consts::OS, std::env::consts::ARCH),
+            ("linux", "x86_64")
+        ) {
+            return; // fixture archive is built for the linux_amd64 target
+        }
+        let archive = fake_archive();
+        let digest = sha256_hex(&archive);
+        let (base, rx) = spawn_mock(
+            format!("{digest}  {ARCHIVE_NAME}\n"),
+            provenance_json(&digest),
+            archive.clone(),
+        );
+
+        let home = TempDir::new().unwrap();
+        let cwd = TempDir::new().unwrap();
+        let output = ddl_cmd(&base, &home, &cwd).output().unwrap();
+        let combined = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        assert!(
+            output.status.success(),
+            "valid counterpart must install successfully; output:\n{combined}"
+        );
+        assert!(
+            combined.contains("sha256 verified"),
+            "success must report the sha256-verified status; output:\n{combined}"
+        );
+        let dest = dest_path(&home);
+        assert!(
+            dest.exists(),
+            "installed binary must exist at the destination"
+        );
+        let installed = std::fs::read(&dest).unwrap();
+        assert_eq!(
+            installed,
+            b"#!/bin/sh\necho ddl-hsn-fake-wai\n".to_vec(),
+            "destination content must be the archive member, not the archive"
+        );
+
+        let served = served_requests(&rx);
+        assert!(
+            served.iter().any(|p| p.ends_with("/checksums.txt")),
+            "valid install must consult checksums.txt; requests: {served:?}"
+        );
+        assert!(
+            served.iter().any(|p| p.ends_with("/provenance.json")),
+            "valid install must consult provenance.json (DDL-wof); requests: {served:?}"
+        );
+    }
+}
