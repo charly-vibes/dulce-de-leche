@@ -281,3 +281,48 @@ from `versions.ddl.toml` more than once (mechanize the mirror then), or
 - Every devenv environment must verify honestly: `devenv shell -- just gates`
   (or the repo's QA entry point) fails loudly on pin mismatch instead of
   silently succeeding on nixpkgs versions (see gently's Graph::Easy comment).
+
+## 9. Fleet-standard compliance checks (DDL-rod)
+
+> **Status:** DECIDED (2026-10-13, bd `DDL-rod`). The gently compliance audit
+> surfaced four mechanically detectable fleet gaps; they are now doctor
+> checks instead of hand-assembled audit steps. Every check below is
+> implemented as a `ddl.repo.*` `ddl doctor` check in
+> `src/diagnostics.rs` (`register_repo_checks`) and pinned by
+> `tests/fleet_compliance.rs`.
+
+Machine-readable checklist — one row per gap class, with the exact
+mechanical predicate so member-repo audits are scriptable:
+
+| Check id | Gap class (from the gently audit) | Mechanical predicate | Fix |
+|---|---|---|---|
+| `ddl.repo.license` | no LICENSE at root; published crate effectively license-less | `LICENSE` (or `LICENSE.md`/`LICENSE.txt`) exists at repo root; if `Cargo.toml` exists it declares `license = "…"` and the LICENSE text matches the declared SPDX id (MIT/Apache-2.0/GPL-2.0/GPL-3.0 recognized; `OR`/`WITH` expressions and unknown ids are accepted as unverifiable) | add/reconcile LICENSE with `Cargo.toml` |
+| `ddl.repo.fmt` | no rustfmt anywhere: repo silently opted out of the fmt gate | Rust repo's `justfile` contains a `fmt-check` recipe | add `fmt`/`fmt-check` recipes (+ CI rustfmt component + lefthook fmt gate) |
+| `ddl.repo.bd-hooks` | lefthook replaced the bd shim without chaining it (the DDL-0tp failure mode) | `lefthook.yml` contains `bd hooks run pre-commit` **and** `bd hooks run pre-push` | `ddl init --gates` (block wiring) + chain `bd hooks run` |
+| `ddl.repo.changelog` | no CHANGELOG.md | `CHANGELOG.md` exists at repo root | add CHANGELOG.md (Keep a Changelog format) |
+
+Run the whole set anywhere: `ddl doctor` (human) or `ddl doctor --json`
+(envelope contract: `tests/envelope_contract.rs`). Checks only fire inside a
+git repository; the presence of `ddl.repo.*` items in a JSON report is the
+signal, absent items mean "not in a repo".
+
+### 9.1 Upstream-license-compliance (recorded, not implemented)
+
+The LICENSE-matches-Cargo.toml predicate would NOT have caught gently's real
+failure: a self-declared Rust port of an upstream that is GPL-2.0-or-later
+must itself ship GPL-2.0-or-later — a declared `MIT` was a copyright issue,
+not a formatting one. Detecting that class mechanically needs upstream
+license metadata per repo (e.g. a registry field like `upstream =
+"Graph::Easy 0.69 (gpl)"` + an SPDX-compatibility judgment). That judgment is
+not mechanical without a curated mapping, so it is recorded here as a
+follow-up idea (candidate: a `ddl doctor` check keyed off registry metadata,
+or a fleet-standard README/manifest convention declaring the port's upstream
+and inherited license) rather than a silently-wrong automatic check.
+
+### 9.2 Known gap in ddl's own gate generator
+
+`ddl init --gates` inserts managed blocks (PRE_COMMIT_BLOCK/PRE_PUSH_BLOCK)
+that do **not** chain `bd hooks run` — repos wired purely by `ddl init
+--gates` fail `ddl.repo.bd-hooks`. The chain currently lives only in
+hand-edited lefthooks (ddl's own repo included). Follow-up: emit the chain
+from the managed blocks so the fix hint and the generator agree.
