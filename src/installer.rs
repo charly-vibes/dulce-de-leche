@@ -1188,6 +1188,19 @@ pub const MAX_CHILD_OUTPUT_BYTES: usize = 4 * 1024 * 1024;
 /// hatch (any value outside the accepted range falls back to the default).
 pub const DEFAULT_CHILD_DEADLINE_SECS: u64 = 30;
 
+/// Budget for a single tool's init child. Most tool inits are quick; `bd`
+/// bootstrap-creates an embedded Dolt database on first run, which can take
+/// well over the default budget on a loaded CI runner — killing it mid-init
+/// would leave the store half-created and fail every `ddl init` that touches
+/// bd (observed 2026-10-14: CI runner killed bd init at the default 30s).
+fn init_deadline_for(tool_name: &str) -> std::time::Duration {
+    if tool_name == "bd" {
+        std::time::Duration::from_secs(300)
+    } else {
+        child_deadline()
+    }
+}
+
 /// Resolve the configured child runtime deadline (DDL-1z1).
 pub fn child_deadline() -> std::time::Duration {
     use std::time::Duration;
@@ -1973,7 +1986,7 @@ pub fn run_tool_init(tool: &Tool, verbose: bool, non_interactive: bool) -> Resul
     // budgets — a hung or flooding init child is killed (with its process
     // group) and the budget is named in the failure, which feeds the resume
     // summary and JSON diagnostics.
-    let output = run_child_captured(&mut command, child_deadline())?;
+    let output = run_child_captured(&mut command, init_deadline_for(tool.name))?;
 
     if output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);
