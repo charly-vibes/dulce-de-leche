@@ -160,6 +160,11 @@ Full documentation is available at [charly-vibes.github.io/dulce-de-leche](https
 - [Architecture](https://charly-vibes.github.io/dulce-de-leche/architecture.html)
 - [Development](https://charly-vibes.github.io/dulce-de-leche/development.html)
 
+## Documentation provenance
+
+Rendered docs are generated artifacts; the repository sources are
+authoritative — edit the repo sources, not the rendered output.
+
 ## Status
 
 **v0.8.0** — orchestrator shipped and published (crates.io, GitHub
