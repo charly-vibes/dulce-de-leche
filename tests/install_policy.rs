@@ -464,12 +464,16 @@ mod checksum_mismatch_e2e {
         gz.finish().unwrap()
     }
 
-    /// DDL-wof provenance manifest naming ddl's own trust roots, so the
-    /// valid counterpart passes identity checks and only the digest can
-    /// be the discriminator between the two scenarios.
+    /// DDL-wof provenance manifest naming ddl's own trust roots (imported
+    /// from the lib — never re-hardcoded here), so the valid counterpart
+    /// passes identity checks and only the digest can be the discriminator
+    /// between the two scenarios.
     fn provenance_json(digest: &str) -> String {
+        use dulce_de_leche::installer::{
+            EXPECTED_PROVENANCE_REPOSITORY, EXPECTED_PROVENANCE_WORKFLOW,
+        };
         format!(
-            "{{\"repository\":\"{REPO}\",\"workflow\":\"Release\",\"tag\":\"{TAG}\",\"artifacts\":{{\"{ARCHIVE_NAME}\":\"{digest}\"}}}}"
+            "{{\"repository\":\"{EXPECTED_PROVENANCE_REPOSITORY}\",\"workflow\":\"{EXPECTED_PROVENANCE_WORKFLOW}\",\"tag\":\"{TAG}\",\"artifacts\":{{\"{ARCHIVE_NAME}\":\"{digest}\"}}}}"
         )
     }
 

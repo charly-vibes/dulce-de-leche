@@ -681,6 +681,51 @@ fn execute_upgrade(
     }
 }
 
+/// Test-only release endpoint override used by networked integration tests
+/// (DDL-hsn, SEC-03).
+///
+/// Purpose: lets `tests/install_policy.rs::checksum_mismatch_e2e` point the
+/// whole binary-download chain (release lookup + assets + checksum +
+/// provenance metadata) at a local HTTP mock so the checksum-mismatch abort
+/// can be exercised end-to-end against a server the test controls.
+///
+/// Responsibilities: reads `DDL_TEST_RELEASE_BASE_URL` and returns it only
+/// when BOTH guards hold — (a) the binary was built with debug assertions
+/// (i.e. a `cargo test`/dev build; release builds return `None` and always
+/// talk to GitHub), and (b) the value targets loopback (`http://127.0.0.1`,
+/// `http://localhost`, `http://[::1]`). Any other build or value yields
+/// `None`.
+///
+/// Rationale: an unconditional download-endpoint override would be a
+/// supply-chain hazard (SEC-03) — release artifacts must never honor a
+/// redirect variable — while tests need a hermetic seam without new
+/// dependencies or new public API surface.
+fn test_release_base_url() -> Option<String> {
+    if !cfg!(debug_assertions) {
+        return None;
+    }
+    let raw = std::env::var("DDL_TEST_RELEASE_BASE_URL")
+        .ok()
+        .filter(|v| !v.trim().is_empty())?;
+    (raw.starts_with("http://127.0.0.1")
+        || raw.starts_with("http://localhost")
+        || raw.starts_with("http://[::1]"))
+    .then_some(raw)
+}
+
+/// Base URL for the GitHub REST API (`/repos/.../releases/latest`),
+/// overridable only by [`test_release_base_url`].
+fn release_api_base() -> String {
+    test_release_base_url().unwrap_or_else(|| "https://api.github.com".to_string())
+}
+
+/// Base URL for GitHub release asset downloads
+/// (`<base>/<repo>/releases/download/<tag>/<asset>`), overridable only by
+/// [`test_release_base_url`].
+fn release_download_base() -> String {
+    test_release_base_url().unwrap_or_else(|| "https://github.com".to_string())
+}
+
 /// Install a tool via binary download from GitHub releases.
 /// Returns the download's verification status (DDL-yts) on success.
 fn install_binary(tool: &Tool, platform: &Platform, verbose: bool) -> Result<VerificationStatus> {
@@ -704,7 +749,7 @@ fn install_binary(tool: &Tool, platform: &Platform, verbose: bool) -> Result<Ver
 
     let client = github_client()?;
 
-    let releases_url = format!("https://api.github.com/repos/{}/releases/latest", tool.repo);
+    let releases_url = format!("{}/repos/{}/releases/latest", release_api_base(), tool.repo);
     let resp = client
         .get(&releases_url)
         .send()
@@ -747,8 +792,12 @@ fn install_binary(tool: &Tool, platform: &Platform, verbose: bool) -> Result<Ver
     let asset_prefix = tool.binary_asset_prefix();
     let archive_name = format!("{asset_prefix}_{version}_{target}");
     let download_url = format!(
-        "https://github.com/{}/releases/download/{}/{}.{}",
-        tool.repo, tag, archive_name, ext
+        "{}/{}/releases/download/{}/{}.{}",
+        release_download_base(),
+        tool.repo,
+        tag,
+        archive_name,
+        ext
     );
 
     verbose_print(
