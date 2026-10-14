@@ -70,6 +70,11 @@ jobs:
           wai status >/dev/null
           openspec validate --all >/dev/null
           pretender check --mode guidance >/dev/null
+      # DDL-43g: smoke our own live Pages URL. A 404'd book must fail THIS
+      # repo's CI immediately, not wait for the next hub conformance run
+      # (the turu failure mode). Mirrored in every Pages-deploying sibling.
+      - name: Smoke live Pages URL
+        run: curl -fsS --max-time 10 --retry 2 https://charly-vibes.github.io/dulce-de-leche/ >/dev/null
       # Run the exact same command as local development
       - name: Run CI pipeline
         run: just ci
