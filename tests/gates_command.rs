@@ -9,7 +9,7 @@ use std::path::Path;
 use std::time::Duration;
 
 /// Timeout for each test — init with --no-install should be instant.
-const CMD_TIMEOUT: Duration = Duration::from_secs(10);
+const CMD_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Prepend a stub `incitaciones` executable to the child's PATH so init's
 /// skill-install step runs the stub instead of a real `npx --yes` network

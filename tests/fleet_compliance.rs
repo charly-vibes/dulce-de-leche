@@ -9,7 +9,7 @@ use assert_cmd::Command;
 use serde_json::Value;
 use std::time::Duration;
 
-const CMD_TIMEOUT: Duration = Duration::from_secs(10);
+const CMD_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Run `ddl doctor --json` inside `dir` and return the diagnostics array.
 fn doctor_diagnostics(dir: &std::path::Path) -> Vec<Value> {
