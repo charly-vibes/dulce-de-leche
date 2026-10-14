@@ -652,6 +652,8 @@ fn s7_ecosystem_landing_cross_linked() {
             summary.contains(ECOSYSTEM_LANDING_URL)
                 || read(&dir, "docs/src/index.md")
                     .is_some_and(|idx| idx.contains(ECOSYSTEM_LANDING_URL))
+                || read(&dir, "docs/src/introduction.md")
+                    .is_some_and(|intro| intro.contains(ECOSYSTEM_LANDING_URL))
         };
         assert!(
             linked,
