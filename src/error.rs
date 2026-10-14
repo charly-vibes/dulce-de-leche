@@ -50,6 +50,22 @@ pub enum DdlError {
         url: String,
     },
 
+    // Note: no #[diagnostic(help)] on this variant — same miette derive
+    // mis-lint as NoReleaseBinary; the remedy is spelled out in the message.
+    // DDL-yts (SEC-03): verification must be *available*, not merely attempted.
+    // A release that publishes no usable checksum (missing, malformed, or
+    // transport-failed metadata) cannot be authenticated, so the download is
+    // rejected before any destination mutation. The only escape is the
+    // explicit `DDL_ALLOW_UNVERIFIED_RELEASE=1` authorization.
+    #[error(
+        "Download rejected for {tool}: no usable checksum verification available ({reason}) — {url}. The download was NOT installed. ddl refuses unverified release downloads by default (DDL-yts); retry later, verify the release manually, or explicitly authorize a legacy-unverified install with DDL_ALLOW_UNVERIFIED_RELEASE=1."
+    )]
+    ChecksumUnavailable {
+        tool: String,
+        url: String,
+        reason: String,
+    },
+
     #[error("Prerequisite missing: {0}")]
     #[diagnostic(help("Install the prerequisite and try again"))]
     PrerequisiteMissing(String),

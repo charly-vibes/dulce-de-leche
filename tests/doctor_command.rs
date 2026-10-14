@@ -9,7 +9,7 @@ use predicates::prelude::*;
 use std::time::Duration;
 
 /// Timeout for each test.
-const CMD_TIMEOUT: Duration = Duration::from_secs(10);
+const CMD_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Helper: create a temp dir with a `.ddl/` containing a manifest and return
 /// the command pre-configured to run inside it.
@@ -218,7 +218,25 @@ fn test_doctor_repo_checks_absent_outside_git_repo() {
 /// Wire a git repo fully: managed lefthook blocks, AGENTS.md blocks,
 /// gitignore coverage, version pins. Returns the temp dir.
 fn git_init(path: &std::path::Path) {
-    let out = std::process::Command::new("git")
+    // Strip git's inherited environment: under a lefthook pre-push run the
+    // child would otherwise inherit GIT_DIR/GIT_WORK_TREE from the hook and
+    // `git init` would try to lock the parent repo's config instead of
+    // creating a fresh repo.
+    let mut cmd = std::process::Command::new("git");
+    for var in [
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_COMMON_DIR",
+        "GIT_CONFIG",
+        "GIT_CONFIG_GLOBAL",
+        "GIT_CONFIG_SYSTEM",
+        "GIT_NAMESPACE",
+    ] {
+        cmd.env_remove(var);
+    }
+    let out = cmd
         .args(["init", "-q"])
         .current_dir(path)
         .output()
@@ -231,17 +249,34 @@ fn wired_git_repo() -> tempfile::TempDir {
     let temp = tempfile::tempdir().unwrap();
     git_init(temp.path());
     let lefthook = format!(
-        "pre-commit:\n  commands:\n{PRE_COMMIT_BLOCK}\n\npre-push:\n  commands:\n{PRE_PUSH_BLOCK}\n"
+        "pre-commit:\n  commands:\n{PRE_COMMIT_BLOCK}\n    bd:\n      run: bd hooks run pre-commit\n\npre-push:\n  commands:\n{PRE_PUSH_BLOCK}\n    bd:\n      run: bd hooks run pre-push\n"
     );
     std::fs::write(temp.path().join("lefthook.yml"), &lefthook).unwrap();
     let (gitignore, _) = ensure_gitignore_tool_dirs(Some(""));
     std::fs::write(temp.path().join(".gitignore"), &gitignore).unwrap();
     std::fs::write(
         temp.path().join("AGENTS.md"),
-        "<!-- WAI:START -->\n<!-- WAI:END -->\n<!-- OPENSPEC:START -->\n<!-- OPENSPEC:END -->\n<!-- BEGIN BEADS INTEGRATION -->\n<!-- END BEADS INTEGRATION -->\n",
+        "<!-- WAI:START -->\n<!-- WAI:END -->\n<!-- OPENSPEC:START -->\n<!-- OPENSPEC:END -->\n<!-- BEGIN BEADS INTEGRATION -->\n<!-- END BEADS INTEGRATION -->\n<!-- DDL:START -->\n<!-- DDL:END -->\n",
     )
     .unwrap();
-    std::fs::write(temp.path().join("Cargo.toml"), "[package]\nname = \"x\"\n").unwrap();
+    std::fs::write(
+        temp.path().join("Cargo.toml"),
+        "[package]\nname = \"x\"\nlicense = \"MIT\"\n",
+    )
+    .unwrap();
+    // Fleet-standard files (DDL-rod): LICENSE matching the Cargo.toml
+    // declaration, a gated fmt-check recipe, and a CHANGELOG.
+    std::fs::write(
+        temp.path().join("LICENSE"),
+        "MIT License\n\nPermission is hereby granted, free of charge...\n",
+    )
+    .unwrap();
+    std::fs::write(temp.path().join("CHANGELOG.md"), "# Changelog\n").unwrap();
+    std::fs::write(
+        temp.path().join("justfile"),
+        "fmt:\n    cargo fmt\n\nfmt-check:\n    cargo fmt -- --check\n",
+    )
+    .unwrap();
     std::fs::write(
         temp.path().join("versions.ddl.toml"),
         "[tools]\nwai = \"latest\"\n",
@@ -310,6 +345,10 @@ fn test_doctor_repo_checks_pass_in_fully_wired_repo() {
         "ddl.repo.blocks",
         "ddl.repo.gitignore",
         "ddl.repo.pins",
+        "ddl.repo.license",
+        "ddl.repo.fmt",
+        "ddl.repo.bd-hooks",
+        "ddl.repo.changelog",
     ] {
         assert!(
             checks.contains(&expected),

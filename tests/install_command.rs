@@ -218,6 +218,236 @@ fn test_install_on_path_untracked_records_in_manifest() {
     assert_eq!(entry["installed"], "0.3.0");
 }
 
+// ===================== DDL-sg8: manifest link guards (SEC-05) =====================
+// A repository manifest reachable through a link must never be written
+// through: the link target could live outside the project, and writes would
+// silently land there. These tests stub turu on PATH so `ddl install turu`
+// takes the fast "already on PATH, untracked" path, which exercises manifest
+// writes with no subprocess/network work.
+
+/// Write an empty valid manifest.json into `dir` (creating it).
+fn empty_manifest(dir: &std::path::Path) {
+    std::fs::create_dir_all(dir).unwrap();
+    std::fs::write(
+        dir.join("manifest.json"),
+        serde_json::to_string_pretty(&serde_json::json!({
+            "ddl_version": "0.7.0",
+            "migration_state": "none",
+            "tools": {}
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+}
+
+/// Run `ddl install turu` in `temp` with a turu stub on PATH.
+fn run_install_turu(temp: &tempfile::TempDir) -> assert_cmd::assert::Assert {
+    let bin_dir = temp.path().join("stub-bin");
+    std::fs::create_dir_all(&bin_dir).unwrap();
+    let stub = bin_dir.join("turu");
+    std::fs::write(&stub, "#!/bin/sh\nprintf 'turu 0.3.0'\n").unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let inherited = std::env::var_os("PATH").unwrap_or_default();
+    let mut paths = vec![bin_dir];
+    paths.extend(std::env::split_paths(&inherited));
+
+    let mut cmd = Command::cargo_bin("ddl").unwrap();
+    cmd.current_dir(temp.path());
+    cmd.env("PATH", std::env::join_paths(paths).unwrap());
+    cmd.arg("install").arg("turu");
+    cmd.timeout(CMD_TIMEOUT);
+    cmd.assert()
+}
+
+/// DDL-sg8 (SEC-05): a symlink at the manifest path must never be followed
+/// on write — the target could live outside the project.
+#[test]
+#[cfg(unix)]
+fn test_install_refuses_manifest_symlink_to_outside_project() {
+    let temp = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    empty_manifest(outside.path());
+    let before = std::fs::read_to_string(outside.path().join("manifest.json")).unwrap();
+
+    std::fs::create_dir_all(temp.path().join(".ddl")).unwrap();
+    std::os::unix::fs::symlink(
+        outside.path().join("manifest.json"),
+        temp.path().join(".ddl/manifest.json"),
+    )
+    .unwrap();
+
+    run_install_turu(&temp)
+        .failure()
+        .stderr(predicate::str::contains("symlink"));
+
+    let after = std::fs::read_to_string(outside.path().join("manifest.json")).unwrap();
+    assert_eq!(before, after, "outside manifest must be untouched");
+    assert!(!after.contains("turu"), "write must not escape the project");
+}
+
+/// DDL-sg8 (SEC-05): a dangling manifest symlink must be refused — a write
+/// through it would create the missing target wherever it points.
+#[test]
+#[cfg(unix)]
+fn test_install_refuses_dangling_manifest_symlink() {
+    let temp = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(temp.path().join(".ddl")).unwrap();
+    std::os::unix::fs::symlink(
+        temp.path().join("missing.json"),
+        temp.path().join(".ddl/manifest.json"),
+    )
+    .unwrap();
+
+    run_install_turu(&temp)
+        .failure()
+        .stderr(predicate::str::contains("symlink"));
+
+    assert!(
+        !temp.path().join("missing.json").exists(),
+        "dangling symlink target must not be created"
+    );
+}
+
+/// DDL-sg8 (SEC-05): a `.ddl` directory link pointing outside the project
+/// root must be refused — manifest writes would land in the linked tree.
+#[test]
+#[cfg(unix)]
+fn test_install_refuses_ddl_dir_link_outside_project() {
+    let temp = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    empty_manifest(outside.path());
+    let before = std::fs::read_to_string(outside.path().join("manifest.json")).unwrap();
+
+    std::os::unix::fs::symlink(outside.path(), temp.path().join(".ddl")).unwrap();
+
+    run_install_turu(&temp)
+        .failure()
+        .stderr(predicate::str::contains("outside the project"));
+
+    let after = std::fs::read_to_string(outside.path().join("manifest.json")).unwrap();
+    assert_eq!(before, after, "outside manifest must be untouched");
+}
+
+/// DDL-sg8 (SEC-05): a `.ddl` directory link that stays inside the project
+/// is still allowed — the guard must not break legitimate link layouts.
+#[test]
+#[cfg(unix)]
+fn test_install_allows_ddl_dir_link_within_project() {
+    let temp = tempfile::tempdir().unwrap();
+    empty_manifest(&temp.path().join("internal-ddl"));
+    std::os::unix::fs::symlink(temp.path().join("internal-ddl"), temp.path().join(".ddl")).unwrap();
+
+    run_install_turu(&temp).success();
+
+    let manifest: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(temp.path().join("internal-ddl/manifest.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(manifest["tools"]["turu"]["source"], "skipped");
+}
+
+/// DDL-sg8 (SEC-05): the post-migration legacy link layout must keep working.
+/// `ddl migrate` moves a legacy config (e.g. `.wai/`) into `.ddl/<tool>/` and
+/// leaves a symlink at the legacy location pointing back into `.ddl/`. Those
+/// links live inside the project and are explicitly supported.
+#[test]
+#[cfg(unix)]
+fn test_install_allows_legacy_migration_links() {
+    let temp = tempfile::tempdir().unwrap();
+    // Post-migration layout: tool config lives in .ddl/wai/, .wai is a link.
+    std::fs::create_dir_all(temp.path().join(".ddl/wai")).unwrap();
+    std::fs::write(temp.path().join(".ddl/wai/config.toml"), "[wai]\n").unwrap();
+    std::os::unix::fs::symlink(temp.path().join(".ddl/wai"), temp.path().join(".wai")).unwrap();
+
+    run_install_turu(&temp).success();
+
+    let manifest: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(temp.path().join(".ddl/manifest.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(manifest["tools"]["turu"]["source"], "skipped");
+    // The legacy link itself must not have been disturbed.
+    assert!(temp.path().join(".wai").is_symlink());
+    assert!(temp.path().join(".wai/config.toml").is_file());
+}
+
+/// DDL-sg8 (SEC-05): Windows reparse-point manifests must be refused too.
+/// Creating file symlinks needs dev-mode/admin privileges; skip gracefully.
+#[test]
+#[cfg(windows)]
+fn test_install_refuses_manifest_symlink_windows() {
+    let temp = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    empty_manifest(outside.path());
+    let before = std::fs::read_to_string(outside.path().join("manifest.json")).unwrap();
+
+    std::fs::create_dir_all(temp.path().join(".ddl")).unwrap();
+    if std::os::windows::fs::symlink_file(
+        outside.path().join("manifest.json"),
+        temp.path().join(".ddl/manifest.json"),
+    )
+    .is_err()
+    {
+        eprintln!("skipping: symlink_file requires admin/dev-mode privileges");
+        return;
+    }
+
+    run_install_turu(&temp)
+        .failure()
+        .stderr(predicate::str::contains("symlink"));
+
+    let after = std::fs::read_to_string(outside.path().join("manifest.json")).unwrap();
+    assert_eq!(before, after, "outside manifest must be untouched");
+}
+
+/// DDL-sg8 (SEC-05): a Windows directory reparse point (.ddl -> outside dir)
+/// must be refused — same escape as the Unix directory-symlink fixture.
+/// Creating directory symlinks needs dev-mode/admin privileges; skip gracefully.
+#[test]
+#[cfg(windows)]
+fn test_install_refuses_ddl_dir_link_outside_project_windows() {
+    let temp = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    empty_manifest(outside.path());
+    let before = std::fs::read_to_string(outside.path().join("manifest.json")).unwrap();
+
+    if std::os::windows::fs::symlink_dir(outside.path(), temp.path().join(".ddl")).is_err() {
+        eprintln!("skipping: symlink_dir requires admin/dev-mode privileges");
+        return;
+    }
+
+    run_install_turu(&temp)
+        .failure()
+        .stderr(predicate::str::contains("outside the project"));
+
+    let after = std::fs::read_to_string(outside.path().join("manifest.json")).unwrap();
+    assert_eq!(before, after, "outside manifest must be untouched");
+}
+
+/// DDL-sg8 (SEC-05): an in-project Windows directory reparse point stays
+/// allowed — same acceptance as the Unix in-project link fixture.
+#[test]
+#[cfg(windows)]
+fn test_install_allows_ddl_dir_link_within_project_windows() {
+    let temp = tempfile::tempdir().unwrap();
+    empty_manifest(&temp.path().join("internal-ddl"));
+    if std::os::windows::fs::symlink_dir(temp.path().join("internal-ddl"), temp.path().join(".ddl"))
+        .is_err()
+    {
+        eprintln!("skipping: symlink_dir requires admin/dev-mode privileges");
+        return;
+    }
+
+    run_install_turu(&temp).success();
+
+    let manifest: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(temp.path().join("internal-ddl/manifest.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(manifest["tools"]["turu"]["source"], "skipped");
+}
+
 #[test]
 fn test_install_json_parses() {
     let (mut cmd, _temp) = ddl_cmd();

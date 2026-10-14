@@ -24,6 +24,10 @@ extern "C" fn strip_hook_git_env() {
         "GIT_PREFIX",
         "GIT_CONFIG_PARAMETERS",
         "GIT_QUARANTINE_PATH",
+        "GIT_CONFIG",
+        "GIT_CONFIG_GLOBAL",
+        "GIT_CONFIG_SYSTEM",
+        "GIT_NAMESPACE",
     ] {
         // Safe: called once at process init, before test threads spawn.
         unsafe { std::env::remove_var(var) };
@@ -44,6 +48,10 @@ pub fn clean_git_env(cmd: &mut assert_cmd::Command) {
         "GIT_PREFIX",
         "GIT_CONFIG_PARAMETERS",
         "GIT_QUARANTINE_PATH",
+        "GIT_CONFIG",
+        "GIT_CONFIG_GLOBAL",
+        "GIT_CONFIG_SYSTEM",
+        "GIT_NAMESPACE",
     ] {
         cmd.env_remove(var);
     }

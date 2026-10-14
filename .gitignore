@@ -51,3 +51,8 @@ docs/src/ecosystem-map.md
 
 # pretender state dir — created by s4 dogfood smoke steps in the conformance suite
 .pretender/
+# turu — track .whisper/ notes; ignore only the private zone and turu's
+# machine-local usage ledger (turu reads notes.usage.jsonl in place, so we
+# ignore it rather than move it)
+.whisper/private/
+.whisper/**/*.usage.jsonl

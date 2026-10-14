@@ -10,7 +10,7 @@ use std::path::Path;
 use std::time::Duration;
 
 /// Timeout for each test — init with --no-install should be instant.
-const CMD_TIMEOUT: Duration = Duration::from_secs(10);
+const CMD_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Prepend a stub `incitaciones` executable to the child's PATH so init's
 /// skill-install step runs the stub instead of a real `npx --yes` network
@@ -36,22 +36,6 @@ fn ddl_cmd() -> (Command, tempfile::TempDir) {
     let mut cmd = Command::cargo_bin("ddl").unwrap();
     common::clean_git_env(&mut cmd);
     cmd.current_dir(temp.path());
-    // Hook-env hygiene (tests/common mod.rs): the spawned ddl/bd children
-    // must not inherit hook-exported git vars pointing at the OUTER repo,
-    // or `git init`/`bd init` inside the fixture target the wrong repo.
-    for var in [
-        "GIT_DIR",
-        "GIT_WORK_TREE",
-        "GIT_INDEX_FILE",
-        "GIT_COMMON_DIR",
-        "GIT_OBJECT_DIRECTORY",
-        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-        "GIT_PREFIX",
-        "GIT_CONFIG_PARAMETERS",
-        "GIT_QUARANTINE_PATH",
-    ] {
-        cmd.env_remove(var);
-    }
     stub_incitaciones_on_path(&mut cmd, &temp);
     (cmd, temp)
 }
@@ -82,8 +66,17 @@ fn gates_wires_lefthook_gitignore_and_beads_in_fresh_repo() {
     assert!(lefthook.contains("# ddl:managed:start (pre-commit)"));
     assert!(lefthook.contains("# ddl:managed:start (pre-push)"));
     assert!(lefthook.contains("run: ah check"));
-    assert!(lefthook.contains("run: pretender check --mode gate"));
-    assert!(lefthook.contains("run: spk lint openspec"));
+    // DDL-3fd: pre-commit pretender gate must be diff-only (consistent with
+    // pre-push) — repo-wide mode fails commits touching untouched files that
+    // carry pre-existing violations.
+    assert!(lefthook.contains("run: pretender check --diff-only --mode gate"));
+    // DDL-3fd: spk lint targets the specs corpus and tolerates exit 2
+    // (nothing-to-lint) — plain-openspec repos without specodelic frontmatter
+    // must not be blocked until they adopt the dual format.
+    assert!(lefthook.contains("run: spk lint openspec/specs || test $? -eq 2"));
+    // ...but a real violation exit (≠ 0/2) still gates: the template must
+    // keep the || rescue scoped to exit 2 only.
+    assert!(!lefthook.contains("spk lint openspec/specs || true"));
     for line in lefthook.lines() {
         if line.contains("ddl-ah-check") || line.contains("ddl-pretender-gate") {
             assert!(

@@ -5,10 +5,29 @@
 # then auto-updates the homebrew-charly tap formula, scoop-charly bucket manifest,
 # and publishes to crates.io.
 #
-# Required secrets:
-#   GITHUB_TOKEN           - automatically provided by GitHub Actions
-#   TAP_GITHUB_TOKEN       - PAT with repo write access to homebrew-charly and scoop-charly
-#   CARGO_REGISTRY_TOKEN   - crates.io API token for publishing the crate
+# Security model (SEC-06 / DDL-bas):
+#   * Workflow-level permissions default to `contents: read`; only the `publish`
+#     job is granted `contents: write`, so no build/test job can touch releases.
+#   * Publication credentials (CARGO_REGISTRY_TOKEN, TAP_GITHUB_TOKEN,
+#     GITHUB_TOKEN) are referenced exclusively inside the `publish` job.
+#   * `publish` needs `test` and `security` in addition to the build jobs: a
+#     failed, skipped, or cancelled test/advisory/secret-check on the tagged
+#     commit prevents publication entirely.
+#   * Every third-party action is pinned to a full reviewed commit SHA.
+#
+# Credential scopes:
+#   GITHUB_TOKEN (publish only)   - contents:write scoped to this repository,
+#                                   used to create the release and upload assets
+#   CARGO_REGISTRY_TOKEN (publish) - crates.io publish token for this crate only
+#   TAP_GITHUB_TOKEN (publish)     - PAT with contents:write limited to the
+#                                   homebrew-charly and scoop-charly repos
+#
+# Repository protections (verified 2026-10-13 via GitHub API): no tag rulesets
+# or tag protection are currently configured on this repository, so any branch
+# write could in principle move a tag. Recommendation (follow-up issue):
+# enable a ruleset restricting `v*` tag creation to release maintainers.
+# Mutable-tag risk is otherwise mitigated by pinning actions and gating publish
+# on checks that run on the exact tagged commit (checkout of GITHUB_SHA).
 
 name: Release
 
@@ -18,7 +37,7 @@ on:
       - "v*"
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -27,14 +46,16 @@ jobs:
   build-linux:
     name: Build Linux
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
         with:
           targets: x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: linux
 
@@ -57,7 +78,7 @@ jobs:
           cp target/x86_64-unknown-linux-gnu/release/ddl bins/linux_amd64/ddl
           cp target/aarch64-unknown-linux-gnu/release/ddl bins/linux_arm64/ddl
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: bins-linux
           path: bins/
@@ -66,14 +87,16 @@ jobs:
   build-darwin:
     name: Build macOS
     runs-on: macos-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
         with:
           targets: x86_64-apple-darwin,aarch64-apple-darwin
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: darwin
 
@@ -89,7 +112,7 @@ jobs:
           cp target/x86_64-apple-darwin/release/ddl bins/darwin_amd64/ddl
           cp target/aarch64-apple-darwin/release/ddl bins/darwin_arm64/ddl
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: bins-darwin
           path: bins/
@@ -98,14 +121,16 @@ jobs:
   build-windows:
     name: Build Windows
     runs-on: windows-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
         with:
           targets: x86_64-pc-windows-msvc
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: windows
 
@@ -118,22 +143,68 @@ jobs:
           mkdir -p bins/windows_amd64
           cp target/x86_64-pc-windows-msvc/release/ddl.exe bins/windows_amd64/ddl.exe
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: bins-windows
           path: bins/
           retention-days: 1
 
+  # Test and security gates run on the exact tagged commit (GITHUB_SHA) before
+  # anything is published. Failed / skipped / cancelled runs block `publish`
+  # via its `needs` list.
+  test:
+    name: Test tagged commit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: test
+
+      - name: Run full test suite
+        run: cargo test --locked
+
+  security:
+    name: Advisory & secret scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: security
+
+      - name: Dependency advisory audit (RustSec)
+        run: just advisory
+
+      - name: Secret scan
+        run: just secret-scan
+
   publish:
     name: Publish Release
-    needs: [build-linux, build-darwin, build-windows]
+    needs: [build-linux, build-darwin, build-windows, test, security]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: bins-*
           path: bins/
@@ -155,7 +226,45 @@ jobs:
           tar -czf "dist/ddl_${VERSION}_darwin_amd64.tar.gz" -C bins/darwin_amd64 ddl
           tar -czf "dist/ddl_${VERSION}_darwin_arm64.tar.gz" -C bins/darwin_arm64 ddl
           (cd bins/windows_amd64 && zip "../../dist/ddl_${VERSION}_windows_amd64.zip" ddl.exe)
-          cd dist && sha256sum *.tar.gz *.zip > checksums.txt
+          cd dist && sha256sum ./*.tar.gz ./*.zip > checksums.txt
+
+      # DDL-wof (SEC-03/06): publish cryptographically verifiable provenance for
+      # every supported binary. provenance.json binds each published artifact's
+      # sha256 to the publisher/build identity (repository, workflow, tag) that
+      # produced the release. ddl's installer rejects downloads whose manifest
+      # names an unexpected identity or whose bytes diverge from the listed
+      # digest; provenance.json is excluded from its own artifact map because a
+      # file cannot contain its own digest.
+      - name: Generate provenance manifest
+        env:
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'EOF'
+          import hashlib, json, os
+          dist = "dist"
+          artifacts = {}
+          for name in sorted(os.listdir(dist)):
+              if name == "provenance.json":
+                  continue
+              path = os.path.join(dist, name)
+              if not os.path.isfile(path):
+                  continue
+              h = hashlib.sha256()
+              with open(path, "rb") as f:
+                  for chunk in iter(lambda: f.read(1 << 20), b""):
+                      h.update(chunk)
+              artifacts[name] = h.hexdigest()
+          provenance = {
+              "repository": os.environ["REPO"],
+              "workflow": "Release",
+              "tag": os.environ["TAG"],
+              "artifacts": artifacts,
+          }
+          with open(os.path.join(dist, "provenance.json"), "w") as f:
+              json.dump(provenance, f, indent=2, sort_keys=True)
+              f.write("\n")
+          EOF
 
       - name: Create GitHub release
         run: |
@@ -172,7 +281,8 @@ jobs:
             dist/ddl_${VERSION}_darwin_amd64.tar.gz \
             dist/ddl_${VERSION}_darwin_arm64.tar.gz \
             dist/ddl_${VERSION}_windows_amd64.zip \
-            dist/checksums.txt
+            dist/checksums.txt \
+            dist/provenance.json
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -181,40 +291,138 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
-      # Tap/scoop auto-update is best-effort: TAP_GITHUB_TOKEN may be unset,
-      # and a failure here must not mark the whole release run failed.
+      # DDL-9e7 (SEC-07): channel propagation is no longer silently
+      # best-effort. A missing TAP_GITHUB_TOKEN means the channel is
+      # intentionally disabled and is reported as such; a real update
+      # failure is retried idempotently (the update scripts refuse to
+      # write unless version/tag/checksums correspond, and re-rendering
+      # an already-updated tap/bucket is a no-op, so a retry never
+      # republishes the crate or recreates the release) and recorded in
+      # a status file. The release-health step below turns any `failed`
+      # status into a visible incomplete-distribution result.
       - name: Update Homebrew tap
-        continue-on-error: true
+        id: channel-homebrew
         env:
           TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
         run: |
           TAG="${GITHUB_REF_NAME}"
           VERSION="${{ steps.pkg.outputs.version }}"
-          git clone "https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/charly-vibes/homebrew-charly.git" /tmp/tap
-          python3 scripts/update-homebrew.py \
-            /tmp/tap/Formula/dulce-de-leche.rb \
-            "${VERSION}" "${TAG}" dist/checksums.txt
-          cd /tmp/tap
-          git config user.email "github-actions@github.com"
-          git config user.name "GitHub Actions"
-          git add Formula/dulce-de-leche.rb
-          git diff --staged --quiet || git commit -m "Update dulce-de-leche to ${VERSION}"
-          git push
+          CHANNEL_STATUS=/tmp/channel-homebrew.status
+          MAX_ATTEMPTS=3
+          if [ -z "${TAP_GITHUB_TOKEN}" ]; then
+            echo "disabled" > "${CHANNEL_STATUS}"
+            echo "::notice::Homebrew tap update is disabled (TAP_GITHUB_TOKEN not set); the release will be marked accordingly."
+            exit 0
+          fi
+          ok=0
+          attempt=1
+          while [ "${attempt}" -le "${MAX_ATTEMPTS}" ]; do
+            rm -rf /tmp/tap
+            if git clone --depth 1 "https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/charly-vibes/homebrew-charly.git" /tmp/tap \
+              && python3 scripts/update-homebrew.py \
+                   /tmp/tap/Formula/dulce-de-leche.rb \
+                   "${VERSION}" "${TAG}" dist/checksums.txt; then
+              git -C /tmp/tap config user.email "github-actions@github.com"
+              git -C /tmp/tap config user.name "GitHub Actions"
+              git -C /tmp/tap add Formula/dulce-de-leche.rb
+              if git -C /tmp/tap diff --staged --quiet; then
+                echo "unchanged" > "${CHANNEL_STATUS}"
+                ok=1
+                break
+              fi
+              if git -C /tmp/tap commit -m "Update dulce-de-leche to ${VERSION}" \
+                && git -C /tmp/tap push; then
+                echo "updated" > "${CHANNEL_STATUS}"
+                ok=1
+                break
+              fi
+            fi
+            echo "::warning::Homebrew tap update attempt ${attempt}/${MAX_ATTEMPTS} failed; retrying."
+            attempt=$((attempt + 1))
+            sleep 5
+          done
+          if [ "${ok}" -ne 1 ]; then
+            echo "failed" > "${CHANNEL_STATUS}"
+            echo "::error::Homebrew tap update failed after ${MAX_ATTEMPTS} attempts."
+          fi
 
       - name: Update Scoop bucket
-        continue-on-error: true
+        id: channel-scoop
         env:
           TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
         run: |
           TAG="${GITHUB_REF_NAME}"
           VERSION="${{ steps.pkg.outputs.version }}"
-          git clone "https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/charly-vibes/scoop-charly.git" /tmp/scoop
-          python3 scripts/update-scoop.py \
-            /tmp/scoop/bucket/dulce-de-leche.json \
-            "${VERSION}" "${TAG}" dist/checksums.txt
-          cd /tmp/scoop
-          git config user.email "github-actions@github.com"
-          git config user.name "GitHub Actions"
-          git add bucket/dulce-de-leche.json
-          git diff --staged --quiet || git commit -m "Update dulce-de-leche to ${VERSION}"
-          git push
+          CHANNEL_STATUS=/tmp/channel-scoop.status
+          MAX_ATTEMPTS=3
+          if [ -z "${TAP_GITHUB_TOKEN}" ]; then
+            echo "disabled" > "${CHANNEL_STATUS}"
+            echo "::notice::Scoop bucket update is disabled (TAP_GITHUB_TOKEN not set); the release will be marked accordingly."
+            exit 0
+          fi
+          ok=0
+          attempt=1
+          while [ "${attempt}" -le "${MAX_ATTEMPTS}" ]; do
+            rm -rf /tmp/scoop
+            if git clone --depth 1 "https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/charly-vibes/scoop-charly.git" /tmp/scoop \
+              && python3 scripts/update-scoop.py \
+                   /tmp/scoop/bucket/dulce-de-leche.json \
+                   "${VERSION}" "${TAG}" dist/checksums.txt; then
+              git -C /tmp/scoop config user.email "github-actions@github.com"
+              git -C /tmp/scoop config user.name "GitHub Actions"
+              git -C /tmp/scoop add bucket/dulce-de-leche.json
+              if git -C /tmp/scoop diff --staged --quiet; then
+                echo "unchanged" > "${CHANNEL_STATUS}"
+                ok=1
+                break
+              fi
+              if git -C /tmp/scoop commit -m "Update dulce-de-leche to ${VERSION}" \
+                && git -C /tmp/scoop push; then
+                echo "updated" > "${CHANNEL_STATUS}"
+                ok=1
+                break
+              fi
+            fi
+            echo "::warning::Scoop bucket update attempt ${attempt}/${MAX_ATTEMPTS} failed; retrying."
+            attempt=$((attempt + 1))
+            sleep 5
+          done
+          if [ "${ok}" -ne 1 ]; then
+            echo "failed" > "${CHANNEL_STATUS}"
+            echo "::error::Scoop bucket update failed after ${MAX_ATTEMPTS} attempts."
+          fi
+
+      # DDL-9e7 (SEC-07): the release run must not look successful while a
+      # distribution channel lags. This step aggregates the recorded channel
+      # outcomes into the job summary and fails the job when any channel
+      # failed, producing a visible incomplete-distribution result for the
+      # release. Intentionally disabled channels are reported as such, not
+      # as failures. `always()` keeps the report even when an earlier step
+      # already failed (the job is failed by that step regardless).
+      - name: Release health (channel propagation)
+        if: always()
+        run: |
+          {
+            echo "## Release channel propagation"
+            echo ""
+            echo "| Channel | Outcome |"
+            echo "| --- | --- |"
+            for ch in homebrew scoop; do
+              f="/tmp/channel-${ch}.status"
+              if [ ! -f "${f}" ]; then
+                outcome="not-run (earlier step failed or skipped)"
+              else
+                outcome="$(cat "${f}")"
+              fi
+              echo "| ${ch} | ${outcome} |"
+              if [ "${outcome}" = "failed" ]; then
+                echo "::error::Release distribution is INCOMPLETE: the ${ch} channel update failed."
+              fi
+            done
+            echo ""
+            echo "Outcome legend: updated / unchanged (idempotent retry) / disabled (token absent, intentional) / failed (incomplete distribution)."
+          } >> "${GITHUB_STEP_SUMMARY}"
+          if grep -qs "^| homebrew | failed" "${GITHUB_STEP_SUMMARY}" || grep -qs "^| scoop | failed" "${GITHUB_STEP_SUMMARY}"; then
+            echo "::error::At least one distribution channel failed; the release is incomplete."
+            exit 1
+          fi

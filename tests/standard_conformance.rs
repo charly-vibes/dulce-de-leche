@@ -41,6 +41,7 @@ const RUST_REPOS: &[&str] = &[
     "espectacular",
     "whisper",
     "dulce-de-leche",
+    "funkalization",
 ];
 const ALL_REPOS: &[&str] = &[
     "wai",
@@ -54,6 +55,7 @@ const ALL_REPOS: &[&str] = &[
     "dulce-de-leche",
     "incitaciones",
     "genesis",
+    "funkalization",
 ];
 
 const RELEASE_TARGETS: &[&str] = &[
@@ -343,6 +345,10 @@ const DOGFOOD_MATRIX: &[(&str, &[&str])] = &[
         "dulce-de-leche",
         &["pretender", "wai", "bd", "openspec", "dont"],
     ),
+    (
+        "funkalization",
+        &["pretender", "wai", "bd", "openspec", "dulce-de-leche"],
+    ),
 ];
 
 /// The install reference each tool's pin must produce in `ci.yml`.
@@ -455,6 +461,27 @@ fn s4_genesis_lib_pins_meet_ratified_floor() {
 }
 
 // ---------- §2 live URL smoke (regression guardrail) ----------
+
+/// DDL-43g residual: the live-URL smoke must also run in each book repo's
+/// OWN ci.yml, so a 404'd Pages site fails that repo's CI immediately
+/// instead of waiting for the next hub conformance run (the turu failure
+/// mode). Every Pages-deploying repo's ci.yml must curl its own live URL
+/// with the canonical flags (10s timeout, 2 attempts).
+#[test]
+fn s2_ci_smokes_own_pages_url() {
+    for name in pages_deploying_repos() {
+        let dir = repo_dir(name).expect("scope filter guarantees presence");
+        let ci = read(&dir, ".github/workflows/ci.yml")
+            .unwrap_or_else(|| panic!("{name}: missing .github/workflows/ci.yml (§1)"));
+        let expected =
+            format!("curl -fsS --max-time 10 --retry 2 https://charly-vibes.github.io/{name}/");
+        assert!(
+            ci.contains(&expected),
+            "{name}: ci.yml must smoke its own live Pages URL (`{expected}`) — \
+             a 404'd book must fail that repo's CI, not wait for the next hub run (DDL-43g)"
+        );
+    }
+}
 
 /// A docs.yml deploys the book to GitHub Pages when it uses the official
 /// Pages deployment actions. Content-based detection — no hardcoded list of

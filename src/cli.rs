@@ -148,17 +148,27 @@ impl Args {
     pub fn parse_or_exit() -> Self {
         let mut cmd = Args::command();
         let tools_line = Self::managed_tools_line();
+        // DDL-uu8 (SEC-04): the execution scopes of the install plan are
+        // disclosed in the help text so their authorization requirements are
+        // discoverable before running.
+        let scopes_note = "Execution scopes (restricted-privilege policy): children run with \
+                           an allowlisted environment; set \
+                           DDL_ALLOW_UNRESTRICTED_CHILD_ENV=1 to restore the legacy \
+                           inherited environment. Global skill installs write outside \
+                           this project and require DDL_ALLOW_GLOBAL_SKILL=1."
+            .to_string();
         cmd = cmd.mut_subcommand("install", |c| {
             c.after_help(format!(
                 "Managed tools: {tools_line}\n\
                  Crate-name aliases resolve to their tool (e.g. \
                  'espectacular' → ah). Run `ddl catalog` for descriptions \
-                 and install methods."
+                 and install methods.\n\n{scopes_note}"
             ))
         });
         cmd = cmd.mut_subcommand("init", |c| {
             c.after_help(format!(
-                "--tools accepts a comma-separated subset (default: all): {tools_line}"
+                "--tools accepts a comma-separated subset (default: all): {tools_line}\
+                 \n\n{scopes_note}"
             ))
         });
         let matches = cmd.get_matches();

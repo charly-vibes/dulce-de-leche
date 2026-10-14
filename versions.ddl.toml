@@ -8,7 +8,7 @@
 # CI installs these pinned (see ci.yml).
 
 [tools]
-wai = "2026.9.28"          # crates.io: wai-cli
+wai = "2026.10.10"      # crates.io: wai-cli — fixes wai init hanging on non-TTY select (fresh dir, stdin closed) in CI cascades
 pretender = "0.7.0"        # crates.io — 0.7.0: gate-by-default + advisory lease TTL (pretender-1te)
 dont = "0.2.2"             # crates.io: dont-cli
 dulce-de-leche = "0.8.0"   # crates.io (bin: ddl) — self

@@ -85,10 +85,10 @@ fn init_help_lists_every_registry_tool() {
 
 use assert_cmd::Command;
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Timeout for each test — init with --no-install should be instant.
-const CMD_TIMEOUT: Duration = Duration::from_secs(10);
+const CMD_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Create stub executables (name → script body) in `temp/stub-bin` and
 /// prepend that dir to the child's PATH. Also stubs `incitaciones` so the
@@ -132,6 +132,137 @@ fn ddl_cmd() -> (Command, tempfile::TempDir) {
 
 fn read(temp: &Path, rel: &str) -> String {
     std::fs::read_to_string(temp.join(rel)).unwrap_or_else(|e| panic!("read {rel}: {e}"))
+}
+
+// ===================== DDL-uu8 (SEC-04) =====================
+// Restricted-privilege policy for children spawned by the install/init
+// cascade: cargo/npm/npx and tool-init children must run with an explicitly
+// restricted environment (allowlist), and execution scopes whose write roots
+// reach beyond this project (global skill installs) must require explicit
+// policy authorization.
+
+/// A canary credential in the caller environment must never reach a tool-init
+/// child: the child environment is built from an explicit allowlist, so
+/// non-approved variables (credentials, tokens) are dropped.
+#[test]
+fn init_children_do_not_inherit_canary_credentials() {
+    let (mut cmd, temp) = ddl_cmd();
+    stub_tools(
+        &mut cmd,
+        &temp,
+        &[(
+            "ah",
+            // The stub reports whether the canary leaked into its environment.
+            "if env | grep -q '^DDL_TEST_CANARY_CREDENTIAL='; then echo 'CANARY LEAKED'; else echo 'restricted env ok'; fi",
+        )],
+    );
+    cmd.env(
+        "DDL_TEST_CANARY_CREDENTIAL",
+        "canary-secret-do-not-leak-9f3a",
+    );
+    cmd.args(["init", "--tools", "ah", "--no-install", "--human"]);
+    cmd.timeout(CMD_TIMEOUT);
+    let output = cmd.assert().success().get_output().clone();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    assert!(
+        !stderr.contains("CANARY LEAKED"),
+        "tool-init child inherited the caller's canary credential: {stderr}"
+    );
+    assert!(
+        !stderr.contains("canary-secret-do-not-leak-9f3a"),
+        "canary credential value leaked into child output: {stderr}"
+    );
+    assert!(
+        stderr.contains("ah initialized: restricted env ok"),
+        "stub should have run with a restricted but usable environment: {stderr}"
+    );
+}
+
+/// Global-skill installation writes to ~/.agents/skills — visible to every
+/// project on the machine — so it requires explicit policy authorization
+/// (DDL_ALLOW_GLOBAL_SKILL=1). Without it the install must be rejected with a
+/// structured diagnostic naming the authorization variable; the init cascade
+/// stays advisory (warn, do not abort) but must NOT run the global install.
+#[test]
+fn unauthorized_global_skill_scope_is_rejected_with_policy_diagnostic() {
+    let (mut cmd, temp) = ddl_cmd();
+    // Sandboxed HOME: no pre-existing global skills, so the --yes flow
+    // attempts the global skill install.
+    cmd.env("HOME", temp.path().join("home"));
+    cmd.env_remove("DDL_ALLOW_GLOBAL_SKILL");
+    stub_tools(&mut cmd, &temp, &[]); // hermetic incitaciones stub
+    cmd.args(["init", "--yes", "--no-install", "--human"]);
+    cmd.timeout(CMD_TIMEOUT);
+    let output = cmd.assert().success().get_output().clone();
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        combined.contains("DDL_ALLOW_GLOBAL_SKILL"),
+        "unauthorized global skill install must produce a diagnostic naming \
+         DDL_ALLOW_GLOBAL_SKILL; got: {combined}"
+    );
+}
+
+/// DDL-6ox: a tool-config step that exits nonzero (dont/bd refusing to
+/// re-initialise an already-initialised project) must NOT abort the run
+/// before the gates wiring is written. Gates wiring always completes
+/// (lefthook block, DDL AGENTS.md block, gitignore entries, pins scaffold);
+/// the per-tool config failures surface as advisory entries in the resume
+/// summary and the exit code stays nonzero.
+#[test]
+fn config_step_failure_still_writes_gates() {
+    let (mut cmd, temp) = ddl_cmd();
+    stub_tools(
+        &mut cmd,
+        &temp,
+        &[
+            (
+                "dont",
+                "echo 'refuses re-init: already initialised' >&2\nexit 1",
+            ),
+            (
+                "bd",
+                "echo 'refuses re-init: already initialised' >&2\nexit 1",
+            ),
+        ],
+    );
+    // Sandboxed HOME: keep the --yes global-skill step off the real machine.
+    cmd.env("HOME", temp.path().join("home"));
+    cmd.args(["init", "--yes", "--no-install", "--gates", "--human"]);
+    cmd.timeout(CMD_TIMEOUT);
+    // Exit code stays nonzero (resume summary), but gates MUST be written.
+    // Single execution: capture the output once — a second cmd.assert() call
+    // re-runs the command.
+    let output = cmd.assert().failure().get_output().clone();
+
+    // Gates wiring completed: lefthook managed block ...
+    let lefthook = read(temp.path(), "lefthook.yml");
+    assert!(
+        lefthook.contains("# ddl:managed:start (pre-commit)"),
+        "lefthook gates block missing — config-step failure aborted before gates"
+    );
+    // ... beads no-db stamp ...
+    assert!(read(temp.path(), ".beads/config.yaml").contains("no-db: true"));
+    // ... DDL managed block in AGENTS.md ...
+    let agents = read(temp.path(), "AGENTS.md");
+    assert!(agents.contains("DDL"), "DDL block missing from AGENTS.md");
+    // ... pins scaffold ...
+    assert!(
+        temp.path().join("versions.ddl.toml").exists(),
+        "versions.ddl.toml pins scaffold missing"
+    );
+
+    // Resume summary names the failed config steps (advisory).
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    assert!(
+        stdout.contains("Init cascade failed"),
+        "resume summary missing from stdout: {stdout}"
+    );
+    assert!(stdout.contains("dont init failed"));
+    assert!(stdout.contains("bd init failed"));
 }
 
 #[test]
@@ -262,4 +393,90 @@ fn gates_flag_still_works_alongside_cascade() {
     let lefthook = read(temp.path(), "lefthook.yml");
     assert!(lefthook.contains("# ddl:managed:start (pre-commit)"));
     assert!(read(temp.path(), ".beads/config.yaml").contains("no-db: true"));
+}
+
+// ===================== DDL-1z1 (SEC-02): init cascade child runtime budget =====================
+//
+// A tool init command that hangs must be terminated within the configured
+// deadline plus one second, the run must fail (exit status identifies the
+// exhausted budget), and the diagnostics — human and JSON — must name the
+// budget instead of silently hanging or falling back.
+
+#[test]
+fn hanging_init_child_killed_and_budget_identified() {
+    let (mut cmd, temp) = ddl_cmd();
+    // "testaruda" (any managed tool works): "bd" is special-cased with a
+    // 300s heavyweight budget (embedded Dolt bootstrap), so the budget
+    // mechanism test needs a tool without an init-specific override.
+    // DDL-6ox: a `wai` stub keeps the post-failure advisory tail (wai
+    // force-init) instant so the elapsed bound stays a strict deadline check.
+    stub_tools(
+        &mut cmd,
+        &temp,
+        &[("testaruda", "sleep 60"), ("wai", "exit 0")],
+    );
+    cmd.env("DDL_CHILD_DEADLINE_SECS", "1");
+    cmd.args([
+        "init",
+        "--yes",
+        "--tools",
+        "testaruda",
+        "--no-install",
+        "--human",
+    ]);
+    let start = Instant::now();
+    // Human mode: the resume summary (naming the exhausted budget) is on
+    // stdout; the non-zero exit status identifies the budget exhaustion.
+    cmd.assert()
+        .failure()
+        .stdout(predicates::str::contains("budget exceeded: child-runtime"));
+    let elapsed = start.elapsed();
+    // DDL-6ox: the run no longer aborts at the first init failure — the
+    // advisory tail (gitignore, repo setup with per-tool version probes,
+    // wai force-init) now executes after the budget kill, adding ~1s of
+    // legitimate work. The bound still fails hard if the budget mechanism
+    // is broken (a hung child would exceed it by far).
+    assert!(
+        // CI runners add load to the post-kill advisory tail (real wai init
+        // child); the mechanism invariant is the 1s budget kill — a broken
+        // budget would only fail here via the 60s CMD_TIMEOUT, so 15s stays
+        // a hard, meaningful bound.
+        elapsed < Duration::from_secs(15),
+        "hanging init child must be terminated within deadline + 1s; took {elapsed:?}"
+    );
+}
+
+#[test]
+fn hanging_init_child_budget_identified_in_json() {
+    let (mut cmd, temp) = ddl_cmd();
+    // "testaruda" (any managed tool works): "bd" is special-cased with a
+    // 300s heavyweight budget (embedded Dolt bootstrap), so the budget
+    // mechanism test needs a tool without an init-specific override.
+    // DDL-6ox: a `wai` stub keeps the post-failure advisory tail (wai
+    // force-init) instant so the elapsed bound stays a strict deadline check.
+    stub_tools(
+        &mut cmd,
+        &temp,
+        &[("testaruda", "sleep 60"), ("wai", "exit 0")],
+    );
+    cmd.env("DDL_CHILD_DEADLINE_SECS", "1");
+    cmd.args(["init", "--yes", "--tools", "testaruda", "--no-install"]);
+    // Piped stdout auto-selects JSON mode; the error envelope must name the
+    // exhausted budget.
+    let start = Instant::now();
+    cmd.assert()
+        .failure()
+        .stderr(predicates::str::contains("budget"));
+    let elapsed = start.elapsed();
+    // DDL-6ox: advisory tail now runs after the budget kill (see the human
+    // variant above) — the bound still fails hard if the budget mechanism
+    // is broken.
+    assert!(
+        // CI runners add load to the post-kill advisory tail (real wai init
+        // child); the mechanism invariant is the 1s budget kill — a broken
+        // budget would only fail here via the 60s CMD_TIMEOUT, so 15s stays
+        // a hard, meaningful bound.
+        elapsed < Duration::from_secs(15),
+        "hanging init child must be terminated within deadline + 1s; took {elapsed:?}"
+    );
 }

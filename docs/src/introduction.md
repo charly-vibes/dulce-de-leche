@@ -7,14 +7,18 @@
 
 dulce-de-leche (`ddl`) is a thin orchestrator that bootstraps the entire
 [charly-vibes](https://github.com/charly-vibes) tool ecosystem on any platform
-— macOS, Linux, or Windows — with no prerequisites beyond the binary itself.
+— macOS, Linux, or Windows. `ddl` itself needs nothing but the binary; a few
+tools have prerequisites (npm for `incitaciones`, and a Rust toolchain for
+tools without published release binaries) — `ddl` tells you exactly what is
+missing and how to install it. See [Troubleshooting](./troubleshooting.md).
 
 ## The problem
 
 The charly-vibes ecosystem has **8 active Rust CLI tools** (wai, dont, ah,
 pretender, testaruda, vampiro, specodelic, turu/whisper), plus bd and
-openspec (workflow/issue tooling) and incitaciones (npm) — **11 managed
-tools** in total.
+openspec (workflow/issue tooling) and incitaciones (npm) — **12 managed
+tools** in total (funkalization, the visual semantic design workspace,
+joined as the newest experimental extension).
 Each tool has:
 
 - Its own config file or directory

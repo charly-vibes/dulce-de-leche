@@ -38,6 +38,12 @@ pub fn find_ddl_dir() -> Option<PathBuf> {
 /// The version of ddl embedded at build time.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// START marker of ddl's own managed block in AGENTS.md, as written by
+/// [`agents_block`] (genesis::aix `<!-- NAME:START -->` format). Shared
+/// constant so the writer (init) and the checker (ddl.repo.blocks doctor
+/// check, DDL-fw7) can never drift apart.
+pub const DDL_AGENTS_MARKER: &str = "<!-- DDL:START -->";
+
 /// Generate ddl's agents block for AIX artifacts (llm.txt, AGENTS.md).
 ///
 /// Uses genesis::aix::agents_block for consistent marker wrapping.

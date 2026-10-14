@@ -152,12 +152,39 @@ Rows are in-org repos only; external consumers (bd, openspec, turu) appear as
 | incitaciones | ✅ | ✅ | ✅ | — | ◻ opt | — | ✅ |
 | espectacular (`ah`) | ✅ | ✅ | ✅ | ✅ | ◻ opt | ◻ opt | ✅ |
 | whisper (`turu`) | ✅ | ✅ | ✅ | — | ◻ opt | — | ✅ |
+| funkalization | ✅ | ✅ | ✅ | ✅ | ◻ opt | — | ✅ |
 | ddl          | ✅ | ✅ | ✅ | ✅ | ◻ opt | — | — |
 
 `✅` = required in `ci.yml` (unless the section says otherwise); `◻ opt` = opt-in;
 `—` = self/not applicable.
 `ddl status` is the runtime check: the registry drift test enforces the
 README block, and each tool's status page links back to ddl.
+
+### 4.1 Per-repo `ddl init --gates` rollout (DDL-d73)
+
+Fleet sweep running `ddl init --gates -y --no-install` per repo (one PR each,
+branch `ddl/init-gates-sweep`) and wiring lefthook gates, DDL managed blocks,
+tool-data `.gitignore` entries, and the `versions.ddl.toml` pin. Closure
+per repo: `ddl doctor --json` reports zero `ddl.repo.*` warnings.
+
+| Repo | Swept | `ddl.repo.*` residual | PR |
+|---|---|---|---|
+| wai | ✅ | none | charly-vibes/wai#49 |
+| espectacular (`ah`) | ✅ | `ddl.repo.bd-hooks` (lefthook not chaining `bd hooks run`) | charly-vibes/espectacular#45 |
+| testaruda | ✅ | `ddl.repo.license` (LICENSE text vs declared Apache-2.0) | charly-vibes/testaruda#72 |
+| specodelic | ✅ | `ddl.repo.bd-hooks`, `ddl.repo.changelog` | charly-vibes/specodelic#14 |
+| genesis | ✅ | `ddl.repo.blocks` (openspec block missing) | charly-vibes/genesis#14 |
+| dont | ✅ | `ddl.repo.bd-hooks` (lefthook not chaining `bd hooks run`); main's `ah check` has 4 pre-existing slug-collisions | charly-vibes/dont#27 |
+| pretender | ✅ | `ddl.repo.license` (Cargo.toml declares no license field), `ddl.repo.bd-hooks` | charly-vibes/pretender#49 |
+| vampiro | ✅ | none | charly-vibes/vampiro#46 |
+| incitaciones | ✅ | `ddl.repo.bd-hooks` (lefthook not chaining `bd hooks run`) | charly-vibes/incitaciones#2 |
+| whisper (`turu`) | ✅ | none | charly-vibes/whisper#4 |
+
+Continuation run (2026-10-14, post-#81): the original partial-failure blocker
+was fixed — tool-config failures are now advisory and gates wiring always
+completes — so all five previously-skipped repos were swept with
+`ddl init --gates -y --no-install` against each repo's `main` (throwaway
+worktrees).
 
 ## 5. Motivation & status block (the "why / how mature")
 
@@ -218,3 +245,110 @@ matrix; and an ecosystem landing link in the book SUMMARY and README status
 block (§7 — the fleet's front door, enforced by the `s7_ecosystem_landing_*`
 conformance tests). Deviations must be documented in the tool's
 `docs/src/status.md`.
+
+## 8. Reproducible environments — Nix/devenv (spike DDL-irv)
+
+> **Status:** DECIDED (2026-10-13, spike `DDL-irv`). Spike evidence lives in the
+> per-repo files listed below; wai way tracks the Reproducible-environments
+> check under `wai-bvn7`.
+
+ddl's promise is collapsing "a dozen install paths, config formats, and
+version drifts" into one install — but the one install itself spans
+homebrew/scoop/crates/cargo/npm, each with its own drift (PATH precedence
+conflicts, bd needing a pinned GitHub release because no versioned
+homebrew-core formula exists, tarball exec-bit issues, MSRV drift). Nix via
+[devenv.sh](https://devenv.sh) was evaluated as an additional fleet install
+path.
+
+### 8.1 Decision — granularity: per-repo devenv
+
+**Adopted: one `devenv.nix` + `devenv.yaml` per repo**, pinning that repo's
+toolchain from its own `versions.ddl.toml` values. **One fleet flake in ddl is
+deferred** until cross-repo duplication of tool pins becomes real pain.
+
+Evidence: the pattern is already proven in four repos — `gently`, `wanna`,
+`tambor`, and `wild` each carry a hand-written `devenv.nix`/`devenv.yaml`
+(see `gently/devenv.nix` for the annotated template). All four CI workflows
+ran green on first run (53s–1m13s, cachix devenv cache), and the local loop
+resolved every tool in all repo shells via distrobox (nix 2.35 single-user +
+devenv 2.4.0). Fleet pins are few and stable; a central flake would add a
+single point of coupling without removing real duplication yet.
+
+`versions.ddl.toml` remains the source of truth for versions; a repo's
+`devenv.nix` mirrors it declaratively for humans, CI, and ephemeral agent
+sandboxes. Tools unavailable at pinned versions in nixpkgs (crates.io pins,
+bd's GitHub-release pin) stay provisioned by ddl and are noted in the
+`devenv.nix` comment rather than duplicated — drift is caught by review, and
+by the §4 pin file as the canonical reference.
+
+### 8.2 Decision — nix in `versions.ddl.toml` `[tools]`: not now
+
+Nix/devenv is **not** added to `[tools]` at this time. It is an environment
+*provider*, not an installed dependency of the fleet; per §4, `[tools]` pins
+what CI installs. Revisit when either: (a) a repo's `devenv.nix` pins drift
+from `versions.ddl.toml` more than once (mechanize the mirror then), or
+(b) nix becomes a real install path for a fleet binary (e.g. a
+`flake.nix` packaging `ddl` itself), at which point an entry like
+`nix = "2.35"` would pin the provider.
+
+### 8.3 Constraints and the local loop
+
+- **Additive, macOS/Linux only.** Nix has no native Windows support; scoop
+  stays canonical on Windows. The devenv path never replaces brew/crates
+  install paths — it is one more reproducible consumer of the same pins.
+- **No host-level nix on Bluefin 44** (atomic/ublue; maintainers explicitly
+  do not support Nix — ublue-os/bluefin#3606). The canonical local loop is
+  **distrobox**: a `devenv` container (`quay.io/fedora/fedora:41`, isolated
+  home under `~/.dbx-homes/devenv`) with nix single-user + devenv; `/var/home`
+  is bind-mounted so repos work in place. A devcontainer with devenv is the
+  documented alternative; CI-only verification is the fallback. Repo CI uses
+  `determinate-systems/nix-installer-action` on runners, where nix installs
+  cleanly.
+- Every devenv environment must verify honestly: `devenv shell -- just gates`
+  (or the repo's QA entry point) fails loudly on pin mismatch instead of
+  silently succeeding on nixpkgs versions (see gently's Graph::Easy comment).
+
+## 9. Fleet-standard compliance checks (DDL-rod)
+
+> **Status:** DECIDED (2026-10-13, bd `DDL-rod`). The gently compliance audit
+> surfaced four mechanically detectable fleet gaps; they are now doctor
+> checks instead of hand-assembled audit steps. Every check below is
+> implemented as a `ddl.repo.*` `ddl doctor` check in
+> `src/diagnostics.rs` (`register_repo_checks`) and pinned by
+> `tests/fleet_compliance.rs`.
+
+Machine-readable checklist — one row per gap class, with the exact
+mechanical predicate so member-repo audits are scriptable:
+
+| Check id | Gap class (from the gently audit) | Mechanical predicate | Fix |
+|---|---|---|---|
+| `ddl.repo.license` | no LICENSE at root; published crate effectively license-less | `LICENSE` (or `LICENSE.md`/`LICENSE.txt`) exists at repo root; if `Cargo.toml` exists it declares `license = "…"` and the LICENSE text matches the declared SPDX id (MIT/Apache-2.0/GPL-2.0/GPL-3.0 recognized; `OR`/`WITH` expressions and unknown ids are accepted as unverifiable) | add/reconcile LICENSE with `Cargo.toml` |
+| `ddl.repo.fmt` | no rustfmt anywhere: repo silently opted out of the fmt gate | Rust repo's `justfile` contains a `fmt-check` recipe | add `fmt`/`fmt-check` recipes (+ CI rustfmt component + lefthook fmt gate) |
+| `ddl.repo.bd-hooks` | lefthook replaced the bd shim without chaining it (the DDL-0tp failure mode) | `lefthook.yml` contains `bd hooks run pre-commit` **and** `bd hooks run pre-push` | `ddl init --gates` (block wiring) + chain `bd hooks run` |
+| `ddl.repo.changelog` | no CHANGELOG.md | `CHANGELOG.md` exists at repo root | add CHANGELOG.md (Keep a Changelog format) |
+
+Run the whole set anywhere: `ddl doctor` (human) or `ddl doctor --json`
+(envelope contract: `tests/envelope_contract.rs`). Checks only fire inside a
+git repository; the presence of `ddl.repo.*` items in a JSON report is the
+signal, absent items mean "not in a repo".
+
+### 9.1 Upstream-license-compliance (recorded, not implemented)
+
+The LICENSE-matches-Cargo.toml predicate would NOT have caught gently's real
+failure: a self-declared Rust port of an upstream that is GPL-2.0-or-later
+must itself ship GPL-2.0-or-later — a declared `MIT` was a copyright issue,
+not a formatting one. Detecting that class mechanically needs upstream
+license metadata per repo (e.g. a registry field like `upstream =
+"Graph::Easy 0.69 (gpl)"` + an SPDX-compatibility judgment). That judgment is
+not mechanical without a curated mapping, so it is recorded here as a
+follow-up idea (candidate: a `ddl doctor` check keyed off registry metadata,
+or a fleet-standard README/manifest convention declaring the port's upstream
+and inherited license) rather than a silently-wrong automatic check.
+
+### 9.2 Known gap in ddl's own gate generator
+
+`ddl init --gates` inserts managed blocks (PRE_COMMIT_BLOCK/PRE_PUSH_BLOCK)
+that do **not** chain `bd hooks run` — repos wired purely by `ddl init
+--gates` fail `ddl.repo.bd-hooks`. The chain currently lives only in
+hand-edited lefthooks (ddl's own repo included). Follow-up: emit the chain
+from the managed blocks so the fix hint and the generator agree.

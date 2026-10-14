@@ -1,6 +1,8 @@
 # dulce-de-leche
 
 > Rust CLI orchestrator for the charly-vibes tool ecosystem. One command (`ddl`) to install, configure, and update every tool, with per-tool health via `ddl status` and everything living under a clean `.ddl/` directory.
+>
+> File roles: this `llms.txt` is the machine index (link list + commands). `llm.txt` is the ecosystem-standard narrative summary (§3) covering ddl's role in the fleet standard. Content is kept in sync — edit both or neither.
 
 ## Authorship
 
@@ -18,15 +20,22 @@ Leer en español: https://charly-vibes.github.io/charly-vibes/
 
 ## Install
 
-macOS & Linux via curl (downloads the latest release binary, no package manager needed):
+macOS & Linux via curl — stable bootstrap script; resolves the latest release,
+downloads the archive AND its checksums.txt, and verifies the archive sha256
+BEFORE extraction/execution (fail-closed: tampered or unverified archives are
+never installed; mirrors the DDL-yts policy in src/installer.rs):
 
 ```bash
-V=$(basename "$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
-  https://github.com/charly-vibes/dulce-de-leche/releases/latest)" | sed 's/^v//')
-TGT="$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/^x86_64$/amd64/; s/^aarch64$/arm64/')"
-curl -fsSL "https://github.com/charly-vibes/dulce-de-leche/releases/download/v${V}/ddl_${V}_${TGT}.tar.gz" | tar xz
-chmod +x ddl && sudo mv ddl /usr/local/bin/
+curl -fsSL https://raw.githubusercontent.com/charly-vibes/dulce-de-leche/main/install.sh | bash
+
+# Pin a specific version instead of latest:
+curl -fsSL https://raw.githubusercontent.com/charly-vibes/dulce-de-leche/main/install.sh | DDL_VERSION=0.8.0 bash
 ```
+
+Env overrides: `DDL_VERSION` (pin), `DDL_INSTALL_DIR` (default /usr/local/bin),
+`DDL_ALLOW_UNVERIFIED_RELEASE=1` (explicitly authorize installing when the
+release publishes no usable checksum — same escape hatch as the Rust installer;
+a checksum MISMATCH is never bypassed).
 
 Then run it:
 

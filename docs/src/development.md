@@ -39,22 +39,28 @@ CI runs on GitHub Actions with the same `just ci` command used locally.
 
 ```bash
 # 1. Update version in Cargo.toml
-# 2. Commit and push
-git add Cargo.toml
-git commit -m "Release v0.1.0"
+# 2. Update CHANGELOG.md (move Unreleased entries under the new version)
+# 3. If managed tool pins changed, update versions.ddl.toml (§4 standard)
+# 4. Commit and push
+git add Cargo.toml CHANGELOG.md versions.ddl.toml
+git commit -m "Release v0.8.1"
 git push
 
-# 3. Tag and push
-git tag v0.1.0
+# 5. Tag and push
+git tag v0.8.1
 git push --tags
 
-# 4. GitHub Actions handles the rest:
+# 6. GitHub Actions handles the rest:
 #    - Builds binaries for all platforms
 #    - Creates GitHub Release
 #    - Publishes to crates.io
 #    - Updates Homebrew formula
 #    - Updates Scoop manifest
+#    - Regenerates docs/src/release.md from Cargo.toml and deploys the book
 ```
+
+The release page (`docs/src/release.md`) is generated at docs build time and
+must never be hand-edited (it is gitignored).
 
 ## Repository structure
 
@@ -80,3 +86,6 @@ src/
   manifest.rs     # Manifest management
   platform.rs     # Platform detection
 ```
+
+Postmortems of incidents that shaped the current design:
+[Fleet Incident Records](./fleet-incidents.md).

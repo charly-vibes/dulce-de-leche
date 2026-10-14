@@ -74,8 +74,8 @@ jobs:
         # (docs/capability-matrix.md is not part of the book).
         run: |
           {
-            echo '> **Generated artifact** (docs.yml, from docs/ecosystem-map.md).'
-            echo '> Do not hand-edit — the repo source file remains authoritative.'
+            echo '> **Generated artifact** (docs.yml, from [docs/ecosystem-map.md](https://github.com/charly-vibes/dulce-de-leche/blob/main/docs/ecosystem-map.md)).'
+            echo '> Do not hand-edit — edit that source file instead.'
             echo
             sed 's|(capability-matrix.md)|(https://github.com/charly-vibes/dulce-de-leche/blob/main/docs/capability-matrix.md)|' docs/ecosystem-map.md
           } > docs/src/ecosystem-map.md

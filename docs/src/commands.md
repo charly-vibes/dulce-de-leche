@@ -68,7 +68,8 @@ binary name and the crate name, case-insensitive.
 
 Binary names and crate names don't always match — and agents repeatedly
 `cargo install` the crate expecting the binary, or `gh repo view` the
-binary name expecting the repo. The mapping:
+binary name expecting the repo. The table below lists only the tools whose
+names **mismatch** (the rest install by their own name):
 
 | binary | crate | repository |
 |---|---|---|
@@ -194,3 +195,7 @@ body is saved to a local file so nothing is lost.
 |------|---------|
 | 0 | Success |
 | 1 | Error (any failure — see stderr for details) |
+
+Failures are not distinguished by exit code; the human-readable error and
+its remediation hint are printed to stderr. Scripts should parse `--json`
+output instead of exit codes.

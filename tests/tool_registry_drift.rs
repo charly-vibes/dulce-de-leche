@@ -126,6 +126,7 @@ const EXPECTED_CATEGORY: &[(&str, &str)] = &[
     ("bd", "extension"),
     ("openspec", "extension"),
     ("specodelic", "extension"),
+    ("funkalization", "extension"),
 ];
 
 #[test]
@@ -178,6 +179,7 @@ fn maturity_matches_ratified_assignments() {
         ("incitaciones", "experimental"),
         ("turu", "beta"),
         ("specodelic", "experimental"),
+        ("funkalization", "experimental"),
     ];
     assert_eq!(
         ratified.len(),
