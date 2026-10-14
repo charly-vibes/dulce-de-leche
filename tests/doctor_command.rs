@@ -211,7 +211,25 @@ fn test_doctor_repo_checks_absent_outside_git_repo() {
 /// Wire a git repo fully: managed lefthook blocks, AGENTS.md blocks,
 /// gitignore coverage, version pins. Returns the temp dir.
 fn git_init(path: &std::path::Path) {
-    let out = std::process::Command::new("git")
+    // Strip git's inherited environment: under a lefthook pre-push run the
+    // child would otherwise inherit GIT_DIR/GIT_WORK_TREE from the hook and
+    // `git init` would try to lock the parent repo's config instead of
+    // creating a fresh repo.
+    let mut cmd = std::process::Command::new("git");
+    for var in [
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_COMMON_DIR",
+        "GIT_CONFIG",
+        "GIT_CONFIG_GLOBAL",
+        "GIT_CONFIG_SYSTEM",
+        "GIT_NAMESPACE",
+    ] {
+        cmd.env_remove(var);
+    }
+    let out = cmd
         .args(["init", "-q"])
         .current_dir(path)
         .output()
