@@ -53,6 +53,10 @@ semver = "1"
 # Cross-platform symlinks
 fs2 = "0.4"
 
+# O_NOFOLLOW for race-free manifest opens (SEC-05); unix-only
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 # Progress indicators
 indicatif = "0.17"
 
