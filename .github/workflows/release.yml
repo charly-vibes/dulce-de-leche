@@ -291,40 +291,138 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
-      # Tap/scoop auto-update is best-effort: TAP_GITHUB_TOKEN may be unset,
-      # and a failure here must not mark the whole release run failed.
+      # DDL-9e7 (SEC-07): channel propagation is no longer silently
+      # best-effort. A missing TAP_GITHUB_TOKEN means the channel is
+      # intentionally disabled and is reported as such; a real update
+      # failure is retried idempotently (the update scripts refuse to
+      # write unless version/tag/checksums correspond, and re-rendering
+      # an already-updated tap/bucket is a no-op, so a retry never
+      # republishes the crate or recreates the release) and recorded in
+      # a status file. The release-health step below turns any `failed`
+      # status into a visible incomplete-distribution result.
       - name: Update Homebrew tap
-        continue-on-error: true
+        id: channel-homebrew
         env:
           TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
         run: |
           TAG="${GITHUB_REF_NAME}"
           VERSION="${{ steps.pkg.outputs.version }}"
-          git clone "https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/charly-vibes/homebrew-charly.git" /tmp/tap
-          python3 scripts/update-homebrew.py \
-            /tmp/tap/Formula/dulce-de-leche.rb \
-            "${VERSION}" "${TAG}" dist/checksums.txt
-          cd /tmp/tap
-          git config user.email "github-actions@github.com"
-          git config user.name "GitHub Actions"
-          git add Formula/dulce-de-leche.rb
-          git diff --staged --quiet || git commit -m "Update dulce-de-leche to ${VERSION}"
-          git push
+          CHANNEL_STATUS=/tmp/channel-homebrew.status
+          MAX_ATTEMPTS=3
+          if [ -z "${TAP_GITHUB_TOKEN}" ]; then
+            echo "disabled" > "${CHANNEL_STATUS}"
+            echo "::notice::Homebrew tap update is disabled (TAP_GITHUB_TOKEN not set); the release will be marked accordingly."
+            exit 0
+          fi
+          ok=0
+          attempt=1
+          while [ "${attempt}" -le "${MAX_ATTEMPTS}" ]; do
+            rm -rf /tmp/tap
+            if git clone --depth 1 "https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/charly-vibes/homebrew-charly.git" /tmp/tap \
+              && python3 scripts/update-homebrew.py \
+                   /tmp/tap/Formula/dulce-de-leche.rb \
+                   "${VERSION}" "${TAG}" dist/checksums.txt; then
+              git -C /tmp/tap config user.email "github-actions@github.com"
+              git -C /tmp/tap config user.name "GitHub Actions"
+              git -C /tmp/tap add Formula/dulce-de-leche.rb
+              if git -C /tmp/tap diff --staged --quiet; then
+                echo "unchanged" > "${CHANNEL_STATUS}"
+                ok=1
+                break
+              fi
+              if git -C /tmp/tap commit -m "Update dulce-de-leche to ${VERSION}" \
+                && git -C /tmp/tap push; then
+                echo "updated" > "${CHANNEL_STATUS}"
+                ok=1
+                break
+              fi
+            fi
+            echo "::warning::Homebrew tap update attempt ${attempt}/${MAX_ATTEMPTS} failed; retrying."
+            attempt=$((attempt + 1))
+            sleep 5
+          done
+          if [ "${ok}" -ne 1 ]; then
+            echo "failed" > "${CHANNEL_STATUS}"
+            echo "::error::Homebrew tap update failed after ${MAX_ATTEMPTS} attempts."
+          fi
 
       - name: Update Scoop bucket
-        continue-on-error: true
+        id: channel-scoop
         env:
           TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
         run: |
           TAG="${GITHUB_REF_NAME}"
           VERSION="${{ steps.pkg.outputs.version }}"
-          git clone "https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/charly-vibes/scoop-charly.git" /tmp/scoop
-          python3 scripts/update-scoop.py \
-            /tmp/scoop/bucket/dulce-de-leche.json \
-            "${VERSION}" "${TAG}" dist/checksums.txt
-          cd /tmp/scoop
-          git config user.email "github-actions@github.com"
-          git config user.name "GitHub Actions"
-          git add bucket/dulce-de-leche.json
-          git diff --staged --quiet || git commit -m "Update dulce-de-leche to ${VERSION}"
-          git push
+          CHANNEL_STATUS=/tmp/channel-scoop.status
+          MAX_ATTEMPTS=3
+          if [ -z "${TAP_GITHUB_TOKEN}" ]; then
+            echo "disabled" > "${CHANNEL_STATUS}"
+            echo "::notice::Scoop bucket update is disabled (TAP_GITHUB_TOKEN not set); the release will be marked accordingly."
+            exit 0
+          fi
+          ok=0
+          attempt=1
+          while [ "${attempt}" -le "${MAX_ATTEMPTS}" ]; do
+            rm -rf /tmp/scoop
+            if git clone --depth 1 "https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/charly-vibes/scoop-charly.git" /tmp/scoop \
+              && python3 scripts/update-scoop.py \
+                   /tmp/scoop/bucket/dulce-de-leche.json \
+                   "${VERSION}" "${TAG}" dist/checksums.txt; then
+              git -C /tmp/scoop config user.email "github-actions@github.com"
+              git -C /tmp/scoop config user.name "GitHub Actions"
+              git -C /tmp/scoop add bucket/dulce-de-leche.json
+              if git -C /tmp/scoop diff --staged --quiet; then
+                echo "unchanged" > "${CHANNEL_STATUS}"
+                ok=1
+                break
+              fi
+              if git -C /tmp/scoop commit -m "Update dulce-de-leche to ${VERSION}" \
+                && git -C /tmp/scoop push; then
+                echo "updated" > "${CHANNEL_STATUS}"
+                ok=1
+                break
+              fi
+            fi
+            echo "::warning::Scoop bucket update attempt ${attempt}/${MAX_ATTEMPTS} failed; retrying."
+            attempt=$((attempt + 1))
+            sleep 5
+          done
+          if [ "${ok}" -ne 1 ]; then
+            echo "failed" > "${CHANNEL_STATUS}"
+            echo "::error::Scoop bucket update failed after ${MAX_ATTEMPTS} attempts."
+          fi
+
+      # DDL-9e7 (SEC-07): the release run must not look successful while a
+      # distribution channel lags. This step aggregates the recorded channel
+      # outcomes into the job summary and fails the job when any channel
+      # failed, producing a visible incomplete-distribution result for the
+      # release. Intentionally disabled channels are reported as such, not
+      # as failures. `always()` keeps the report even when an earlier step
+      # already failed (the job is failed by that step regardless).
+      - name: Release health (channel propagation)
+        if: always()
+        run: |
+          {
+            echo "## Release channel propagation"
+            echo ""
+            echo "| Channel | Outcome |"
+            echo "| --- | --- |"
+            for ch in homebrew scoop; do
+              f="/tmp/channel-${ch}.status"
+              if [ ! -f "${f}" ]; then
+                outcome="not-run (earlier step failed or skipped)"
+              else
+                outcome="$(cat "${f}")"
+              fi
+              echo "| ${ch} | ${outcome} |"
+              if [ "${outcome}" = "failed" ]; then
+                echo "::error::Release distribution is INCOMPLETE: the ${ch} channel update failed."
+              fi
+            done
+            echo ""
+            echo "Outcome legend: updated / unchanged (idempotent retry) / disabled (token absent, intentional) / failed (incomplete distribution)."
+          } >> "${GITHUB_STEP_SUMMARY}"
+          if grep -qs "^| homebrew | failed" "${GITHUB_STEP_SUMMARY}" || grep -qs "^| scoop | failed" "${GITHUB_STEP_SUMMARY}"; then
+            echo "::error::At least one distribution channel failed; the release is incomplete."
+            exit 1
+          fi
