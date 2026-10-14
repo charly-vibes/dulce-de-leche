@@ -6,28 +6,74 @@ Usage:
 
 Example:
     python3 scripts/update-homebrew.py /tmp/Formula/dulce-de-leche.rb 0.1.0 v0.1.0 dist/checksums.txt
+
+Purpose:
+    Renders the homebrew-charly tap formula for one release. DDL-9e7: the
+    script refuses to write any output unless the declared version, the
+    asset tag, and the checksum entries for every referenced platform
+    asset correspond — a failed verification exits non-zero and leaves
+    the target untouched, so a retry can never commit a half-verified
+    channel update. Rendering is deterministic, so re-running against an
+    already-updated tap is a no-op (idempotent retry).
 """
-import sys
 import os
+import sys
 
-formula_path = sys.argv[1]
-version = sys.argv[2]
-tag = sys.argv[3]
-checksums_path = sys.argv[4]
+# Platforms the formula references; each must appear in checksums.txt.
+REQUIRED_PLATFORMS = [
+    "darwin_arm64", "darwin_amd64", "linux_arm64", "linux_amd64",
+]
 
-shas = {}
-with open(checksums_path) as f:
-    for line in f:
-        parts = line.split()
-        if len(parts) == 2:
-            sha, name = parts
-            for platform in ["darwin_arm64", "darwin_amd64", "linux_arm64", "linux_amd64"]:
-                if platform in name:
-                    shas[platform] = sha
 
-base = f"https://github.com/charly-vibes/dulce-de-leche/releases/download/{tag}"
+class VerificationError(Exception):
+    """Release inputs do not correspond; the channel update is refused."""
 
-formula = f"""\
+
+def verify_release_inputs(version, tag, checksums_path, required=REQUIRED_PLATFORMS):
+    """Assert declared version, asset tag, and checksums correspond.
+
+    Raises VerificationError (before any file is written) when:
+      * the tag does not equal "v" + version, or
+      * any required platform asset is missing from the checksum file.
+    """
+    if tag != "v" + version:
+        raise VerificationError(
+            f"refusing channel update: tag {tag!r} does not match "
+            f"declared version {version!r} (expected 'v{version}')"
+        )
+    if not os.path.isfile(checksums_path):
+        raise VerificationError(
+            f"refusing channel update: checksums file {checksums_path!r} not found"
+        )
+    shas = parse_checksums(checksums_path)
+    missing = [p for p in required if p not in shas]
+    if missing:
+        raise VerificationError(
+            f"refusing channel update: checksums file is missing assets for "
+            f"{', '.join(missing)}"
+        )
+    return shas
+
+
+def parse_checksums(checksums_path):
+    """Return {platform: sha256} for every required platform found."""
+    shas = {}
+    with open(checksums_path) as f:
+        for line in f:
+            parts = line.split()
+            if len(parts) == 2:
+                sha, name = parts
+                for platform in REQUIRED_PLATFORMS:
+                    if platform in name:
+                        shas[platform] = sha
+    return shas
+
+
+def build_formula(version, tag, shas):
+    """Render the formula text deterministically."""
+    base = f"https://github.com/charly-vibes/dulce-de-leche/releases/download/{tag}"
+
+    return f"""\
 # typed: false
 # frozen_string_literal: true
 
@@ -71,10 +117,26 @@ class DulceDeLeche < Formula
 end
 """
 
-os.makedirs(os.path.dirname(formula_path), exist_ok=True)
-with open(formula_path, "w") as f:
-    f.write(formula)
 
-print(f"Wrote {formula_path} (version {version})")
-for p, s in shas.items():
-    print(f"  {p}: {s[:16]}...")
+def write_formula(formula_path, text):
+    os.makedirs(os.path.dirname(formula_path), exist_ok=True)
+    with open(formula_path, "w") as f:
+        f.write(text)
+
+
+def main(argv):
+    formula_path, version, tag, checksums_path = argv[1], argv[2], argv[3], argv[4]
+    try:
+        shas = verify_release_inputs(version, tag, checksums_path)
+    except VerificationError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+    write_formula(formula_path, build_formula(version, tag, shas))
+    print(f"Wrote {formula_path} (version {version})")
+    for p, s in sorted(shas.items()):
+        print(f"  {p}: {s[:16]}...")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
