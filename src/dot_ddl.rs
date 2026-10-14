@@ -69,6 +69,51 @@ where
     unreachable!("retry loop always returns")
 }
 
+/// SEC-05 (DDL-sg8): refuse manifest writes that links could redirect
+/// outside the project.
+///
+/// Two checks run before every manifest write path:
+/// 1. The manifest path itself must not be a symlink (checked via
+///    `symlink_metadata`, so dangling links are caught too). Even an
+///    in-project link is untrusted: it can be swapped between check and
+///    write, and a write through it lands at the target, wherever that is.
+/// 2. The `.ddl/` directory must not be a link pointing outside the project
+///    root. In-project directory links (e.g. `.ddl` -> `.internal-ddl`)
+///    stay allowed — they cannot escape the tree.
+///
+/// Missing/dangling ancestors degrade to "allow": the subsequent `open()`
+/// then fails (or creates) naturally, mirroring today's behavior for
+/// genuinely absent directories; the guard only rejects link-mediated
+/// redirection.
+pub fn ensure_manifest_write_is_local(manifest_path: &Path) -> Result<()> {
+    if is_symlink(manifest_path) {
+        return Err(DdlError::Other(format!(
+            "refusing to write manifest: {} is a symlink (SEC-05: manifest links must not redirect writes outside the project)",
+            manifest_path.display()
+        )));
+    }
+
+    let Some(ddl_dir) = manifest_path.parent() else {
+        return Ok(());
+    };
+    let Some(root) = ddl_dir.parent() else {
+        return Ok(());
+    };
+    let (Ok(root), Ok(resolved)) = (std::fs::canonicalize(root), std::fs::canonicalize(ddl_dir))
+    else {
+        return Ok(());
+    };
+    if !resolved.starts_with(&root) {
+        return Err(DdlError::Other(format!(
+            "refusing to write manifest: {} links to {}, outside the project root {} (SEC-05)",
+            ddl_dir.display(),
+            resolved.display(),
+            root.display()
+        )));
+    }
+    Ok(())
+}
+
 /// ddl's own configuration, written to `.ddl/config.toml`.
 ///
 /// Implements `genesis::config::ConfigFile` for standard read/write/validate.
@@ -224,6 +269,7 @@ impl DdlDir {
 
         let manifest = Manifest::new();
         let manifest_path = path.join("manifest.json");
+        ensure_manifest_write_is_local(&manifest_path)?;
         manifest.save(&manifest_path)?;
 
         Ok(Self {
@@ -273,6 +319,7 @@ impl DdlDir {
     }
 
     fn try_save_manifest(&self, manifest_path: &Path) -> Result<()> {
+        ensure_manifest_write_is_local(manifest_path)?;
         let mut file = OpenOptions::new()
             .create(true)
             .truncate(false)
@@ -292,6 +339,7 @@ impl DdlDir {
     pub fn record_tool(&mut self, name: &str, entry: ToolEntry) -> Result<()> {
         let manifest_path = self.manifest_path();
         with_sharing_retry(|| {
+            ensure_manifest_write_is_local(&manifest_path)?;
             // Single-handle read-modify-write: the LockFileEx byte-range lock
             // held by this handle blocks every other handle on Windows (see
             // save_manifest), so re-reading and writing must use this handle.
