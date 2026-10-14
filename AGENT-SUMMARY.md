@@ -1,88 +1,73 @@
-# AGENT-SUMMARY — DDL-9e7 (SEC-07): Surface and retry failed Homebrew/Scoop release propagation
+# AGENT-SUMMARY — DDL-1ay (SEC-03): Stable install.sh bootstrap with checksum verification
 
 ## What was implemented
 
-- **`scripts/update-homebrew.py` / `scripts/update-scoop.py`** — refactored
-  into verifiable, testable units (pure `build_formula` / `build_manifest`,
-  `verify_release_inputs`, module-level CLI guard). Both now **refuse to
-  write any output** unless the declared version, asset tag
-  (`tag == "v" + version`), and every referenced asset checksum correspond;
-  verification failure exits 2 with a clear error. Rendering is
-  deterministic, so a retry against an already-updated tap/bucket is a
-  byte-identical no-op (idempotent).
-- **`.github/workflows/release.yml`** — removed unconditional
-  `continue-on-error: true` from both channel steps. Semantics now:
-  - missing `TAP_GITHUB_TOKEN` → channel reported as `disabled`
-    (intentional, non-failure, `::notice`);
-  - real update failure → `MAX_ATTEMPTS=3` idempotent retry with recorded
-    machine-readable status files (`updated` / `unchanged` / `failed`);
-  - new **Release health (channel propagation)** step (`if: always()`)
-    aggregates outcomes into the job summary and **fails the job** when any
-    channel is `failed` — a visible incomplete-distribution result.
-  - Retry is confined to the channel steps; the GitHub release and
-    crates.io publish are never re-run. DDL-bas/DDL-wof invariants
-    (credential scoping, provenance, SHA-pinned actions, gates) untouched.
-- **`tests/test_release_channels.py`** — the required meter deliverable
-  (15 unittest cases): script verification (positive/negative), CLI
-  refusal, idempotency, and structural workflow assertions (no blind
-  continue-on-error, disabled-vs-failed, retry confinement, release-health
-  failure path).
-- **`openspec/changes/surface-channel-propagation/`** — DESIGN-lane
-  proposal + `release-pipeline` spec delta documenting the release-health
-  semantics (not an unreviewed protocol break; no interface changes).
+- **`install.sh`** (new, repo root) — stable single-URL bootstrap entry point for
+  macOS & Linux. Resolves the latest release (or a pinned `DDL_VERSION`),
+  downloads the release archive **and** its `checksums.txt`, and verifies the
+  archive sha256 **before** extraction or execution. This mirrors the DDL-yts
+  policy from `src/installer.rs` (`enforce_checksum_policy`) at shell level:
+  - missing / malformed / unfetchable `checksums.txt`, or asset not listed →
+    fail-closed rejection with **zero executable installs**;
+  - checksum **mismatch is never bypassed**;
+  - `DDL_ALLOW_UNVERIFIED_RELEASE=1` is the only bypass (same env var and
+    semantics as the Rust installer — authorizes *unavailable* checksums only);
+  - extraction happens into a temp dir; the verified binary is then installed
+    to `DDL_INSTALL_DIR` (default `/usr/local/bin`).
+  - Carries a Purpose/Responsibilities/Rationale header.
+- **`tests/install_sh_fixtures.sh`** (new) — 5 executable fixture tests served
+  over `file://` (no network), pinning the SEC-03 contract:
+  1. clean fixture → installs a verified, runnable `ddl`
+  2. tampered archive (published digest for original bytes) → reject, zero installs
+  3. missing `checksums.txt` → reject, zero installs
+  4. asset unlisted in `checksums.txt` → reject, zero installs
+  5. `DDL_ALLOW_UNVERIFIED_RELEASE=1` with missing checksums → authorized install
+- **`justfile`** — new `bootstrap-fixtures` recipe wired into `ci`.
+- **`README.md` / `llms.txt`** — 4-line curl|tar snippet replaced with the
+  stable bootstrap URL plus a `DDL_VERSION=...` pinning variant and env-var docs.
+
+## src/installer.rs — intentionally untouched
+
+CO-MOD note: `src/installer.rs` is claimed by 8 open security slices. The
+DDL-yts policy is *mirrored* in bash (shell cannot link the Rust binary), so no
+installer.rs change is required for this slice; no refactor was made.
 
 ## TDD evidence
 
-- Red first: `tests/test_release_channels.py` committed at `358b34a` with
-  7 failures + 6 import errors against the then-current code.
-- Green after implementation: **15/15 pass**
-  (`python3 -m unittest discover -s tests -p "test_release_channels*.py"` → OK).
-- Embedded workflow shell validated with `bash -n` (all three new/changed
-  run blocks).
+- Red: commit `a25968a` — fixture tests + justfile wiring committed first; test
+  run fails with `install.sh does not exist yet (red phase expected)`.
+- Green: commit with `install.sh` + doc updates — fixtures **5 passed / 0 failed**.
 
-## Quality gates
+## Test results
 
-- `cargo fmt --all`, `cargo clippy --all-targets -- -D warnings`: clean.
-- `cargo test --locked`: all suites pass except pre-existing environmental
-  failure `s2_live_book_sites_return_200` (live-network docs test) —
-  verified it fails identically on base commit `01aa578` via a temp
-  worktree, so it is unrelated to this change.
-- Hook note: lefthook pre-commit/pre-push invoke `bd hooks run` (bd
-  commands are forbidden for this agent) and `just pre-push` fails in the
-  sandbox; commits/pushes used `--no-verify` with fmt/clippy/test run
-  manually as required.
+- `bash tests/install_sh_fixtures.sh` → 5 passed, 0 failed.
+- `cargo fmt --all`, `cargo clippy --all-targets -- -D warnings` → clean.
+- `cargo test --locked` (with `DDL_SKIP_LIVE_SMOKE=1`) → all 23 suites ok
+  (0 failures). One pre-existing environmental failure without the env var:
+  `s2_live_book_sites_return_200` (live GitHub Pages smoke needing network;
+  the repo's own `DDL_SKIP_LIVE_SMOKE` gate exists for it).
 
 ## Commits
 
-- `358b34a` — test(SEC-07/DDL-9e7): red fixtures for channel propagation failure surfacing
-- `fb118f3` — fix(SEC-07/DDL-9e7): surface and retry failed channel propagation
-- `603ce27` — docs(SEC-07/DDL-9e7): openspec change proposal for channel propagation health
+- `a25968a` — test(ddl-1ay): red — executable install.sh bootstrap fixtures (SEC-03)
+- (green)  — feat(ddl-1ay): install.sh — checksum-verified stable bootstrap (SEC-03 green)
 
 ## PR
 
-- https://github.com/charly-vibes/dulce-de-leche/pull/68 (draft → ready)
-
-## Acceptance criteria
-
-- [x] Injected tap/bucket failure → visible incomplete-distribution result
-      (release-health step fails the job + summary table).
-- [x] Retry idempotent, never republishes crate or release (retry confined
-      to channel steps; deterministic re-render; status files).
-- [x] Version/tag/checksum asserted before committing either channel
-      update (`verify_release_inputs`, exit 2, no write on refusal).
-- [x] Disabled channels distinguished from failure (`disabled` vs
-      `failed` outcomes; legend documented in the summary).
-- [x] Failing fixtures first (red commit), green after, existing
-      regression coverage intact.
-- [x] New files open with Purpose/Responsibilities/Rationale headers.
+https://github.com/charly-vibes/dulce-de-leche/pull/74 (draft → ready at completion)
 
 ## Residual gaps / decisions
 
-- The `release-health` failure path is covered structurally (YAML
-  assertions), not by executing GitHub Actions; live-workflow verification
-  happens on the next tagged release.
-- `sleep 5` fixed backoff chosen over exponential backoff to keep the
-  retry loop simple and bounded (3 attempts ≈ 10 s overhead on failure).
-- Per the ticket's CO-MOD note, release.yml channel logic stayed
-  independent of the DDL-bas/DDL-wof shared-revision concerns; no
-  coordination conflict introduced.
+- **Decisions**: (1) mirrored DDL-yts policy in bash instead of touching
+  installer.rs (CO-MOD constraint); (2) fixture tests live in bash rather than
+  Rust integration tests — the contract under test is shell behavior;
+  (3) bypass semantics match installer.rs exactly (authorize unavailable only,
+  never mismatch).
+- **Gaps**: install.sh provenance (the raw.githubusercontent main-branch URL)
+  is itself unverified by design — full provenance coordination with DDL-wof
+  (per-release provenance manifests) remains for that slice; the bootstrap only
+  pins the archive-vs-checksums.txt invariant. Windows bootstrap (Scoop) is
+  out of scope for this slice.
+- Pre-push lefthook gate failed environmentally (its `cargo test` collides with
+  the concurrent `bd` gate locking the main repo's `.git/config`); pushed with
+  `--no-verify` after manually running fmt/clippy/test, per protocol.
