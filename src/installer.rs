@@ -9,6 +9,15 @@
 //! error naming both remedies. npm-distributed tools (incitaciones) always
 //! install via npm. Homebrew and Scoop are not part of ddl's install decisions;
 //! their formulas/manifests remain published for manual installs.
+//!
+//! Rationale (DDL-yts, SEC-03): verification must be *available*, not merely
+//! attempted. A release that publishes no usable checksum — missing,
+//! malformed, incomplete, or transport-failed metadata — cannot be
+//! authenticated, so the download is REJECTED before any destination
+//! mutation, instead of being installed with a verbose-only skip warning.
+//! The secure default can only be bypassed by the explicit user
+//! authorization `DDL_ALLOW_UNVERIFIED_RELEASE=1`; even then, a published
+//! checksum mismatch is never bypassed and never falls back to cargo.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -24,6 +33,57 @@ fn verbose_print(verbose: bool, msg: &str) {
 use crate::error::{DdlError, Result};
 use crate::manifest::{Manifest, ToolEntry};
 use crate::platform::{MANAGED_TOOLS, Os, PackageManager, Platform, Tool};
+
+/// Verification outcome of a binary release download (DDL-yts).
+///
+/// `label()` is the machine-readable value used in JSON output events.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VerificationStatus {
+    /// sha256 matched the checksum published for the release.
+    Verified,
+    /// Installed without release-checksum verification, explicitly authorized
+    /// by the user via `DDL_ALLOW_UNVERIFIED_RELEASE=1` (legacy transition).
+    UnverifiedAuthorized,
+    /// Installed without release-checksum verification: non-binary method
+    /// (cargo/npm rely on their registries' own integrity guarantees).
+    Unverified,
+}
+
+impl VerificationStatus {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Verified => "verified",
+            Self::UnverifiedAuthorized => "unverified-authorized",
+            Self::Unverified => "unverified",
+        }
+    }
+
+    /// Human-readable suffix appended to install result messages so human and
+    /// JSON output both carry the distinction.
+    pub fn suffix(self) -> String {
+        match self {
+            Self::Verified => " (sha256 verified)".to_string(),
+            Self::UnverifiedAuthorized => {
+                " (unverified — explicitly authorized via DDL_ALLOW_UNVERIFIED_RELEASE)".to_string()
+            }
+            Self::Unverified => String::new(),
+        }
+    }
+}
+
+/// Result of looking up the published checksum for a release asset (DDL-yts).
+///
+/// Replaces the old `Option<String>`: every flavor of "verification is not
+/// possible" now carries its reason so the rejection diagnostic is accurate.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ChecksumLookup {
+    /// A published sha256 digest for the asset.
+    Published(String),
+    /// No usable checksum metadata: missing, malformed, incomplete (asset
+    /// absent from the manifest), or the fetch failed. The string is the
+    /// human-readable reason used in rejection diagnostics.
+    Unavailable(&'static str),
+}
 
 /// Result of a single tool installation attempt.
 #[derive(Debug, Clone)]
@@ -275,6 +335,51 @@ fn github_client() -> Result<reqwest::blocking::Client> {
         .map_err(|e| DdlError::Other(format!("Failed to create HTTP client: {e}")))
 }
 
+/// DDL-yts policy for release downloads, as a pure decision (no network, no
+/// filesystem) so it can be regression-tested without connectivity.
+///
+/// - `ChecksumLookup::Published(digest)` → sha256 must match: `Ok(Verified)`
+///   or `Err(ChecksumMismatch)`. A mismatch is NEVER bypassed by
+///   `allow_unverified` and never falls back to cargo.
+/// - `ChecksumLookup::Unavailable(reason)` → `Err(ChecksumUnavailable)` by
+///   default (secure default: reject unverified downloads before any
+///   destination mutation). Only when the user explicitly authorized the
+///   legacy-unverified transition (`DDL_ALLOW_UNVERIFIED_RELEASE=1`) does it
+///   return `Ok(UnverifiedAuthorized)`.
+pub fn enforce_checksum_policy(
+    tool: &str,
+    url: &str,
+    lookup: ChecksumLookup,
+    bytes: &[u8],
+    allow_unverified: bool,
+) -> Result<VerificationStatus> {
+    match lookup {
+        ChecksumLookup::Published(expected) => {
+            verify_checksum(bytes, &expected, tool, url)?;
+            Ok(VerificationStatus::Verified)
+        }
+        ChecksumLookup::Unavailable(reason) => {
+            if allow_unverified {
+                Ok(VerificationStatus::UnverifiedAuthorized)
+            } else {
+                Err(DdlError::ChecksumUnavailable {
+                    tool: tool.to_string(),
+                    url: url.to_string(),
+                    reason: reason.to_string(),
+                })
+            }
+        }
+    }
+}
+
+/// True only when the user explicitly authorized a legacy-unverified install.
+fn unverified_authorized() -> bool {
+    matches!(
+        std::env::var("DDL_ALLOW_UNVERIFIED_RELEASE").as_deref(),
+        Ok("1" | "true" | "yes")
+    )
+}
+
 /// Install a tool using the best available method.
 pub fn install_tool(
     tool: &Tool,
@@ -297,7 +402,7 @@ pub fn install_tool(
 
     let (method, result) = match method {
         InstallMethod::Binary => match install_binary(tool, platform, verbose) {
-            Ok(()) => (InstallMethod::Binary, Ok(())),
+            Ok(status) => (InstallMethod::Binary, Ok(status)),
             // Definitive miss (no release asset for this platform): fall back
             // to cargo when available — but only for tools with a real
             // crates.io package (Go/npm tools have none, and installing the
@@ -314,7 +419,10 @@ pub fn install_tool(
                                 tool.name
                             ),
                         );
-                        (InstallMethod::Cargo, install_cargo(tool, verbose))
+                        (
+                            InstallMethod::Cargo,
+                            install_cargo(tool, verbose).map(|()| VerificationStatus::Unverified),
+                        )
                     }
                     _ => (
                         InstallMethod::Binary,
@@ -330,7 +438,8 @@ pub fn install_tool(
             Err(e) => (InstallMethod::Binary, Err(e)),
         },
         other => {
-            let result = execute_install(&other, tool, platform, verbose);
+            let result = execute_install(&other, tool, platform, verbose)
+                .map(|()| VerificationStatus::Unverified);
             (other, result)
         }
     };
@@ -339,7 +448,7 @@ pub fn install_tool(
         .unwrap_or_else(|| "unknown".to_string());
 
     match result {
-        Ok(()) => {
+        Ok(status) => {
             manifest.set_tool(
                 tool.name,
                 ToolEntry {
@@ -354,7 +463,13 @@ pub fn install_tool(
                 success: true,
                 method: method.clone(),
                 version: detected.clone(),
-                message: format!("{} v{} installed via {}", tool.name, detected, method),
+                message: format!(
+                    "{} v{} installed via {}{}",
+                    tool.name,
+                    detected,
+                    method,
+                    status.suffix()
+                ),
             }
         }
         Err(e) => {
@@ -386,7 +501,10 @@ fn execute_install(
     verbose: bool,
 ) -> Result<()> {
     match method {
-        InstallMethod::Binary => install_binary(tool, platform, verbose),
+        // Binary status flows through the install_tool first-arm path; this
+        // dispatch arm is only reached for Cargo/Npm, so the status is
+        // irrelevant here.
+        InstallMethod::Binary => install_binary(tool, platform, verbose).map(|_| ()),
         InstallMethod::Cargo => install_cargo(tool, verbose),
         InstallMethod::Npm => install_npm(tool, verbose),
         InstallMethod::Skipped => unreachable!(),
@@ -401,7 +519,7 @@ fn execute_upgrade(
     verbose: bool,
 ) -> Result<()> {
     match method {
-        InstallMethod::Binary => upgrade_binary(tool, platform, verbose),
+        InstallMethod::Binary => upgrade_binary(tool, platform, verbose).map(|_| ()),
         InstallMethod::Cargo => upgrade_cargo(tool, verbose),
         InstallMethod::Npm => upgrade_npm(tool, verbose),
         InstallMethod::Skipped => unreachable!(),
@@ -409,7 +527,8 @@ fn execute_upgrade(
 }
 
 /// Install a tool via binary download from GitHub releases.
-fn install_binary(tool: &Tool, platform: &Platform, verbose: bool) -> Result<()> {
+/// Returns the download's verification status (DDL-yts) on success.
+fn install_binary(tool: &Tool, platform: &Platform, verbose: bool) -> Result<VerificationStatus> {
     let binary_name = if platform.os == Os::Windows {
         std::path::PathBuf::from(tool.name)
             .with_extension("exe")
@@ -503,8 +622,21 @@ fn install_binary(tool: &Tool, platform: &Platform, verbose: bool) -> Result<()>
 
     let dest_path = dest_dir.join(&binary_name);
 
+    // Verification runs BEFORE any destination mutation: the archive bytes are
+    // only extracted once the checksum policy has accepted them (DDL-yts).
     let archive_bytes = fetch_release_asset(&download_url, tool.name)?;
-    verify_download(&download_url, &archive_bytes, tool, verbose)?;
+    let status = verify_download(&download_url, &archive_bytes, tool, verbose)?;
+    match status {
+        VerificationStatus::Verified => {
+            eprintln!("  ✓ {} sha256 verified against release checksum", tool.name)
+        }
+        VerificationStatus::UnverifiedAuthorized => eprintln!(
+            "  ⚠ {} installed WITHOUT checksum verification ({}): explicitly authorized via DDL_ALLOW_UNVERIFIED_RELEASE",
+            tool.name, download_url
+        ),
+        VerificationStatus::Unverified => {}
+    }
+    crate::output::record_install_verification(tool.name, status.label());
 
     if ext == "zip" {
         extract_zip(&archive_bytes, &dest_path, &download_url)?;
@@ -522,7 +654,7 @@ fn install_binary(tool: &Tool, platform: &Platform, verbose: bool) -> Result<()>
     ensure_on_path(&dest_dir, platform)?;
 
     eprintln!("  ✓ {} downloaded to {}", tool.name, dest_path.display());
-    Ok(())
+    Ok(status)
 }
 
 /// SHA-256 of `bytes` as lowercase hex.
@@ -590,37 +722,53 @@ fn verify_checksum(bytes: &[u8], expected: &str, tool: &str, url: &str) -> Resul
     }
 }
 
-/// Look up the published sha256 for the asset at `archive_url`, printing an
-/// accurate skip-reason (verbose) whenever `None` is returned.
+/// Look up the published sha256 for the asset at `archive_url`, reporting the
+/// exact reason whenever verification is not possible (DDL-yts).
 ///
 /// Conventions checked in order:
 /// 1. `checksums.txt` next to the asset (shasum format — ddl's own release
 ///    workflow publishes this), with the archive looked up by filename
 /// 2. a per-asset `<archive>.sha256` file containing a bare digest
 ///
-/// Returns `None` when the release publishes no usable checksum source or the
-/// asset is absent from the manifest — verification is then skipped rather
-/// than failing, since aborting would break installs for family tools that
-/// don't publish checksums yet. When a checksum IS published, mismatch is
-/// fatal (see `verify_checksum`).
-fn fetch_expected_checksum(archive_url: &str, verbose: bool) -> Option<String> {
-    let (base, archive_name) = archive_url.rsplit_once('/')?;
+/// Returns [`ChecksumLookup::Unavailable`] — with the precise reason — when
+/// the release publishes no usable checksum source, the metadata is
+/// malformed, the asset is absent from the manifest, or the metadata fetch
+/// itself fails. Missing/malformed/transport-failed are all rejections under
+/// the DDL-yts policy (see `enforce_checksum_policy`), not skip-and-install.
+fn fetch_expected_checksum(archive_url: &str, _verbose: bool) -> ChecksumLookup {
+    let Some((base, archive_name)) = archive_url.rsplit_once('/') else {
+        return ChecksumLookup::Unavailable("asset URL has no parent path");
+    };
 
     let checksums_url = format!("{base}/checksums.txt");
-    if let Ok(resp) = reqwest::blocking::get(&checksums_url)
-        && resp.status().is_success()
-        && let Ok(body) = resp.text()
-    {
-        if let Some(expected) = parse_checksums(&body).and_then(|m| m.get(archive_name).cloned()) {
-            return Some(expected);
+    match reqwest::blocking::get(&checksums_url) {
+        Ok(resp) if resp.status().is_success() => {
+            if let Ok(body) = resp.text() {
+                match parse_checksums(&body) {
+                    Some(map) => {
+                        if let Some(expected) = map.get(archive_name).cloned() {
+                            return ChecksumLookup::Published(expected);
+                        }
+                        return ChecksumLookup::Unavailable(
+                            "asset is not listed in this release's checksums.txt",
+                        );
+                    }
+                    None => {
+                        return ChecksumLookup::Unavailable("checksums.txt is malformed");
+                    }
+                }
+            }
+            return ChecksumLookup::Unavailable("checksums.txt body could not be read");
         }
-        verbose_print(
-            verbose,
-            &format!(
-                "⚠ {archive_name} is not listed in this release's checksums.txt — skipping verification"
-            ),
-        );
-        return None;
+        Ok(_) => {
+            // checksums.txt answered but not with success — fall through to
+            // the per-asset convention.
+        }
+        Err(_) => {
+            // Metadata transport failed — an attacker or outage must not be
+            // indistinguishable from "no checksum published". Rejected.
+            return ChecksumLookup::Unavailable("checksums.txt could not be fetched");
+        }
     }
 
     let per_asset_url = format!("{archive_url}.sha256");
@@ -630,36 +778,35 @@ fn fetch_expected_checksum(archive_url: &str, verbose: bool) -> Option<String> {
     {
         let digest = body.split_whitespace().next().unwrap_or("").to_lowercase();
         if digest.len() == 64 && digest.chars().all(|c| c.is_ascii_hexdigit()) {
-            return Some(digest);
+            return ChecksumLookup::Published(digest);
         }
+        return ChecksumLookup::Unavailable("per-asset .sha256 file is malformed");
     }
 
-    verbose_print(
-        verbose,
-        &format!("⚠ release publishes no checksum for {archive_name} — skipping verification"),
-    );
-    None
+    ChecksumLookup::Unavailable("release publishes no checksum for the asset")
 }
 
-/// Verify a downloaded release archive against the checksum published for the
-/// same release. Skip-warning is owned by `fetch_expected_checksum`.
+/// Verify a downloaded release archive under the DDL-yts policy.
+///
+/// Missing / malformed / incomplete / transport-failed checksum metadata is a
+/// rejection (see `enforce_checksum_policy`); the only bypass is the explicit
+/// `DDL_ALLOW_UNVERIFIED_RELEASE=1` authorization, which yields
+/// [`VerificationStatus::UnverifiedAuthorized`]. Rejection happens before any
+/// destination mutation — the caller must not extract when this returns Err.
 fn verify_download(
     archive_url: &str,
     archive_bytes: &[u8],
     tool: &Tool,
     verbose: bool,
-) -> Result<()> {
-    match fetch_expected_checksum(archive_url, verbose) {
-        Some(expected) => {
-            verify_checksum(archive_bytes, &expected, tool.name, archive_url)?;
-            verbose_print(
-                verbose,
-                &format!("✓ {} sha256 verified against release checksum", tool.name),
-            );
-            Ok(())
-        }
-        None => Ok(()),
-    }
+) -> Result<VerificationStatus> {
+    let lookup = fetch_expected_checksum(archive_url, verbose);
+    enforce_checksum_policy(
+        tool.name,
+        archive_url,
+        lookup,
+        archive_bytes,
+        unverified_authorized(),
+    )
 }
 
 /// Fetch a release archive, mapping the release-404
@@ -974,7 +1121,7 @@ pub fn upgrade_tool(
 
     let (method, result) = match method {
         InstallMethod::Binary => match upgrade_binary(tool, platform, verbose) {
-            Ok(()) => (InstallMethod::Binary, Ok(())),
+            Ok(status) => (InstallMethod::Binary, Ok(status)),
             Err(DdlError::NoReleaseBinary { .. }) => {
                 match fallback_after_binary_failure(
                     tool.cargo_installable() && PackageManager::Cargo.is_available(),
@@ -987,7 +1134,10 @@ pub fn upgrade_tool(
                                 tool.name
                             ),
                         );
-                        (InstallMethod::Cargo, upgrade_cargo(tool, verbose))
+                        (
+                            InstallMethod::Cargo,
+                            upgrade_cargo(tool, verbose).map(|()| VerificationStatus::Unverified),
+                        )
                     }
                     _ => (
                         InstallMethod::Binary,
@@ -1003,7 +1153,8 @@ pub fn upgrade_tool(
             Err(e) => (InstallMethod::Binary, Err(e)),
         },
         other => {
-            let result = execute_upgrade(&other, tool, platform, verbose);
+            let result = execute_upgrade(&other, tool, platform, verbose)
+                .map(|()| VerificationStatus::Unverified);
             (other, result)
         }
     };
@@ -1011,7 +1162,7 @@ pub fn upgrade_tool(
     let new_version = resolve_with_dest(tool.name, Some(&binary_dest_path(tool, platform)));
 
     match result {
-        Ok(()) => {
+        Ok(status) => {
             let ver = new_version.clone().unwrap_or_else(|| "unknown".to_string());
             let was_upgraded = match (&old_version, &new_version) {
                 (Some(old), Some(new)) => old != new,
@@ -1034,7 +1185,13 @@ pub fn upgrade_tool(
                     success: true,
                     method: method.clone(),
                     version: ver.clone(),
-                    message: format!("{} upgraded to v{} via {}", tool.name, ver, method),
+                    message: format!(
+                        "{} upgraded to v{} via {}{}",
+                        tool.name,
+                        ver,
+                        method,
+                        status.suffix()
+                    ),
                 }
             } else {
                 InstallResult {
@@ -1042,7 +1199,12 @@ pub fn upgrade_tool(
                     success: true,
                     method: InstallMethod::Skipped,
                     version: ver.clone(),
-                    message: format!("{} v{} is already up to date", tool.name, ver),
+                    message: format!(
+                        "{} v{} is already up to date{}",
+                        tool.name,
+                        ver,
+                        status.suffix()
+                    ),
                 }
             }
         }
@@ -1118,7 +1280,7 @@ fn upgrade_npm(tool: &Tool, verbose: bool) -> Result<()> {
 }
 
 /// Upgrade a tool installed via binary download (re-download).
-fn upgrade_binary(tool: &Tool, platform: &Platform, verbose: bool) -> Result<()> {
+fn upgrade_binary(tool: &Tool, platform: &Platform, verbose: bool) -> Result<VerificationStatus> {
     // Re-download the binary — same as install_binary but without the
     // is_tool_installed check (which is handled by the caller)
     install_binary(tool, platform, verbose)

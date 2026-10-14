@@ -95,7 +95,9 @@ fn policy(lookup: ChecksumLookup, allow_unverified: bool) -> Result<Verification
 #[test]
 fn missing_checksum_is_rejected_by_default() {
     let err = policy(
-        ChecksumLookup::Unavailable("release publishes no checksum for tool_v1.0.0_linux_amd64.tar.gz"),
+        ChecksumLookup::Unavailable(
+            "release publishes no checksum for tool_v1.0.0_linux_amd64.tar.gz",
+        ),
         false,
     )
     .unwrap_err();
@@ -107,7 +109,11 @@ fn missing_checksum_is_rejected_by_default() {
 
 #[test]
 fn malformed_checksums_txt_is_rejected_by_default() {
-    let err = policy(ChecksumLookup::Unavailable("checksums.txt is malformed"), false).unwrap_err();
+    let err = policy(
+        ChecksumLookup::Unavailable("checksums.txt is malformed"),
+        false,
+    )
+    .unwrap_err();
     assert!(
         matches!(err, DdlError::ChecksumUnavailable { .. }),
         "malformed checksum metadata must reject, got: {err}"
@@ -144,7 +150,9 @@ fn valid_published_checksum_installs_verified() {
 
 #[test]
 fn checksum_mismatch_never_falls_back_to_cargo() {
-    let err = policy(ChecksumLookup::Published(FIXTURE_DIGEST.to_string()), false)
+    // The release publishes a digest that does NOT match the downloaded bytes.
+    let wrong: &str = "d121be3103007b41edf96f8262925f8c7d61894afe9a041843b631f69445bc57";
+    let err = policy(ChecksumLookup::Published(wrong.to_string()), false)
         .expect_err("wrong digest must reject");
     assert!(
         matches!(err, DdlError::ChecksumMismatch { .. }),
@@ -156,7 +164,9 @@ fn checksum_mismatch_never_falls_back_to_cargo() {
 #[test]
 fn explicit_authorization_permits_unverified_install() {
     let status = policy(
-        ChecksumLookup::Unavailable("release publishes no checksum for tool_v1.0.0_linux_amd64.tar.gz"),
+        ChecksumLookup::Unavailable(
+            "release publishes no checksum for tool_v1.0.0_linux_amd64.tar.gz",
+        ),
         true,
     )
     .unwrap();

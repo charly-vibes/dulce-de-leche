@@ -3,6 +3,13 @@
 //! Every command supports both human-readable output (default) and JSON
 //! output (via `--json`). JSON output follows the genesis-vibes envelope
 //! format for machine-parsable responses.
+//!
+//! Rationale (DDL-yts): install results must distinguish sha256-verified,
+//! rejected, and explicitly authorized legacy-unverified installs. Binary
+//! install verification events are buffered through the JSON collector when
+//! active (so `ddl init --json` carries a per-tool `verification` field),
+//! while the install message text carries the same distinction for human
+//! output and single-envelope JSON commands.
 
 use serde::Serialize;
 use std::sync::Mutex;
@@ -183,6 +190,18 @@ pub fn print_banner(json: bool) {
         println!("╰──────────────────────────────────────╯");
         println!();
     }
+}
+
+/// Record a binary install's verification outcome (DDL-yts) into the JSON
+/// collector when one is active. No-op for JSON when no collector is active
+/// (the install message — which carries the same verification suffix — is
+/// already serialized by `print_install_result`); no human output here, the
+/// installer prints the ✓/⚠ line itself.
+pub fn record_install_verification(tool: &str, verification: &str) {
+    collect_json(&serde_json::json!({
+        "tool": tool,
+        "verification": verification,
+    }));
 }
 
 /// Print a tool installation result line.
