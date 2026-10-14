@@ -1,4 +1,15 @@
 //! Manifest management — read/write `.ddl/manifest.json`.
+//!
+//! Purpose: the typed model of the manifest file plus its parse/save
+//! primitives.
+//! Responsibilities: serde model, parse semantics, in-memory mutations.
+//! Rationale (SEC-01, DDL-8u8): parse semantics are load-bearing for
+//! durability — an empty file parses as a fresh manifest (compat with the
+//! fresh-creation window), and corrupt JSON returns an error rather than
+//! silently resetting established state. Interrupted writes can no longer
+//! *produce* an empty or partial file: all on-disk manifest replacement is
+//! staged + fsynced + renamed atomically (see `dot_ddl::write_manifest_atomic`
+//! and `Manifest::save`), never truncated in place.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -58,13 +69,34 @@ impl Manifest {
         Ok(manifest)
     }
 
-    /// Save the manifest to a file path.
+    /// Save the manifest to a file path as an atomic replace (SEC-01,
+    /// DDL-8u8).
+    ///
+    /// Rationale: the previous implementation wrote with `std::fs::write`
+    /// (truncate-then-write). Any crash mid-write would leave an empty or
+    /// partial file — and since an empty file parses as a fresh manifest,
+    /// established tool state was silently reset. Staging to a temp
+    /// sibling, fsyncing, and renaming publishes either the complete old
+    /// or the complete new file. Temp files are cleaned up on failure.
+    /// Note: manifest writes that require locking/concurrency guarantees
+    /// go through `DdlDir::save_manifest`/`record_tool`, which add the
+    /// dedicated lock file on top of this same staged-replace pattern.
     pub fn save(&self, path: &Path) -> Result<()> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(DdlError::Io)?;
         }
         let contents = serde_json::to_string_pretty(self).map_err(DdlError::Serde)?;
-        std::fs::write(path, contents).map_err(DdlError::Io)?;
+        let tmp_path = path.with_extension("json.tmp");
+        {
+            use std::io::Write;
+            let mut file = std::fs::File::create(&tmp_path).map_err(DdlError::Io)?;
+            file.write_all(contents.as_bytes()).map_err(DdlError::Io)?;
+            file.sync_all().map_err(DdlError::Io)?;
+        }
+        if let Err(e) = std::fs::rename(&tmp_path, path) {
+            let _ = std::fs::remove_file(&tmp_path);
+            return Err(DdlError::Io(e));
+        }
         Ok(())
     }
 
