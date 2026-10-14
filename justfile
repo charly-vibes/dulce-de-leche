@@ -64,6 +64,23 @@ fmt-check:
 ci: fmt-check lint test build-release
     @echo "✅ CI pipeline passed"
 
+# Dependency advisory audit (RustSec). Used by the release workflow's
+# security gate; publication is blocked when it fails.
+advisory:
+    cargo audit --version >/dev/null 2>&1 || cargo install --locked cargo-audit
+    cargo audit
+
+# Secret scan over tracked files. Used by the release workflow's security
+# gate; publication is blocked when a potential secret is found.
+secret-scan:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if git grep -nIE '(AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{22,}|-----BEGIN [A-Z ]*PRIVATE KEY-----)' -- . 2>/dev/null; then
+        echo "❌ potential secret detected in tracked files (see matches above)" >&2
+        exit 1
+    fi
+    echo "✅ no potential secrets in tracked files"
+
 # Pre-push checks (fast gate)
 pre-push: fmt-check lint test
     @echo "✅ Pre-push checks passed"

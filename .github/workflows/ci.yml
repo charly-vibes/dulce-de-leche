@@ -2,6 +2,10 @@
 #
 # Uses `just ci` to ensure parity between local and CI environments.
 # If CI fails, run `just ci` locally to reproduce the issue.
+#
+# Security (SEC-06 / DDL-bas): every third-party action is pinned to a full
+# reviewed commit SHA, and the bd bootstrap tarball is checksum-verified
+# against a pinned SHA-256 digest before it is extracted or executed.
 
 name: CI
 
@@ -15,35 +19,44 @@ env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
 
+permissions:
+  contents: read
+
 jobs:
   ci:
     name: Test & Build
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
         with:
           components: clippy, rustfmt
 
       - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Install just
-        uses: extractions/setup-just@v2
+        uses: extractions/setup-just@dd310ad5a97d8e7b41793f8ef055398d51ad4de6 # v2.0.0
 
       - name: Install ecosystem tools (§4 dogfood matrix, pinned)
         run: |
           cargo install --locked pretender@0.7.0 wai-cli@2026.9.28 dont-cli@0.2.2
           npm install -g @fission-ai/openspec@0.19.0
-      - name: Install bd (beads, pinned §4)
+      - name: Install bd (beads, pinned §4, checksum-verified)
         run: |
           tmp=$(mktemp -d)
           curl -fsSL https://github.com/gastownhall/beads/releases/download/v1.3.0/beads_1.3.0_linux_amd64.tar.gz -o "$tmp/bd.tgz"
+          # SEC-06: verify the archive against a pinned SHA-256 digest BEFORE
+          # extracting or executing anything from it. A tampered or truncated
+          # download must fail here, not run.
+          echo "2f92b904ecf35b607e44dc5c39229173af69c54f1183e8d709f1773540cdcf3b  $tmp/bd.tgz" | sha256sum -c -
           # extract only the binary — the tarball also ships README/LICENSE/CHANGELOG
           # which must not clobber the repo checkout
           tar -xzf "$tmp/bd.tgz" -C "$tmp" bd
@@ -62,7 +75,7 @@ jobs:
         run: just ci
 
       - name: Upload binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ddl-linux-amd64
           path: target/release/ddl

@@ -5,10 +5,29 @@
 # then auto-updates the homebrew-charly tap formula, scoop-charly bucket manifest,
 # and publishes to crates.io.
 #
-# Required secrets:
-#   GITHUB_TOKEN           - automatically provided by GitHub Actions
-#   TAP_GITHUB_TOKEN       - PAT with repo write access to homebrew-charly and scoop-charly
-#   CARGO_REGISTRY_TOKEN   - crates.io API token for publishing the crate
+# Security model (SEC-06 / DDL-bas):
+#   * Workflow-level permissions default to `contents: read`; only the `publish`
+#     job is granted `contents: write`, so no build/test job can touch releases.
+#   * Publication credentials (CARGO_REGISTRY_TOKEN, TAP_GITHUB_TOKEN,
+#     GITHUB_TOKEN) are referenced exclusively inside the `publish` job.
+#   * `publish` needs `test` and `security` in addition to the build jobs: a
+#     failed, skipped, or cancelled test/advisory/secret-check on the tagged
+#     commit prevents publication entirely.
+#   * Every third-party action is pinned to a full reviewed commit SHA.
+#
+# Credential scopes:
+#   GITHUB_TOKEN (publish only)   - contents:write scoped to this repository,
+#                                   used to create the release and upload assets
+#   CARGO_REGISTRY_TOKEN (publish) - crates.io publish token for this crate only
+#   TAP_GITHUB_TOKEN (publish)     - PAT with contents:write limited to the
+#                                   homebrew-charly and scoop-charly repos
+#
+# Repository protections (verified 2026-10-13 via GitHub API): no tag rulesets
+# or tag protection are currently configured on this repository, so any branch
+# write could in principle move a tag. Recommendation (follow-up issue):
+# enable a ruleset restricting `v*` tag creation to release maintainers.
+# Mutable-tag risk is otherwise mitigated by pinning actions and gating publish
+# on checks that run on the exact tagged commit (checkout of GITHUB_SHA).
 
 name: Release
 
@@ -18,7 +37,7 @@ on:
       - "v*"
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -27,14 +46,16 @@ jobs:
   build-linux:
     name: Build Linux
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
         with:
           targets: x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: linux
 
@@ -57,7 +78,7 @@ jobs:
           cp target/x86_64-unknown-linux-gnu/release/ddl bins/linux_amd64/ddl
           cp target/aarch64-unknown-linux-gnu/release/ddl bins/linux_arm64/ddl
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: bins-linux
           path: bins/
@@ -66,14 +87,16 @@ jobs:
   build-darwin:
     name: Build macOS
     runs-on: macos-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
         with:
           targets: x86_64-apple-darwin,aarch64-apple-darwin
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: darwin
 
@@ -89,7 +112,7 @@ jobs:
           cp target/x86_64-apple-darwin/release/ddl bins/darwin_amd64/ddl
           cp target/aarch64-apple-darwin/release/ddl bins/darwin_arm64/ddl
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: bins-darwin
           path: bins/
@@ -98,14 +121,16 @@ jobs:
   build-windows:
     name: Build Windows
     runs-on: windows-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
         with:
           targets: x86_64-pc-windows-msvc
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: windows
 
@@ -118,22 +143,68 @@ jobs:
           mkdir -p bins/windows_amd64
           cp target/x86_64-pc-windows-msvc/release/ddl.exe bins/windows_amd64/ddl.exe
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: bins-windows
           path: bins/
           retention-days: 1
 
+  # Test and security gates run on the exact tagged commit (GITHUB_SHA) before
+  # anything is published. Failed / skipped / cancelled runs block `publish`
+  # via its `needs` list.
+  test:
+    name: Test tagged commit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: test
+
+      - name: Run full test suite
+        run: cargo test --locked
+
+  security:
+    name: Advisory & secret scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: security
+
+      - name: Dependency advisory audit (RustSec)
+        run: just advisory
+
+      - name: Secret scan
+        run: just secret-scan
+
   publish:
     name: Publish Release
-    needs: [build-linux, build-darwin, build-windows]
+    needs: [build-linux, build-darwin, build-windows, test, security]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: bins-*
           path: bins/
@@ -155,7 +226,7 @@ jobs:
           tar -czf "dist/ddl_${VERSION}_darwin_amd64.tar.gz" -C bins/darwin_amd64 ddl
           tar -czf "dist/ddl_${VERSION}_darwin_arm64.tar.gz" -C bins/darwin_arm64 ddl
           (cd bins/windows_amd64 && zip "../../dist/ddl_${VERSION}_windows_amd64.zip" ddl.exe)
-          cd dist && sha256sum *.tar.gz *.zip > checksums.txt
+          cd dist && sha256sum ./*.tar.gz ./*.zip > checksums.txt
 
       - name: Create GitHub release
         run: |
