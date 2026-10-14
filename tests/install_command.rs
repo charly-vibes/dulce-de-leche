@@ -334,6 +334,31 @@ fn test_install_allows_ddl_dir_link_within_project() {
     assert_eq!(manifest["tools"]["turu"]["source"], "skipped");
 }
 
+/// DDL-sg8 (SEC-05): the post-migration legacy link layout must keep working.
+/// `ddl migrate` moves a legacy config (e.g. `.wai/`) into `.ddl/<tool>/` and
+/// leaves a symlink at the legacy location pointing back into `.ddl/`. Those
+/// links live inside the project and are explicitly supported.
+#[test]
+#[cfg(unix)]
+fn test_install_allows_legacy_migration_links() {
+    let temp = tempfile::tempdir().unwrap();
+    // Post-migration layout: tool config lives in .ddl/wai/, .wai is a link.
+    std::fs::create_dir_all(temp.path().join(".ddl/wai")).unwrap();
+    std::fs::write(temp.path().join(".ddl/wai/config.toml"), "[wai]\n").unwrap();
+    std::os::unix::fs::symlink(temp.path().join(".ddl/wai"), temp.path().join(".wai")).unwrap();
+
+    run_install_turu(&temp).success();
+
+    let manifest: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(temp.path().join(".ddl/manifest.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(manifest["tools"]["turu"]["source"], "skipped");
+    // The legacy link itself must not have been disturbed.
+    assert!(temp.path().join(".wai").is_symlink());
+    assert!(temp.path().join(".wai/config.toml").is_file());
+}
+
 /// DDL-sg8 (SEC-05): Windows reparse-point manifests must be refused too.
 /// Creating file symlinks needs dev-mode/admin privileges; skip gracefully.
 #[test]
@@ -361,6 +386,53 @@ fn test_install_refuses_manifest_symlink_windows() {
 
     let after = std::fs::read_to_string(outside.path().join("manifest.json")).unwrap();
     assert_eq!(before, after, "outside manifest must be untouched");
+}
+
+/// DDL-sg8 (SEC-05): a Windows directory reparse point (.ddl -> outside dir)
+/// must be refused — same escape as the Unix directory-symlink fixture.
+/// Creating directory symlinks needs dev-mode/admin privileges; skip gracefully.
+#[test]
+#[cfg(windows)]
+fn test_install_refuses_ddl_dir_link_outside_project_windows() {
+    let temp = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    empty_manifest(outside.path());
+    let before = std::fs::read_to_string(outside.path().join("manifest.json")).unwrap();
+
+    if std::os::windows::fs::symlink_dir(outside.path(), temp.path().join(".ddl")).is_err() {
+        eprintln!("skipping: symlink_dir requires admin/dev-mode privileges");
+        return;
+    }
+
+    run_install_turu(&temp)
+        .failure()
+        .stderr(predicate::str::contains("outside the project"));
+
+    let after = std::fs::read_to_string(outside.path().join("manifest.json")).unwrap();
+    assert_eq!(before, after, "outside manifest must be untouched");
+}
+
+/// DDL-sg8 (SEC-05): an in-project Windows directory reparse point stays
+/// allowed — same acceptance as the Unix in-project link fixture.
+#[test]
+#[cfg(windows)]
+fn test_install_allows_ddl_dir_link_within_project_windows() {
+    let temp = tempfile::tempdir().unwrap();
+    empty_manifest(&temp.path().join("internal-ddl"));
+    if std::os::windows::fs::symlink_dir(temp.path().join("internal-ddl"), temp.path().join(".ddl"))
+        .is_err()
+    {
+        eprintln!("skipping: symlink_dir requires admin/dev-mode privileges");
+        return;
+    }
+
+    run_install_turu(&temp).success();
+
+    let manifest: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(temp.path().join("internal-ddl/manifest.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(manifest["tools"]["turu"]["source"], "skipped");
 }
 
 #[test]
