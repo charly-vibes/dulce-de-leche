@@ -570,6 +570,226 @@ impl DoctorCheck for RepoPinsCheck {
     }
 }
 
+/// Check the repo's fleet-standard license posture (DDL-rod).
+///
+/// A LICENSE file must exist at the repo root; when the repo is Rust
+/// (has `Cargo.toml`), the LICENSE text must also agree with the declared
+/// `license` field — the gently audit class (declared MIT, upstream port
+/// actually GPL-2.0-or-later) is mechanically detectable as a mismatch.
+pub struct RepoLicenseCheck;
+
+impl DoctorCheck for RepoLicenseCheck {
+    fn name(&self) -> &'static str {
+        "ddl.repo.license"
+    }
+    fn description(&self) -> &'static str {
+        "Check that LICENSE exists and matches Cargo.toml's license field"
+    }
+    fn run(
+        &self,
+        repo_root: &Path,
+    ) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
+        let Some(root) = find_git_root(repo_root) else {
+            return Ok(vec![]);
+        };
+        let license_path = ["LICENSE", "LICENSE.md", "LICENSE.txt"]
+            .iter()
+            .map(|f| root.join(f))
+            .find(|p| p.exists());
+        let cargo_toml = root
+            .join("Cargo.toml")
+            .exists()
+            .then(|| std::fs::read_to_string(root.join("Cargo.toml")))
+            .transpose()
+            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+        let declared = cargo_toml.as_deref().and_then(declared_license);
+        let mut problems = Vec::new();
+        let Some(path) = license_path else {
+            problems.push(LintResult::with_fix(
+                "LICENSE missing at repo root",
+                Severity::Warning,
+                "add a LICENSE file (docs/standardization.md §fleet-compliance)",
+            ));
+            return Ok(problems);
+        };
+        let text = std::fs::read_to_string(&path)
+            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+        match declared {
+            None if cargo_toml.is_some() => problems.push(LintResult::with_fix(
+                "Cargo.toml declares no license field",
+                Severity::Warning,
+                "set package.license (docs/standardization.md §fleet-compliance)",
+            )),
+            Some(decl) if !license_text_matches(&decl, &text) => {
+                problems.push(LintResult::with_fix(
+                    format!("LICENSE text does not match declared license {decl}"),
+                    Severity::Warning,
+                    "reconcile LICENSE with Cargo.toml license (docs/standardization.md §fleet-compliance)",
+                ));
+            }
+            _ => {}
+        }
+        Ok(problems)
+    }
+}
+
+/// Read the `license = "…"` field out of a Cargo.toml, if any.
+fn declared_license(cargo_toml: &str) -> Option<String> {
+    cargo_toml.lines().find_map(|line| {
+        let t = line.trim();
+        t.strip_prefix("license =")
+            .map(|rest| rest.trim().trim_matches('"').trim_matches('\'').to_string())
+            .filter(|s| !s.is_empty())
+    })
+}
+
+/// Best-effort match of a LICENSE file's text against a declared SPDX id.
+/// Unknown ids (and `OR`/`WITH` expressions) pass — only the well-known
+/// fleet licenses are mechanically verifiable.
+fn license_text_matches(declared: &str, text: &str) -> bool {
+    let t = text.to_ascii_lowercase();
+    let d = declared.to_ascii_lowercase();
+    if d.contains(" or ") || d.contains(" with ") {
+        return true;
+    }
+    if d.starts_with("gpl-2") {
+        t.contains("gnu general public license") && t.contains("version 2")
+    } else if d.starts_with("gpl-3") {
+        t.contains("gnu general public license") && t.contains("version 3")
+    } else if d.starts_with("apache") {
+        t.contains("apache license")
+    } else if d.starts_with("mit") {
+        t.contains("mit license") || t.contains("permission is hereby granted")
+    } else {
+        true
+    }
+}
+
+/// Check that rustfmt is gated somewhere mechanical (DDL-rod).
+///
+/// The gently audit class: no `fmt`/`fmt-check` just recipes, no rustfmt in
+/// CI, no fmt gate in lefthook — the repo silently opted out. The justfile
+/// `fmt-check` recipe is the fleet's canonical gate surface.
+pub struct RepoFmtCheck;
+
+impl DoctorCheck for RepoFmtCheck {
+    fn name(&self) -> &'static str {
+        "ddl.repo.fmt"
+    }
+    fn description(&self) -> &'static str {
+        "Check that rustfmt is gated (fmt-check recipe in justfile)"
+    }
+    fn run(
+        &self,
+        repo_root: &Path,
+    ) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
+        let Some(root) = find_git_root(repo_root) else {
+            return Ok(vec![]);
+        };
+        if !root.join("Cargo.toml").exists() {
+            return Ok(vec![]);
+        }
+        let justfile = root
+            .join("justfile")
+            .exists()
+            .then(|| std::fs::read_to_string(root.join("justfile")))
+            .transpose()
+            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+        let gated = justfile
+            .as_deref()
+            .map(|t| t.lines().any(|l| l.trim().starts_with("fmt-check")))
+            .unwrap_or(false);
+        if gated {
+            Ok(vec![])
+        } else {
+            Ok(vec![LintResult::with_fix(
+                "rustfmt not gated — no fmt-check recipe in justfile",
+                Severity::Warning,
+                "add fmt/fmt-check recipes (docs/standardization.md §fleet-compliance)",
+            )])
+        }
+    }
+}
+
+/// Check that lefthook chains the beads hooks (DDL-rod, the DDL-0tp class).
+///
+/// When lefthook replaces the bd shim it must chain `bd hooks run` for both
+/// pre-commit and pre-push, or beads checks silently stop running.
+pub struct RepoBdHookChainCheck;
+
+impl DoctorCheck for RepoBdHookChainCheck {
+    fn name(&self) -> &'static str {
+        "ddl.repo.bd-hooks"
+    }
+    fn description(&self) -> &'static str {
+        "Check that lefthook chains `bd hooks run` for pre-commit and pre-push"
+    }
+    fn run(
+        &self,
+        repo_root: &Path,
+    ) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
+        let Some(root) = find_git_root(repo_root) else {
+            return Ok(vec![]);
+        };
+        let content = root
+            .join("lefthook.yml")
+            .exists()
+            .then(|| std::fs::read_to_string(root.join("lefthook.yml")))
+            .transpose()
+            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+        let Some(text) = content else {
+            // RepoGatesCheck already flags a missing lefthook.yml; the bd
+            // chain check has nothing extra to say without it.
+            return Ok(vec![]);
+        };
+        let missing: Vec<&str> = ["pre-commit", "pre-push"]
+            .into_iter()
+            .filter(|h| !text.contains(&format!("bd hooks run {h}")))
+            .collect();
+        if missing.is_empty() {
+            Ok(vec![])
+        } else {
+            Ok(vec![LintResult::with_fix(
+                format!(
+                    "lefthook does not chain `bd hooks run {}`",
+                    missing.join(", ")
+                ),
+                Severity::Warning,
+                "ddl init --gates",
+            )])
+        }
+    }
+}
+
+/// Check that a CHANGELOG.md exists at the repo root (DDL-rod).
+pub struct RepoChangelogCheck;
+
+impl DoctorCheck for RepoChangelogCheck {
+    fn name(&self) -> &'static str {
+        "ddl.repo.changelog"
+    }
+    fn description(&self) -> &'static str {
+        "Check that CHANGELOG.md exists at the repo root"
+    }
+    fn run(
+        &self,
+        repo_root: &Path,
+    ) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
+        let Some(root) = find_git_root(repo_root) else {
+            return Ok(vec![]);
+        };
+        if root.join("CHANGELOG.md").exists() {
+            Ok(vec![])
+        } else {
+            Ok(vec![LintResult::with_fix(
+                "CHANGELOG.md missing at repo root",
+                Severity::Warning,
+                "add CHANGELOG.md (docs/standardization.md §fleet-compliance)",
+            )])
+        }
+    }
+}
+
 /// Check that incitaciones skills are installed globally.
 pub struct IncitacionesSkillsCheck;
 
@@ -881,6 +1101,10 @@ fn register_repo_checks(runner: &mut genesis::doctor::DoctorRunner) {
     runner.register(Box::new(RepoAgentBlocksCheck));
     runner.register(Box::new(RepoGitignoreCheck));
     runner.register(Box::new(RepoPinsCheck));
+    runner.register(Box::new(RepoLicenseCheck));
+    runner.register(Box::new(RepoFmtCheck));
+    runner.register(Box::new(RepoBdHookChainCheck));
+    runner.register(Box::new(RepoChangelogCheck));
 }
 
 /// Build the structured `ddl doctor` report (JSON path, DDL-6zn.4).
