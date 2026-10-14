@@ -1,5 +1,6 @@
 //! dulce-de-leche (ddl) — CLI entry point.
 
+use std::io::IsTerminal;
 use std::process;
 
 use dulce_de_leche::dot_ddl::DdlDir;
@@ -510,6 +511,18 @@ fn ensure_incitaciones_skills(
     }
 
     if !prompt_eligible {
+        println!(
+            "  ℹ  incitaciones skills not installed globally — install with: npx incitaciones install --global"
+        );
+        return Ok(());
+    }
+
+    // Only prompt when the session is actually interactive: a non-TTY
+    // session (CI, piped output) that reaches this point because the tool is
+    // eligible-but-uninstalled must get the deterministic hint below instead
+    // of a cliclack "not connected" failure (DDL-fw7's manifest reconcile can
+    // make previously untracked tools eligible without any interactive ask).
+    if !std::io::stdin().is_terminal() {
         println!(
             "  ℹ  incitaciones skills not installed globally — install with: npx incitaciones install --global"
         );
