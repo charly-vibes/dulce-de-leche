@@ -520,12 +520,12 @@ fn hanging_child_with_descendants_killed_within_deadline_plus_one() {
         elapsed < Duration::from_secs(2),
         "child tree must be terminated within deadline + 1s; took {elapsed:?}"
     );
-    // No orphaned sleeper may survive the group kill.
+    // No orphaned sleeper may survive the group kill. Exact full-commandline
+    // match: a bare `ps | grep -F 'sleep 60'` also matches UNRELATED processes
+    // like a lingering `sleep 600` from another session (observed in the wild).
     std::thread::sleep(Duration::from_millis(100));
     let mut pgrep = std::process::Command::new("sh");
-    pgrep
-        .arg("-c")
-        .arg("ps -eo args= | grep -F 'sleep 60' | grep -v grep");
+    pgrep.arg("-c").arg("pgrep -f -x 'sleep 60'");
     let check = pgrep.output().unwrap();
     assert!(
         check.stdout.is_empty(),
