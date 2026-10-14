@@ -24,27 +24,114 @@ fn is_sharing_violation(e: &DdlError) -> bool {
     matches!(e, DdlError::Io(io) if matches!(io.raw_os_error(), Some(32) | Some(33)))
 }
 
-/// Read the manifest through the given (locked) handle.
-fn read_manifest_from(file: &mut std::fs::File) -> Result<Manifest> {
-    use std::io::{Read, Seek, SeekFrom};
-    file.seek(SeekFrom::Start(0)).map_err(DdlError::Io)?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents).map_err(DdlError::Io)?;
-    Manifest::parse(&contents)
+/// SEC-01 (DDL-8u8): atomically replace the manifest file.
+///
+/// Baseline (pre-DDL-8u8) wrote through the locked manifest handle after
+/// truncating it (`set_len(0)`): a crash in that window left an empty file
+/// — which [`Manifest::parse`] then accepted as a fresh manifest, silently
+/// resetting established tool state — and a crash mid-write left partial
+/// JSON on disk.
+///
+/// Replacement strategy: stage the serialized manifest in a temp sibling
+/// file, fsync it, then `rename()` over the target. POSIX rename is atomic,
+/// so readers observe either the complete old or the complete new manifest
+/// — never partial JSON — and a failure anywhere before the rename leaves
+/// the prior manifest byte-for-byte intact. On Windows `std::fs::rename`
+/// uses MOVEFILE_REPLACE_EXISTING; transient sharing violations during the
+/// rename are retried by the caller's [`with_sharing_retry`].
+///
+/// The staging file is opened no-follow (SEC-05): a link swapped in at the
+/// temp path cannot redirect the staged write.
+fn stage_manifest(manifest_path: &Path, manifest: &Manifest) -> Result<PathBuf> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static TMP_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    let dir = manifest_path.parent().ok_or_else(|| {
+        DdlError::Other(format!(
+            "manifest path {} has no parent directory",
+            manifest_path.display()
+        ))
+    })?;
+    let stem = manifest_path
+        .file_name()
+        .map(|n| n.to_os_string())
+        .unwrap_or_else(|| "manifest.json".into());
+    let counter = TMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let tmp_path = dir.join(format!(
+        "{}.tmp.{}.{}",
+        stem.to_string_lossy(),
+        std::process::id(),
+        counter
+    ));
+
+    let contents = serde_json::to_string_pretty(manifest).map_err(DdlError::Serde)?;
+    let mut file = open_manifest_no_follow(&tmp_path)?;
+    file.write_all(contents.as_bytes()).map_err(DdlError::Io)?;
+    // fsync the staged file so the rename cannot publish zero-length or
+    // torn contents after a crash.
+    file.sync_all().map_err(DdlError::Io)?;
+    Ok(tmp_path)
 }
 
-/// Write the manifest through the given (locked) handle. Writing through
-/// the owning handle is the whole point: on Windows the LockFileEx lock
-/// blocks every other handle, so this handle must do the write itself.
-fn write_manifest_to(file: &mut std::fs::File, manifest: &Manifest) -> Result<()> {
-    use std::io::{Seek, SeekFrom, Write};
-    let contents = serde_json::to_string_pretty(manifest).map_err(DdlError::Serde)?;
-    file.seek(SeekFrom::Start(0)).map_err(DdlError::Io)?;
-    file.set_len(0).map_err(DdlError::Io)?;
-    file.write_all(contents.as_bytes()).map_err(DdlError::Io)?;
-    file.flush().map_err(DdlError::Io)?;
+/// Replace `manifest_path` with the already-staged file, then (Unix)
+/// best-effort fsync the parent directory so the rename itself survives a
+/// power loss. Best-effort: a failed directory fsync degrades durability
+/// but never loses the on-disk new state.
+fn commit_staged(tmp_path: &Path, manifest_path: &Path) -> Result<()> {
+    if let Err(e) = std::fs::rename(tmp_path, manifest_path) {
+        // Leave no staging debris behind on a failed rename.
+        let _ = std::fs::remove_file(tmp_path);
+        return Err(DdlError::Io(e));
+    }
+    sync_parent_dir(manifest_path);
     Ok(())
 }
+
+/// Write the manifest as an atomic replace (SEC-01, DDL-8u8). See
+/// [`stage_manifest`] for the durability rationale.
+fn write_manifest_atomic(manifest_path: &Path, manifest: &Manifest) -> Result<()> {
+    let tmp_path = stage_manifest(manifest_path, manifest)?;
+    commit_staged(&tmp_path, manifest_path)
+}
+
+/// Path of the dedicated manifest lock file (a stable sibling that is
+/// never renamed or replaced).
+fn manifest_lock_path(manifest_path: &Path) -> PathBuf {
+    let mut name = manifest_path
+        .file_name()
+        .map(|n| n.to_os_string())
+        .unwrap_or_else(|| "manifest.json".into());
+    name.push(".lock");
+    manifest_path.with_file_name(name)
+}
+
+/// Acquire the manifest lock (SEC-01, DDL-8u8).
+///
+/// Serialization uses a dedicated lock file rather than a lock on the
+/// manifest itself: the lock file is never renamed or replaced, so the
+/// lock can be held through the atomic rename without the Windows
+/// rename-over-locked-open-file interaction (the DDL-71i class of
+/// self-conflicts). The lock file is opened no-follow (SEC-05).
+/// Dropped when the returned handle goes out of scope.
+fn manifest_lock_guard(manifest_path: &Path) -> Result<std::fs::File> {
+    let lock_path = manifest_lock_path(manifest_path);
+    let file = open_manifest_no_follow(&lock_path)?;
+    file.lock_exclusive().map_err(DdlError::Io)?;
+    Ok(file)
+}
+
+/// Best-effort fsync of the directory containing `path` (Unix only).
+#[cfg(unix)]
+fn sync_parent_dir(path: &Path) {
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::File::open(dir).map(|f| f.sync_all());
+    }
+}
+
+/// Best-effort directory fsync is a Unix durability nicety; Windows
+/// relies on MOVEFILE_REPLACE_EXISTING journaling semantics.
+#[cfg(not(unix))]
+fn sync_parent_dir(_path: &Path) {}
 
 /// Run a manifest write operation, retrying transient Windows file locks
 /// (DDL-71i). Windows LockFileEx locks held by antivirus scanners or other
@@ -336,10 +423,10 @@ impl DdlDir {
         let manifest = Manifest::new();
         let manifest_path = path.join("manifest.json");
         ensure_manifest_write_is_local(&manifest_path)?;
-        // Write through a no-follow open (SEC-05): std::fs::write would
-        // follow a link swapped in after the guard check.
-        let mut file = open_manifest_no_follow(&manifest_path)?;
-        write_manifest_to(&mut file, &manifest)?;
+        // Atomic replace (SEC-01, DDL-8u8) through a no-follow staged
+        // file (SEC-05): std::fs::write would follow a link swapped in
+        // after the guard check and truncates in place.
+        write_manifest_atomic(&manifest_path, &manifest)?;
 
         Ok(Self {
             path: path.to_path_buf(),
@@ -371,17 +458,16 @@ impl DdlDir {
         Ok(tool_dir)
     }
 
-    /// Save the manifest to disk with an exclusive file lock.
+    /// Save the manifest to disk as an atomic replace under an exclusive
+    /// lock (SEC-01, DDL-8u8).
     ///
-    /// The lock prevents concurrent manifest writes from different processes
-    /// from losing entries. Lock is released when the opened file is dropped.
-    ///
-    /// All I/O goes through the locking handle: on Windows a LockFileEx
-    /// byte-range lock blocks every OTHER handle — including a second open
-    /// of the same file in this process — so reopening for the write would
-    /// self-deadlock with os error 33 (DDL-71i, found by the cross-platform
-    /// smoke run on windows-latest). The with_sharing_retry wrapper remains
-    /// for genuine transient locks (e.g. antivirus scanning) on open/lock.
+    /// Serialization uses the dedicated [`manifest_lock_guard`] lock file
+    /// (stable, never renamed) so the lock can be held through the rename;
+    /// the replacement itself is staged + fsynced + renamed (see
+    /// [`write_manifest_atomic`]). Lock is released when the lock handle is
+    /// dropped. The with_sharing_retry wrapper handles genuine transient
+    /// Windows locks (e.g. antivirus scanning) on the open/lock/rename
+    /// steps (DDL-71i).
     pub fn save_manifest(&self) -> Result<()> {
         let manifest_path = self.manifest_path();
         with_sharing_retry(|| self.try_save_manifest(&manifest_path))
@@ -389,33 +475,32 @@ impl DdlDir {
 
     fn try_save_manifest(&self, manifest_path: &Path) -> Result<()> {
         ensure_manifest_write_is_local(manifest_path)?;
-        let mut file = open_manifest_no_follow(manifest_path)?;
-        file.lock_exclusive().map_err(DdlError::Io)?;
-        write_manifest_to(&mut file, &self.manifest)
+        let _lock = manifest_lock_guard(manifest_path)?;
+        write_manifest_atomic(manifest_path, &self.manifest)
     }
 
     /// Update a tool entry in the manifest and save atomically.
     ///
-    /// Uses an exclusive file lock to prevent concurrent manifest writes
-    /// from different processes from losing entries. Re-reads the manifest
-    /// from disk inside the lock to get the latest state.
+    /// Uses the dedicated lock file to prevent concurrent manifest writes
+    /// from different processes from losing entries (SEC-01, DDL-8u8).
+    /// Re-reads the manifest from disk inside the lock to get the latest
+    /// state, then installs it with an atomic staged replace — readers
+    /// observe complete-old or complete-new only.
     pub fn record_tool(&mut self, name: &str, entry: ToolEntry) -> Result<()> {
         let manifest_path = self.manifest_path();
         with_sharing_retry(|| {
             ensure_manifest_write_is_local(&manifest_path)?;
-            // Single-handle read-modify-write: the LockFileEx byte-range lock
-            // held by this handle blocks every other handle on Windows (see
-            // save_manifest), so re-reading and writing must use this handle.
-            // The open itself refuses link redirection (SEC-05) so the guard
-            // cannot be raced past by a check-then-open swap.
-            let mut file = open_manifest_no_follow(&manifest_path)?;
-            file.lock_exclusive().map_err(DdlError::Io)?;
+            // Read-modify-write serialized by the dedicated lock file, held
+            // through the atomic rename (see save_manifest). The lock file
+            // open refuses link redirection (SEC-05).
+            let _lock = manifest_lock_guard(&manifest_path)?;
 
             // Re-read manifest from disk inside the lock to get the latest
-            // state (catches any concurrent modifications).
-            let mut manifest = read_manifest_from(&mut file)?;
+            // state (catches any concurrent modifications). With atomic
+            // replacement, the file is always a complete manifest.
+            let mut manifest = Manifest::load(&manifest_path)?;
             manifest.set_tool(name, entry.clone());
-            write_manifest_to(&mut file, &manifest)?;
+            write_manifest_atomic(&manifest_path, &manifest)?;
 
             // Update in-memory state to match disk
             self.manifest = manifest;
