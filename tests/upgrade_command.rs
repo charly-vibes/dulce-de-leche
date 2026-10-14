@@ -439,3 +439,119 @@ fn concurrent_upgrades_never_expose_partial_executable() {
     );
     assert_no_staging_leftovers(&dest);
 }
+
+// ===================== DDL-1z1 (SEC-02): bootstrap resource budgets =====================
+//
+// Regression fixtures for the bootstrap resource-budget policy: release
+// downloads, captured child output and child runtime are bounded by explicit
+// numeric budgets, and an exhausted budget is identified in diagnostics
+// instead of silently falling back to a less restricted install method.
+
+use std::time::Instant;
+
+use dulce_de_leche::installer::{
+    MAX_CHILD_OUTPUT_BYTES, MAX_RELEASE_ASSET_BYTES, enforce_download_budget, run_child_captured,
+};
+
+#[test]
+fn download_budget_rejects_oversize_declared_length() {
+    // A release body declaring more than the download budget is rejected
+    // before any byte crosses the budget.
+    let err = enforce_download_budget(Some(MAX_RELEASE_ASSET_BYTES + 1), 0).unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("download"),
+        "message must name the budget: {msg}"
+    );
+    assert!(msg.contains("budget"), "message must say budget: {msg}");
+}
+
+#[test]
+fn download_budget_rejects_oversize_streamed_bytes() {
+    // Unknown declared length: the streamed byte count is still bounded.
+    let err = enforce_download_budget(None, MAX_RELEASE_ASSET_BYTES + 1).unwrap_err();
+    assert!(
+        err.to_string().contains("download"),
+        "message must name the download budget: {err}"
+    );
+}
+
+#[test]
+fn download_budget_accepts_within_cap() {
+    enforce_download_budget(Some(1024), 1024).unwrap();
+    enforce_download_budget(None, 0).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn hanging_child_killed_within_deadline_plus_one() {
+    let mut cmd = std::process::Command::new("sleep");
+    cmd.arg("60");
+    let start = Instant::now();
+    let err = run_child_captured(&mut cmd, Duration::from_secs(1)).unwrap_err();
+    let elapsed = start.elapsed();
+    assert!(
+        err.to_string().contains("budget"),
+        "timeout must be reported as a budget exhaustion: {err}"
+    );
+    assert!(
+        elapsed < Duration::from_secs(2),
+        "child must be terminated within deadline + 1s; took {elapsed:?}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn hanging_child_with_descendants_killed_within_deadline_plus_one() {
+    // `sh -c 'sleep 60'` makes the sleeper a *descendant* of the direct
+    // child; both must be gone when the deadline fires.
+    let mut cmd = std::process::Command::new("sh");
+    cmd.arg("-c").arg("sleep 60");
+    let start = Instant::now();
+    let err = run_child_captured(&mut cmd, Duration::from_secs(1)).unwrap_err();
+    let elapsed = start.elapsed();
+    assert!(err.to_string().contains("budget"), "{err}");
+    assert!(
+        elapsed < Duration::from_secs(2),
+        "child tree must be terminated within deadline + 1s; took {elapsed:?}"
+    );
+    // No orphaned sleeper may survive the group kill.
+    std::thread::sleep(Duration::from_millis(100));
+    let mut pgrep = std::process::Command::new("sh");
+    pgrep
+        .arg("-c")
+        .arg("ps -eo args= | grep -F 'sleep 60' | grep -v grep");
+    let check = pgrep.output().unwrap();
+    assert!(
+        check.stdout.is_empty(),
+        "descendants survived the runtime budget kill: {:?}",
+        String::from_utf8_lossy(&check.stdout)
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn runaway_captured_output_rejected() {
+    // A child emitting one byte more than the captured-output budget must be
+    // rejected — the budget names itself in the error.
+    let script = format!("head -c {} /dev/zero", MAX_CHILD_OUTPUT_BYTES as u64 + 1);
+    let mut cmd = std::process::Command::new("sh");
+    cmd.arg("-c").arg(&script);
+    let err = run_child_captured(&mut cmd, Duration::from_secs(10)).unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("captured-output"),
+        "message must name the captured-output budget: {msg}"
+    );
+    assert!(msg.contains("budget"), "message must say budget: {msg}");
+}
+
+#[cfg(unix)]
+#[test]
+fn captured_output_within_budget_succeeds() {
+    let mut cmd = std::process::Command::new("sh");
+    cmd.arg("-c").arg("echo hello");
+    let out = run_child_captured(&mut cmd, Duration::from_secs(5)).unwrap();
+    assert!(out.status.success());
+    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "hello");
+}
