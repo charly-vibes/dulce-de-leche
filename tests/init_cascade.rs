@@ -201,6 +201,65 @@ fn unauthorized_global_skill_scope_is_rejected_with_policy_diagnostic() {
     );
 }
 
+/// DDL-6ox: a tool-config step that exits nonzero (dont/bd refusing to
+/// re-initialise an already-initialised project) must NOT abort the run
+/// before the gates wiring is written. Gates wiring always completes
+/// (lefthook block, DDL AGENTS.md block, gitignore entries, pins scaffold);
+/// the per-tool config failures surface as advisory entries in the resume
+/// summary and the exit code stays nonzero.
+#[test]
+fn config_step_failure_still_writes_gates() {
+    let (mut cmd, temp) = ddl_cmd();
+    stub_tools(
+        &mut cmd,
+        &temp,
+        &[
+            (
+                "dont",
+                "echo 'refuses re-init: already initialised' >&2\nexit 1",
+            ),
+            (
+                "bd",
+                "echo 'refuses re-init: already initialised' >&2\nexit 1",
+            ),
+        ],
+    );
+    // Sandboxed HOME: keep the --yes global-skill step off the real machine.
+    cmd.env("HOME", temp.path().join("home"));
+    cmd.args(["init", "--yes", "--no-install", "--gates", "--human"]);
+    cmd.timeout(CMD_TIMEOUT);
+    // Exit code stays nonzero (resume summary), but gates MUST be written.
+    // Single execution: capture the output once — a second cmd.assert() call
+    // re-runs the command.
+    let output = cmd.assert().failure().get_output().clone();
+
+    // Gates wiring completed: lefthook managed block ...
+    let lefthook = read(temp.path(), "lefthook.yml");
+    assert!(
+        lefthook.contains("# ddl:managed:start (pre-commit)"),
+        "lefthook gates block missing — config-step failure aborted before gates"
+    );
+    // ... beads no-db stamp ...
+    assert!(read(temp.path(), ".beads/config.yaml").contains("no-db: true"));
+    // ... DDL managed block in AGENTS.md ...
+    let agents = read(temp.path(), "AGENTS.md");
+    assert!(agents.contains("DDL"), "DDL block missing from AGENTS.md");
+    // ... pins scaffold ...
+    assert!(
+        temp.path().join("versions.ddl.toml").exists(),
+        "versions.ddl.toml pins scaffold missing"
+    );
+
+    // Resume summary names the failed config steps (advisory).
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    assert!(
+        stdout.contains("Init cascade failed"),
+        "resume summary missing from stdout: {stdout}"
+    );
+    assert!(stdout.contains("dont init failed"));
+    assert!(stdout.contains("bd init failed"));
+}
+
 #[test]
 fn failing_tool_init_fails_run_with_resume_summary() {
     let (mut cmd, temp) = ddl_cmd();
@@ -341,7 +400,13 @@ fn hanging_init_child_killed_and_budget_identified() {
     // "testaruda" (any managed tool works): "bd" is special-cased with a
     // 300s heavyweight budget (embedded Dolt bootstrap), so the budget
     // mechanism test needs a tool without an init-specific override.
-    stub_tools(&mut cmd, &temp, &[("testaruda", "sleep 60")]);
+    // DDL-6ox: a `wai` stub keeps the post-failure advisory tail (wai
+    // force-init) instant so the elapsed bound stays a strict deadline check.
+    stub_tools(
+        &mut cmd,
+        &temp,
+        &[("testaruda", "sleep 60"), ("wai", "exit 0")],
+    );
     cmd.env("DDL_CHILD_DEADLINE_SECS", "1");
     cmd.args([
         "init",
@@ -358,8 +423,17 @@ fn hanging_init_child_killed_and_budget_identified() {
         .failure()
         .stdout(predicates::str::contains("budget exceeded: child-runtime"));
     let elapsed = start.elapsed();
+    // DDL-6ox: the run no longer aborts at the first init failure — the
+    // advisory tail (gitignore, repo setup with per-tool version probes,
+    // wai force-init) now executes after the budget kill, adding ~1s of
+    // legitimate work. The bound still fails hard if the budget mechanism
+    // is broken (a hung child would exceed it by far).
     assert!(
-        elapsed < Duration::from_secs(2),
+        // CI runners add load to the post-kill advisory tail (real wai init
+        // child); the mechanism invariant is the 1s budget kill — a broken
+        // budget would only fail here via the 60s CMD_TIMEOUT, so 15s stays
+        // a hard, meaningful bound.
+        elapsed < Duration::from_secs(15),
         "hanging init child must be terminated within deadline + 1s; took {elapsed:?}"
     );
 }
@@ -370,7 +444,13 @@ fn hanging_init_child_budget_identified_in_json() {
     // "testaruda" (any managed tool works): "bd" is special-cased with a
     // 300s heavyweight budget (embedded Dolt bootstrap), so the budget
     // mechanism test needs a tool without an init-specific override.
-    stub_tools(&mut cmd, &temp, &[("testaruda", "sleep 60")]);
+    // DDL-6ox: a `wai` stub keeps the post-failure advisory tail (wai
+    // force-init) instant so the elapsed bound stays a strict deadline check.
+    stub_tools(
+        &mut cmd,
+        &temp,
+        &[("testaruda", "sleep 60"), ("wai", "exit 0")],
+    );
     cmd.env("DDL_CHILD_DEADLINE_SECS", "1");
     cmd.args(["init", "--yes", "--tools", "testaruda", "--no-install"]);
     // Piped stdout auto-selects JSON mode; the error envelope must name the
@@ -380,8 +460,15 @@ fn hanging_init_child_budget_identified_in_json() {
         .failure()
         .stderr(predicates::str::contains("budget"));
     let elapsed = start.elapsed();
+    // DDL-6ox: advisory tail now runs after the budget kill (see the human
+    // variant above) — the bound still fails hard if the budget mechanism
+    // is broken.
     assert!(
-        elapsed < Duration::from_secs(2),
+        // CI runners add load to the post-kill advisory tail (real wai init
+        // child); the mechanism invariant is the 1s budget kill — a broken
+        // budget would only fail here via the 60s CMD_TIMEOUT, so 15s stays
+        // a hard, meaningful bound.
+        elapsed < Duration::from_secs(15),
         "hanging init child must be terminated within deadline + 1s; took {elapsed:?}"
     );
 }

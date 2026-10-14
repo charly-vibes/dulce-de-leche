@@ -218,6 +218,24 @@ fn cmd_init(
             .filter(|t| t.as_str() != "wai")
             .cloned()
             .collect();
+        // DDL-6ox: on default full-init re-runs (no explicit --tools), also
+        // retry tools whose config step never succeeded — a tool whose binary
+        // is already on PATH but whose init failed (dont/bd refusing re-init)
+        // must surface again in the resume summary instead of silently
+        // vanishing. Tools whose init succeeded are skipped (DDL-6zn.3:
+        // idempotent-until-green — they may refuse re-init).
+        if tools.is_none() {
+            for t in dulce_de_leche::platform::MANAGED_TOOLS {
+                let name = t.name;
+                if name == "wai"
+                    || init_candidates.iter().any(|c| c == name)
+                    || ddl_dir.manifest.is_inited(name)
+                {
+                    continue;
+                }
+                init_candidates.push(name.to_string());
+            }
+        }
     } else if selected_tools.is_empty() {
         // All tools already installed and configured
         output::print_success("All tools are already installed.", args.is_json());
@@ -353,32 +371,11 @@ fn cmd_init(
             }
         }
     }
-    if !init_failures.is_empty() {
-        if !args.is_json() {
-            println!();
-            println!(
-                "Init cascade failed for {} tool(s) — finish manually or re-run:",
-                init_failures.len()
-            );
-            for line in dulce_de_leche::installer::resume_summary(&init_failures) {
-                println!("{line}");
-            }
-        } else {
-            // JSON mode: buffer failure events into the collected envelope
-            // and put the resume summary on stderr (stdout is machine-only).
-            for f in &init_failures {
-                output::print_install_result(false, &f.tool, &f.detail, true);
-            }
-            for line in dulce_de_leche::installer::resume_summary(&init_failures) {
-                eprintln!("{line}");
-            }
-        }
-        // DDL-6zn.4: error envelope must be the only envelope on stdout.
-        if let Some(g) = json_guard.take() {
-            g.abort();
-        }
-        return Err(DdlError::PartialFailure);
-    }
+    // DDL-6ox: config-step failures are advisory for repo setup — the run
+    // continues so the gates wiring (lefthook block, DDL AGENTS.md block,
+    // gitignore entries, pins scaffold) is ALWAYS written, even when a tool
+    // refused to (re-)initialise. The resume summary below is printed after
+    // the gates phase and the exit code stays nonzero (DDL-6zn.3).
 
     ddl_dir.add_gitignore_entries(args.yes)?;
 
@@ -442,6 +439,36 @@ fn cmd_init(
     let incit_selected = selected_tools.iter().any(|t| t == "incitaciones");
     let incit_tracked = ddl_dir.manifest.get_tool("incitaciones").is_some();
     ensure_incitaciones_skills(args, args.yes || incit_selected || incit_tracked)?;
+
+    // Resume summary for failed config steps (DDL-6ox): printed AFTER the
+    // gates phase completed so the wiring is never silently skipped, with
+    // the exit code staying nonzero (DDL-6zn.3 resume-summary semantics).
+    if !init_failures.is_empty() {
+        if !args.is_json() {
+            println!();
+            println!(
+                "Init cascade failed for {} tool(s) — finish manually or re-run:",
+                init_failures.len()
+            );
+            for line in dulce_de_leche::installer::resume_summary(&init_failures) {
+                println!("{line}");
+            }
+        } else {
+            // JSON mode: buffer failure events into the collected envelope
+            // and put the resume summary on stderr (stdout is machine-only).
+            for f in &init_failures {
+                output::print_install_result(false, &f.tool, &f.detail, true);
+            }
+            for line in dulce_de_leche::installer::resume_summary(&init_failures) {
+                eprintln!("{line}");
+            }
+        }
+        // DDL-6zn.4: error envelope must be the only envelope on stdout.
+        if let Some(g) = json_guard.take() {
+            g.abort();
+        }
+        return Err(DdlError::PartialFailure);
+    }
 
     if !args.is_json() {
         println!();
