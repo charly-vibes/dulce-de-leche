@@ -19,6 +19,12 @@ use crate::error::{DdlError, Result};
 /// skill's SKILL.md frontmatter.
 const INSTALLED_FROM_MARKER: &str = "installed-from: incitaciones";
 
+// Rationale (DDL-uu8, SEC-04): global skill installation mutates
+// ~/.agents/skills/, which every project on the machine reads — so that scope
+// requires explicit policy authorization (DDL_ALLOW_GLOBAL_SKILL=1) and its
+// child runs under the restricted environment policy from crate::installer.
+// Local installs stay project-scoped.
+
 /// The npm package name.
 pub const NPM_PACKAGE: &str = "incitaciones";
 
@@ -109,6 +115,17 @@ pub fn skill_status() -> SkillStatus {
 pub fn install_skills(global: bool, verbose: bool) -> Result<()> {
     let scope_arg = if global { "--global" } else { "--local" };
 
+    // DDL-uu8 (SEC-04): the global scope writes to ~/.agents/skills — visible
+    // to every project on the machine — so it requires explicit policy
+    // authorization (DDL_ALLOW_GLOBAL_SKILL=1). Local scope writes stay inside
+    // this project and need no extra grant. Fail-closed: no silent fallback.
+    let scope = if global {
+        crate::installer::ExecutionScope::GlobalSkill
+    } else {
+        crate::installer::ExecutionScope::ToolInit
+    };
+    crate::installer::authorize_scope(scope)?;
+
     let (cmd, base_args): (&str, Vec<&str>) = if which_incitaciones().is_some() {
         ("incitaciones", vec!["install", scope_arg])
     } else {
@@ -119,10 +136,15 @@ pub fn install_skills(global: bool, verbose: bool) -> Result<()> {
         eprintln!("  · running: {cmd} {}", base_args.join(" "));
     }
 
-    // DDL-1z1: the npm child is bounded by the runtime budget; the budget
-    // error propagates unchanged so diagnostics name the exhausted budget.
+    // DDL-uu8 policy first (env allowlist + scope authorization), then
+    // DDL-1z1's runtime budget bounds the spawn; both diagnostics propagate
+    // unchanged so failures name the exhausted budget or rejected policy.
+    let mut command = crate::installer::npm_command(cmd);
+    crate::installer::apply_child_policy(&mut command, scope, &[]).map_err(|e| {
+        DdlError::InstallFailed(format!("skill install rejected by child policy: {e}"))
+    })?;
     let status = crate::installer::run_child_bounded(
-        crate::installer::npm_command(cmd)
+        command
             .args(&base_args)
             .stdout(std::process::Stdio::inherit())
             .stderr(std::process::Stdio::inherit()),
@@ -174,6 +196,47 @@ mod tests {
     fn test_extract_version_missing() {
         let fm = "name: commit\ninstalled-from: incitaciones";
         assert_eq!(extract_version(fm), None);
+    }
+
+    /// DDL-uu8: the global-skill scope is rejected without explicit
+    /// authorization; the local (tool-init) scope needs no grant.
+    #[test]
+    fn global_skill_scope_requires_explicit_authorization() {
+        let lookup = |var: &str| {
+            if var == crate::installer::ALLOW_GLOBAL_SKILL_ENV {
+                None // simulate the authorization var not being set
+            } else {
+                std::env::var(var).ok()
+            }
+        };
+        assert!(
+            crate::installer::scope_authorize_with(
+                crate::installer::ExecutionScope::GlobalSkill,
+                lookup
+            )
+            .is_err()
+        );
+        let authorized = |var: &str| {
+            if var == crate::installer::ALLOW_GLOBAL_SKILL_ENV {
+                Some("1".to_string())
+            } else {
+                std::env::var(var).ok()
+            }
+        };
+        assert!(
+            crate::installer::scope_authorize_with(
+                crate::installer::ExecutionScope::GlobalSkill,
+                authorized
+            )
+            .is_ok()
+        );
+        assert!(
+            crate::installer::scope_authorize_with(
+                crate::installer::ExecutionScope::ToolInit,
+                authorized
+            )
+            .is_ok()
+        );
     }
 
     #[test]

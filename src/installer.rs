@@ -25,6 +25,19 @@
 //! legacy transition (`DDL_ALLOW_UNVERIFIED_RELEASE=1`) may authorize a
 //! *missing* manifest but never a *contradicting* one.
 //!
+//! Rationale (DDL-uu8, SEC-04): children spawned by ddl (cargo, npm, npx,
+//! tool-init commands) must not silently inherit the caller's full environment
+//! and filesystem authority. Every such child runs with an explicit
+//! restricted-privilege policy: an allowlisted environment (credentials and
+//! other non-approved variables are dropped), and execution scopes whose
+//! write roots reach beyond this project (global skill installs) are gated
+//! behind explicit authorization env vars. Enforcement mechanism is
+//! deliberately cheap and portable — controlled env dictionary + explicit
+//! scope authorization, fail-closed on unsupported platforms — with NO silent
+//! unsandboxed fallback; kernel-level sandboxing would require a verifier
+//! dependency, which the ticket explicitly reserves for a separate design
+//! approval.
+//!
 //! Rationale (DDL-4oi, SEC-01): archive extraction must never write directly
 //! to the installed destination. The expected binary is extracted as the only
 //! accepted entry — regular files only (links and special files rejected),
@@ -1677,7 +1690,11 @@ fn install_cargo(tool: &Tool, verbose: bool) -> Result<()> {
         verbose,
         &format!("running: cargo install {}", tool.crate_name),
     );
-    let status = Command::new("cargo")
+    let mut command = Command::new("cargo");
+    apply_child_policy(&mut command, ExecutionScope::PackageBuild, &[]).map_err(|e| {
+        DdlError::InstallFailed(format!("cargo install rejected by child policy: {e}"))
+    })?;
+    let status = command
         .args(["install", tool.crate_name])
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
@@ -1701,7 +1718,11 @@ fn install_npm(tool: &Tool, verbose: bool) -> Result<()> {
     // npm_package, falling back to crate_name for registry-style entries.
     let package = tool.npm_package.unwrap_or(tool.crate_name);
     verbose_print(verbose, &format!("running: npm install -g {package}"));
-    let status = npm_command("npm")
+    let mut command = npm_command("npm");
+    apply_child_policy(&mut command, ExecutionScope::PackageBuild, &[]).map_err(|e| {
+        DdlError::InstallFailed(format!("npm install rejected by child policy: {e}"))
+    })?;
+    let status = command
         .args(["install", "-g", package])
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
@@ -1816,13 +1837,18 @@ pub fn run_tool_init(tool: &Tool, verbose: bool, non_interactive: bool) -> Resul
         Command::new(at_dest.expect("checked at_dest_exists above"))
     };
     command.args(&args);
-    // Prepend the ddl bin dir so downloaded tools see their siblings.
+    // DDL-uu8: restricted child environment; prepend the ddl bin dir so
+    // downloaded tools see their siblings (override wins over the allowlist).
+    let mut overrides: Vec<(&str, std::ffi::OsString)> = Vec::new();
     if let Some(bin_dir) = ddl_bin_dir() {
-        command.env(
+        overrides.push((
             "PATH",
             prepend_path(&bin_dir, std::env::var_os("PATH").as_deref()),
-        );
+        ));
     }
+    apply_child_policy(&mut command, ExecutionScope::ToolInit, &overrides).map_err(|e| {
+        DdlError::InstallFailed(format!("{} init rejected by child policy: {e}", tool.name))
+    })?;
 
     // DDL-1z1: the init child runs under the runtime and captured-output
     // budgets — a hung or flooding init child is killed (with its process
@@ -2031,7 +2057,11 @@ fn upgrade_cargo(tool: &Tool, verbose: bool) -> Result<()> {
         &format!("running: cargo install {}", tool.crate_name),
     );
     // `cargo install` is idempotent — it upgrades if already installed
-    let status = Command::new("cargo")
+    let mut command = Command::new("cargo");
+    apply_child_policy(&mut command, ExecutionScope::PackageBuild, &[]).map_err(|e| {
+        DdlError::InstallFailed(format!("cargo upgrade rejected by child policy: {e}"))
+    })?;
+    let status = command
         .args(["install", tool.crate_name])
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
@@ -2057,7 +2087,11 @@ fn upgrade_npm(tool: &Tool, verbose: bool) -> Result<()> {
         verbose,
         &format!("running: npm install -g {package}@latest"),
     );
-    let status = npm_command("npm")
+    let mut command = npm_command("npm");
+    apply_child_policy(&mut command, ExecutionScope::PackageBuild, &[]).map_err(|e| {
+        DdlError::InstallFailed(format!("npm upgrade rejected by child policy: {e}"))
+    })?;
+    let status = command
         .args(["install", "-g", &format!("{package}@latest")])
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
@@ -2129,6 +2163,268 @@ pub(crate) fn npm_command(program: &str) -> Command {
     #[cfg(not(windows))]
     {
         Command::new(program)
+    }
+}
+
+// ==========================================================================
+// DDL-uu8 (SEC-04): restricted-privilege policy for spawned children
+// ==========================================================================
+
+/// Authorization variable for the global skill-install scope
+/// (`incitaciones install --global` writes to `~/.agents/skills/`, which is
+/// visible to every project on the machine).
+pub const ALLOW_GLOBAL_SKILL_ENV: &str = "DDL_ALLOW_GLOBAL_SKILL";
+
+/// Legacy-transition variable: when set to `1`, children inherit the caller's
+/// full environment instead of the restricted allowlist. Mirrors the
+/// `DDL_ALLOW_UNVERIFIED_RELEASE` explicit-authorization semantics.
+pub const ALLOW_UNRESTRICTED_CHILD_ENV: &str = "DDL_ALLOW_UNRESTRICTED_CHILD_ENV";
+
+/// The execution scope of a child spawned by ddl.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExecutionScope {
+    /// Package build/install (`cargo install`, `npm install -g`) — authorized
+    /// by the explicit user-invoked install/upgrade command itself.
+    PackageBuild,
+    /// Global skill installation — writes outside this project and affects
+    /// other projects; requires explicit authorization via
+    /// [`ALLOW_GLOBAL_SKILL_ENV`].
+    GlobalSkill,
+    /// Per-tool init cascade — writes are confined to the invoking project
+    /// tree and ddl's own bin dir; authorized by the explicit `ddl init`.
+    ToolInit,
+}
+
+impl ExecutionScope {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::PackageBuild => "package-build",
+            Self::GlobalSkill => "global-skill",
+            Self::ToolInit => "tool-init",
+        }
+    }
+
+    /// The env var granting explicit authorization for this scope, if any.
+    /// Scopes writing only inside this project (or explicitly requested by
+    /// the user's own install/upgrade command) need no additional grant.
+    pub fn authorization_env(self) -> Option<&'static str> {
+        match self {
+            Self::GlobalSkill => Some(ALLOW_GLOBAL_SKILL_ENV),
+            Self::PackageBuild | Self::ToolInit => None,
+        }
+    }
+}
+
+/// Platform support matrix: the restricted-privilege mechanism (controlled
+/// env dictionary + explicit scope authorization) is portable across every
+/// platform std supports. Any other target must be rejected explicitly —
+/// never silently run children unsandboxed.
+pub fn child_policy_supported() -> bool {
+    cfg!(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "windows"
+    ))
+}
+
+/// Environment allowlist for children spawned by ddl. Everything NOT listed
+/// here (credentials, tokens, secrets) is dropped from the child environment.
+#[cfg(not(windows))]
+pub const CHILD_ENV_ALLOWLIST: &[&str] = &[
+    "PATH",
+    "HOME",
+    "USER",
+    "LOGNAME",
+    "SHELL",
+    "TERM",
+    "TMPDIR",
+    "LANG",
+    "LC_ALL",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_CACHE_HOME",
+    "XDG_RUNTIME_DIR",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "NO_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "no_proxy",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "CARGO_HOME",
+    "RUSTUP_HOME",
+    "NPM_CONFIG_PREFIX",
+];
+
+/// Environment allowlist for children spawned by ddl (Windows variants:
+/// cmd shim routing and npm/cargo need the system profile variables).
+#[cfg(windows)]
+pub const CHILD_ENV_ALLOWLIST: &[&str] = &[
+    "PATH",
+    "PATHEXT",
+    "COMSPEC",
+    "SYSTEMROOT",
+    "WINDIR",
+    "SystemDrive",
+    "USERPROFILE",
+    "HOMEDRIVE",
+    "HOMEPATH",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "PROGRAMDATA",
+    "ALLUSERSPROFILE",
+    "PROGRAMFILES",
+    "COMMONPROGRAMFILES",
+    "TEMP",
+    "TMP",
+    "USERNAME",
+    "USERDOMAIN",
+    "COMPUTERNAME",
+    "LANG",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "NO_PROXY",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "CARGO_HOME",
+    "RUSTUP_HOME",
+    "NPM_CONFIG_PREFIX",
+];
+
+/// Is the legacy unrestricted-child-environment transition explicitly
+/// authorized?
+fn unrestricted_child_env_authorized() -> bool {
+    std::env::var(ALLOW_UNRESTRICTED_CHILD_ENV).as_deref() == Ok("1")
+}
+
+/// Build the child environment from the policy allowlist, applying explicit
+/// overrides last (so e.g. the tool-init PATH prepend always wins).
+///
+/// Fail-closed: without a usable PATH the child cannot be started sanely, so
+/// the policy refuses instead of inheriting a half-broken environment.
+pub fn sanitize_child_env(
+    overrides: &[(&str, std::ffi::OsString)],
+) -> Result<Vec<(String, std::ffi::OsString)>> {
+    let mut env: Vec<(String, std::ffi::OsString)> = Vec::new();
+    if unrestricted_child_env_authorized() {
+        for (k, v) in std::env::vars_os() {
+            env.push((k.to_string_lossy().into_owned(), v));
+        }
+    } else {
+        for key in CHILD_ENV_ALLOWLIST {
+            if let Some(v) = std::env::var_os(key) {
+                env.push(((*key).to_string(), v));
+            }
+        }
+    }
+    for (k, v) in overrides {
+        env.retain(|(existing, _)| existing.as_str() != *k);
+        env.push(((*k).to_string(), v.clone()));
+    }
+    if !env.iter().any(|(k, _)| k == "PATH") {
+        return Err(DdlError::InstallFailed(
+            "child environment policy (DDL-uu8): PATH is missing — refusing to spawn a child without an executable search path".to_string(),
+        ));
+    }
+    Ok(env)
+}
+
+/// Apply the restricted-privilege policy to a child command: replace the
+/// inherited environment with the allowlisted one and reject execution on
+/// unsupported platforms. Zero silent unsandboxed fallback.
+pub fn apply_child_policy(
+    command: &mut Command,
+    scope: ExecutionScope,
+    overrides: &[(&str, std::ffi::OsString)],
+) -> Result<()> {
+    if !child_policy_supported() {
+        return Err(DdlError::UnsupportedPlatform(format!(
+            "restricted child execution policy (DDL-uu8) has no enforcement mechanism on this platform — refusing to run the {} child unsandboxed",
+            scope.label()
+        )));
+    }
+    let env = sanitize_child_env(overrides)?;
+    command.env_clear();
+    for (k, v) in env {
+        command.env(k, v);
+    }
+    Ok(())
+}
+
+/// Approve (or reject) a child execution scope. Scopes with an authorization
+/// env var are rejected unless it is explicitly set to `1`; the rejection
+/// message names the variable so the remedy is discoverable.
+pub fn authorize_scope(scope: ExecutionScope) -> Result<()> {
+    scope_authorize_with(scope, |var| std::env::var(var).ok())
+}
+
+/// Pure decision core of [`authorize_scope`], injectable for tests.
+pub fn scope_authorize_with<F>(scope: ExecutionScope, lookup: F) -> Result<()>
+where
+    F: Fn(&str) -> Option<String>,
+{
+    match scope.authorization_env() {
+        // Authorized by the explicit user-invoked install/upgrade/init command.
+        None => Ok(()),
+        Some(var) if lookup(var).as_deref() == Some("1") => Ok(()),
+        Some(var) => Err(DdlError::InstallFailed(format!(
+            "{} scope rejected by the restricted-privilege policy (DDL-uu8): its writes reach beyond this project and affect other projects. Re-run with {var}=1 to explicitly authorize, or install skills locally instead.",
+            scope.label()
+        ))),
+    }
+}
+
+/// The approved write roots for a child execution scope. Anything outside
+/// these roots is outside the child's declared filesystem authority.
+pub fn child_write_roots(scope: ExecutionScope, project_root: Option<&Path>) -> Vec<PathBuf> {
+    let mut roots: Vec<PathBuf> = Vec::new();
+    if let Some(project) = project_root {
+        roots.push(project.to_path_buf());
+    }
+    if let Some(bin) = ddl_bin_dir() {
+        roots.push(bin);
+    }
+    match scope {
+        // Global package registries/caches (cargo home) are the package-build
+        // scope's declared target.
+        ExecutionScope::PackageBuild => {
+            if let Some(home) = std::env::var_os("CARGO_HOME") {
+                roots.push(PathBuf::from(home));
+            }
+        }
+        // Global skills live under ~/.agents/skills — the global-skill
+        // scope's declared target.
+        ExecutionScope::GlobalSkill => {
+            if let Some(dir) = crate::skills::global_skills_dir() {
+                roots.push(dir);
+            }
+        }
+        ExecutionScope::ToolInit => {}
+    }
+    roots
+}
+
+/// Reject a path outside the approved write roots of `scope`.
+pub fn check_write_root(
+    scope: ExecutionScope,
+    path: &Path,
+    project_root: Option<&Path>,
+) -> Result<()> {
+    let roots = child_write_roots(scope, project_root);
+    if roots.iter().any(|root| path.starts_with(root)) {
+        Ok(())
+    } else {
+        let listed = roots
+            .iter()
+            .map(|r| r.display().to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        Err(DdlError::InstallFailed(format!(
+            "write to {} is outside the approved roots of the {} scope (DDL-uu8): approved roots: {listed}",
+            path.display(),
+            scope.label()
+        )))
     }
 }
 
@@ -2240,6 +2536,93 @@ pub fn install_selected_tools(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ===== DDL-uu8 (SEC-04): restricted-privilege policy =====
+
+    #[test]
+    fn scope_authorization_matrix() {
+        // GlobalSkill requires explicit DDL_ALLOW_GLOBAL_SKILL=1.
+        assert!(scope_authorize_with(ExecutionScope::GlobalSkill, |_| None).is_err());
+        assert!(
+            scope_authorize_with(ExecutionScope::GlobalSkill, |v| {
+                if v == ALLOW_GLOBAL_SKILL_ENV {
+                    Some("1".into())
+                } else {
+                    None
+                }
+            })
+            .is_ok()
+        );
+        // PackageBuild and ToolInit are authorized by the explicit
+        // user-invoked command itself (no extra grant).
+        assert!(scope_authorize_with(ExecutionScope::PackageBuild, |_| None).is_ok());
+        assert!(scope_authorize_with(ExecutionScope::ToolInit, |_| None).is_ok());
+    }
+
+    #[test]
+    fn scope_rejection_message_names_the_authorization_variable() {
+        let err = scope_authorize_with(ExecutionScope::GlobalSkill, |_| None).unwrap_err();
+        assert!(err.to_string().contains(ALLOW_GLOBAL_SKILL_ENV));
+    }
+
+    #[test]
+    fn write_roots_reject_out_of_scope_paths() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("project");
+        std::fs::create_dir_all(&project).unwrap();
+        // Inside the project root: approved for tool-init.
+        assert!(
+            check_write_root(
+                ExecutionScope::ToolInit,
+                &project.join("openspec"),
+                Some(&project)
+            )
+            .is_ok()
+        );
+        // Outside every approved root: rejected.
+        assert!(
+            check_write_root(
+                ExecutionScope::ToolInit,
+                Path::new("/etc/passwd"),
+                Some(&project)
+            )
+            .is_err()
+        );
+        // The global-skill scope's declared target is ~/.agents/skills.
+        if let Some(skills_dir) = crate::skills::global_skills_dir() {
+            assert!(
+                check_write_root(
+                    ExecutionScope::GlobalSkill,
+                    &skills_dir.join("commit"),
+                    Some(&project)
+                )
+                .is_ok()
+            );
+            assert!(
+                check_write_root(
+                    ExecutionScope::GlobalSkill,
+                    Path::new("/etc/passwd"),
+                    Some(&project)
+                )
+                .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn child_env_allowlist_excludes_credentials() {
+        assert!(CHILD_ENV_ALLOWLIST.contains(&"PATH"));
+        assert!(CHILD_ENV_ALLOWLIST.contains(&"HOME"));
+        assert!(!CHILD_ENV_ALLOWLIST.contains(&"DDL_TEST_CANARY_CREDENTIAL"));
+        assert!(!CHILD_ENV_ALLOWLIST.contains(&"GITHUB_TOKEN"));
+    }
+
+    #[test]
+    fn child_policy_platform_matrix_is_supported() {
+        // The env-allowlist + authorization mechanism is portable across the
+        // platforms ddl supports; anything else must fail closed.
+        assert!(child_policy_supported());
+    }
 
     #[test]
     fn test_parse_version_line_variants() {
