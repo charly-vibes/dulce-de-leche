@@ -25,6 +25,16 @@
 //! legacy transition (`DDL_ALLOW_UNVERIFIED_RELEASE=1`) may authorize a
 //! *missing* manifest but never a *contradicting* one.
 //!
+//! Rationale (DDL-4oi, SEC-01): archive extraction must never write directly
+//! to the installed destination. The expected binary is extracted as the only
+//! accepted entry — regular files only (links and special files rejected),
+//! size-bounded, traversal-safe — into an *exclusive* staging directory on
+//! the destination's filesystem, then atomically swapped into place. On any
+//! failure before the swap the working executable remains byte-for-byte
+//! intact and no staging residue is left behind. POSIX uses rename(2) (fully
+//! atomic); Windows uses a move-aside + rollback protocol with the DDL-5bs
+//! install lock serializing concurrent upgrades.
+//!
 //! Rationale (DDL-5bs, SEC-04): installs used to float — binary installs
 //! resolved `releases/latest`, cargo had no `--version`/`--locked`, npm was
 //! `@latest`. Replay now resolves the artifact purely from the recorded lock
@@ -903,18 +913,7 @@ fn install_binary(tool: &Tool, platform: &Platform, verbose: bool) -> Result<Ver
     }
     crate::output::record_install_verification(tool.name, status.label());
 
-    if ext == "zip" {
-        extract_zip(&archive_bytes, &dest_path, &download_url)?;
-    } else {
-        extract_tar_gz(&archive_bytes, &dest_path, tool.name, &download_url)?;
-    }
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&dest_path, std::fs::Permissions::from_mode(0o755))
-            .map_err(DdlError::Io)?;
-    }
+    stage_and_replace_binary(&archive_bytes, &dest_path, tool.name, &download_url)?;
 
     ensure_on_path(&dest_dir, platform)?;
 
@@ -1106,7 +1105,93 @@ fn fetch_release_asset(url: &str, tool_name: &str) -> Result<bytes::Bytes> {
     response.bytes().map_err(DdlError::Network)
 }
 
-fn extract_tar_gz(bytes: &[u8], dest: &Path, tool_name: &str, url: &str) -> Result<()> {
+/// Upper bound on the size of an extracted binary (DDL-4oi). The declared
+/// entry size is checked before any byte is written, so a hostile or
+/// corrupted archive cannot exhaust the destination disk with staging data.
+pub const MAX_BINARY_BYTES: u64 = 512 * 1024 * 1024;
+
+/// Extract the expected binary from `bytes` into exclusive staging, then
+/// atomically replace the installed executable at `dest` (DDL-4oi, SEC-01).
+///
+/// Guarantees:
+/// - `dest` is only ever mutated by a single atomic replacement of a fully
+///   extracted, executable regular file — never by a partial write.
+/// - On any failure the previous bytes at `dest` are preserved exactly and
+///   no staging residue remains (`.ddl-stage-*` entries are removed).
+/// - Only the expected binary entry is extracted: regular files only
+///   (symlinks, hardlinks, directories and special files are rejected),
+///   size-bounded by [`MAX_BINARY_BYTES`], with path traversal rejected.
+///
+/// Archive format is detected from the bytes (gzip magic → tar.gz, otherwise
+/// zip) so both the unix and Windows asset paths share one code path.
+pub fn stage_and_replace_binary(
+    bytes: &[u8],
+    dest: &Path,
+    tool_name: &str,
+    url: &str,
+) -> Result<()> {
+    let parent = dest
+        .parent()
+        .ok_or_else(|| DdlError::Other("destination has no parent directory".to_string()))?;
+    // Exclusive staging directory, sibling of `dest` so the final swap is a
+    // same-filesystem rename.
+    let staging = new_staging_dir(parent, tool_name)?;
+
+    let result = (|| -> Result<()> {
+        let staged = if bytes.starts_with(&[0x1f, 0x8b]) {
+            extract_tar_gz_staged(bytes, &staging, tool_name, url)?
+        } else {
+            extract_zip_staged(bytes, &staging, tool_name, url)?
+        };
+        make_executable(&staged)?;
+        atomic_replace_executable(&staged, dest)
+    })();
+
+    if result.is_err() {
+        // Normal failure cases leave zero staging residue behind.
+        let _ = std::fs::remove_dir_all(&staging);
+    } else {
+        // The staged binary was moved into place; drop the staging shell.
+        let _ = std::fs::remove_dir_all(&staging);
+    }
+    result
+}
+
+/// Create an exclusive staging directory (create-new semantics; the attempt
+/// loop disambiguates same-nanosecond collisions) named `.ddl-stage-*` so
+/// cleanup passes can recognize staging residue.
+fn new_staging_dir(parent: &Path, tool_name: &str) -> Result<PathBuf> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    for attempt in 0..64u32 {
+        let dir = parent.join(format!(
+            ".ddl-stage-{tool_name}-{}-{}",
+            std::process::id(),
+            nanos + attempt as u128
+        ));
+        match std::fs::create_dir(&dir) {
+            Ok(()) => return Ok(dir),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(DdlError::Io(e)),
+        }
+    }
+    Err(DdlError::InstallFailed(
+        "could not create an exclusive staging directory for the upgrade".to_string(),
+    ))
+}
+
+/// Extract only the expected regular-file binary entry from a tar.gz into
+/// `staging`. Returns the staged file path. Links, special files, oversized
+/// and traversal entries are rejected before any destination mutation.
+fn extract_tar_gz_staged(
+    bytes: &[u8],
+    staging: &Path,
+    tool_name: &str,
+    url: &str,
+) -> Result<PathBuf> {
     let decoder = flate2::read::GzDecoder::new(bytes);
     let mut archive = tar::Archive::new(decoder);
 
@@ -1115,44 +1200,190 @@ fn extract_tar_gz(bytes: &[u8], dest: &Path, tool_name: &str, url: &str) -> Resu
         .map_err(|e| DdlError::Other(e.to_string()))?
     {
         let mut entry = entry.map_err(|e| DdlError::Other(e.to_string()))?;
-        let path = entry.path().map_err(|e| DdlError::Other(e.to_string()))?;
-        if path.file_name().is_some_and(|f| f == tool_name) {
-            entry.unpack(dest).map_err(DdlError::Io)?;
-            return Ok(());
+        let path = entry
+            .path()
+            .map_err(|e| DdlError::Other(e.to_string()))?
+            .to_path_buf();
+        let path_display = path.display().to_string();
+        if path.file_name().is_none_or(|f| f != tool_name) {
+            continue;
         }
+        // Only the expected regular binary is ever extracted.
+        if !matches!(entry.header().entry_type(), tar::EntryType::Regular) {
+            return Err(DdlError::InstallFailed(format!(
+                "archive entry '{path_display}' for binary '{tool_name}' is not a regular file — rejected from {url}"
+            )));
+        }
+        // Traversal guard: the staged copy is built manually, so the entry
+        // path must stay inside the staging directory.
+        if path.components().any(|c| {
+            matches!(
+                c,
+                std::path::Component::ParentDir
+                    | std::path::Component::RootDir
+                    | std::path::Component::Prefix(_)
+            )
+        }) {
+            return Err(DdlError::InstallFailed(format!(
+                "archive entry '{path_display}' attempts path traversal — rejected from {url}"
+            )));
+        }
+        let declared = entry
+            .header()
+            .size()
+            .map_err(|e| DdlError::Other(e.to_string()))?;
+        if declared > MAX_BINARY_BYTES {
+            return Err(DdlError::InstallFailed(format!(
+                "archive entry '{path_display}' declares {declared} bytes, exceeding the {MAX_BINARY_BYTES}-byte binary limit — rejected from {url}"
+            )));
+        }
+        let staged_path = staging.join(&path);
+        if let Some(p) = staged_path.parent() {
+            std::fs::create_dir_all(p).map_err(DdlError::Io)?;
+        }
+        {
+            let mut out = std::fs::File::create(&staged_path).map_err(DdlError::Io)?;
+            let copied = std::io::copy(&mut entry, &mut out).map_err(DdlError::Io)?;
+            if copied != declared {
+                return Err(DdlError::InstallFailed(format!(
+                    "interrupted copy: archive entry '{path_display}' declared {declared} bytes but only {copied} could be read — {url}"
+                )));
+            }
+            out.sync_all().map_err(DdlError::Io)?;
+        }
+        return Ok(staged_path);
     }
 
     Err(DdlError::InstallFailed(format!(
-        "Binary '{}' not found in archive from {url}",
-        tool_name
+        "Binary '{tool_name}' not found in archive from {url}"
     )))
 }
 
-fn extract_zip(bytes: &[u8], dest: &Path, url: &str) -> Result<()> {
+/// Extract only the expected regular-file binary entry from a zip into
+/// `staging`. Returns the staged file path. Symlinks, directories, oversized
+/// and traversal entries are rejected before any destination mutation.
+fn extract_zip_staged(bytes: &[u8], staging: &Path, tool_name: &str, url: &str) -> Result<PathBuf> {
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes.to_vec()))
         .map_err(|e| DdlError::Other(e.to_string()))?;
-
-    let binary_name = dest
-        .file_name()
-        .and_then(|n| n.to_str())
-        .ok_or_else(|| DdlError::Other("Invalid destination path".to_string()))?;
 
     for i in 0..archive.len() {
         let mut entry = archive
             .by_index(i)
             .map_err(|e| DdlError::Other(e.to_string()))?;
-        let path = entry.name().to_string();
-
-        if path.ends_with(binary_name) || path == binary_name {
-            let mut out = std::fs::File::create(dest).map_err(DdlError::Io)?;
-            std::io::copy(&mut entry, &mut out).map_err(DdlError::Io)?;
-            return Ok(());
+        let name = entry.name().to_string();
+        let base = name
+            .trim_end_matches('/')
+            .rsplit('/')
+            .next()
+            .unwrap_or(&name);
+        if base != tool_name {
+            continue;
         }
+        // Only the expected regular binary is ever extracted.
+        if entry.is_symlink() || entry.is_dir() {
+            return Err(DdlError::InstallFailed(format!(
+                "archive entry '{name}' for binary '{tool_name}' is not a regular file — rejected from {url}"
+            )));
+        }
+        let declared = entry.size();
+        if declared > MAX_BINARY_BYTES {
+            return Err(DdlError::InstallFailed(format!(
+                "archive entry '{name}' declares {declared} bytes, exceeding the {MAX_BINARY_BYTES}-byte binary limit — rejected from {url}"
+            )));
+        }
+        // enclosed_name() rejects traversal ("../", absolute paths).
+        let staged_path = staging.join(entry.enclosed_name().ok_or_else(|| {
+            DdlError::InstallFailed(format!(
+                "archive entry '{name}' attempts path traversal — rejected from {url}"
+            ))
+        })?);
+        if let Some(p) = staged_path.parent() {
+            std::fs::create_dir_all(p).map_err(DdlError::Io)?;
+        }
+        {
+            let mut out = std::fs::File::create(&staged_path).map_err(DdlError::Io)?;
+            let copied = std::io::copy(&mut entry, &mut out).map_err(DdlError::Io)?;
+            if copied != declared {
+                return Err(DdlError::InstallFailed(format!(
+                    "interrupted copy: archive entry '{name}' declared {declared} bytes but only {copied} could be read — {url}"
+                )));
+            }
+            out.sync_all().map_err(DdlError::Io)?;
+        }
+        return Ok(staged_path);
     }
 
     Err(DdlError::InstallFailed(format!(
-        "Binary '{binary_name}' not found in zip archive from {url}"
+        "Binary '{tool_name}' not found in zip archive from {url}"
     )))
+}
+
+/// Mark a staged binary executable (POSIX mode 0o755; a no-op on Windows,
+/// where executability is carried by the file extension).
+fn make_executable(path: &Path) -> Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
+            .map_err(DdlError::Io)?;
+    }
+    Ok(())
+}
+
+/// Atomically replace the installed executable at `dest` with the staged
+/// binary (DDL-4oi).
+///
+/// - POSIX: `rename(2)` is atomic over an existing file — a concurrent
+///   reader observes either the complete old or the complete new executable,
+///   never a partial write.
+/// - Windows: `std::fs::rename` fails when `dest` exists, so the replacement
+///   is a defined move-aside protocol with rollback: (1) move the current
+///   executable to `<dest>.ddl-old`, (2) rename the staged binary into
+///   place, (3) delete the rollback file. Any failure in (2) restores the
+///   old executable; concurrent upgrades are serialized by the DDL-5bs
+///   install lock, closing the brief exposure window between (1) and (2).
+fn atomic_replace_executable(staged: &Path, dest: &Path) -> Result<()> {
+    #[cfg(unix)]
+    {
+        std::fs::rename(staged, dest).map_err(DdlError::Io)?;
+        Ok(())
+    }
+    #[cfg(not(unix))]
+    {
+        match std::fs::rename(staged, dest) {
+            Ok(()) => Ok(()),
+            Err(_) => {
+                let bak = sibling_path(dest, ".ddl-old");
+                let _ = std::fs::remove_file(&bak);
+                std::fs::rename(dest, &bak).map_err(DdlError::Io)?;
+                match std::fs::rename(staged, dest) {
+                    Ok(()) => {
+                        let _ = std::fs::remove_file(&bak);
+                        Ok(())
+                    }
+                    Err(e) => {
+                        // Rollback: the working executable must survive.
+                        let _ = std::fs::rename(&bak, dest);
+                        Err(DdlError::Io(e))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Path for a sibling of `dest` with `suffix` appended to the file name.
+#[cfg(not(unix))]
+fn sibling_path(dest: &Path, suffix: &str) -> PathBuf {
+    let mut name = dest
+        .file_name()
+        .map(|n| n.to_os_string())
+        .unwrap_or_default();
+    name.push(suffix);
+    match dest.parent() {
+        Some(p) => p.join(name),
+        None => PathBuf::from(name),
+    }
 }
 
 fn install_cargo(tool: &Tool, verbose: bool) -> Result<()> {
