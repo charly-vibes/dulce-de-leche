@@ -129,6 +129,78 @@ fn read(temp: &Path, rel: &str) -> String {
     std::fs::read_to_string(temp.join(rel)).unwrap_or_else(|e| panic!("read {rel}: {e}"))
 }
 
+// ===================== DDL-uu8 (SEC-04) =====================
+// Restricted-privilege policy for children spawned by the install/init
+// cascade: cargo/npm/npx and tool-init children must run with an explicitly
+// restricted environment (allowlist), and execution scopes whose write roots
+// reach beyond this project (global skill installs) must require explicit
+// policy authorization.
+
+/// A canary credential in the caller environment must never reach a tool-init
+/// child: the child environment is built from an explicit allowlist, so
+/// non-approved variables (credentials, tokens) are dropped.
+#[test]
+fn init_children_do_not_inherit_canary_credentials() {
+    let (mut cmd, temp) = ddl_cmd();
+    stub_tools(
+        &mut cmd,
+        &temp,
+        &[(
+            "ah",
+            // The stub reports whether the canary leaked into its environment.
+            "if env | grep -q '^DDL_TEST_CANARY_CREDENTIAL='; then echo 'CANARY LEAKED'; else echo 'restricted env ok'; fi",
+        )],
+    );
+    cmd.env(
+        "DDL_TEST_CANARY_CREDENTIAL",
+        "canary-secret-do-not-leak-9f3a",
+    );
+    cmd.args(["init", "--tools", "ah", "--no-install", "--human"]);
+    cmd.timeout(CMD_TIMEOUT);
+    let output = cmd.assert().success().get_output().clone();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    assert!(
+        !stderr.contains("CANARY LEAKED"),
+        "tool-init child inherited the caller's canary credential: {stderr}"
+    );
+    assert!(
+        !stderr.contains("canary-secret-do-not-leak-9f3a"),
+        "canary credential value leaked into child output: {stderr}"
+    );
+    assert!(
+        stderr.contains("ah initialized: restricted env ok"),
+        "stub should have run with a restricted but usable environment: {stderr}"
+    );
+}
+
+/// Global-skill installation writes to ~/.agents/skills — visible to every
+/// project on the machine — so it requires explicit policy authorization
+/// (DDL_ALLOW_GLOBAL_SKILL=1). Without it the install must be rejected with a
+/// structured diagnostic naming the authorization variable; the init cascade
+/// stays advisory (warn, do not abort) but must NOT run the global install.
+#[test]
+fn unauthorized_global_skill_scope_is_rejected_with_policy_diagnostic() {
+    let (mut cmd, temp) = ddl_cmd();
+    // Sandboxed HOME: no pre-existing global skills, so the --yes flow
+    // attempts the global skill install.
+    cmd.env("HOME", temp.path().join("home"));
+    cmd.env_remove("DDL_ALLOW_GLOBAL_SKILL");
+    stub_tools(&mut cmd, &temp, &[]); // hermetic incitaciones stub
+    cmd.args(["init", "--yes", "--no-install", "--human"]);
+    cmd.timeout(CMD_TIMEOUT);
+    let output = cmd.assert().success().get_output().clone();
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        combined.contains("DDL_ALLOW_GLOBAL_SKILL"),
+        "unauthorized global skill install must produce a diagnostic naming \
+         DDL_ALLOW_GLOBAL_SKILL; got: {combined}"
+    );
+}
+
 #[test]
 fn failing_tool_init_fails_run_with_resume_summary() {
     let (mut cmd, temp) = ddl_cmd();
