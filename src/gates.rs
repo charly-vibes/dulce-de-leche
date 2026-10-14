@@ -38,9 +38,9 @@ pub const PRE_COMMIT_BLOCK: &str = "    # ddl:managed:start (pre-commit)
     ddl-ah-check:
       run: ah check
     ddl-pretender-gate:
-      run: pretender check --mode gate
+      run: pretender check --diff-only --mode gate
     ddl-spk-lint:
-      run: spk lint openspec
+      run: spk lint openspec/specs || test $? -eq 2
     # ddl:managed:end (pre-commit)";
 
 /// Managed pre-push command block.
@@ -525,7 +525,8 @@ pre-commit:
         let cmds_pos = out.find("  commands:").unwrap();
         let managed_pos = out.find(MARKER_START_PREFIX).unwrap();
         assert!(cmds_pos < managed_pos);
-        assert!(out.contains("spk lint openspec"));
+        assert!(out.contains("run: pretender check --diff-only --mode gate"));
+        assert!(out.contains("run: spk lint openspec/specs || test $? -eq 2"));
         assert!(out.contains(PRE_COMMIT_BLOCK));
         // exactly one pre-commit marker pair
         assert_eq!(out.matches("(pre-commit)").count(), 2); // start + end

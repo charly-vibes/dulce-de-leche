@@ -80,8 +80,17 @@ fn gates_wires_lefthook_gitignore_and_beads_in_fresh_repo() {
     assert!(lefthook.contains("# ddl:managed:start (pre-commit)"));
     assert!(lefthook.contains("# ddl:managed:start (pre-push)"));
     assert!(lefthook.contains("run: ah check"));
-    assert!(lefthook.contains("run: pretender check --mode gate"));
-    assert!(lefthook.contains("run: spk lint openspec"));
+    // DDL-3fd: pre-commit pretender gate must be diff-only (consistent with
+    // pre-push) — repo-wide mode fails commits touching untouched files that
+    // carry pre-existing violations.
+    assert!(lefthook.contains("run: pretender check --diff-only --mode gate"));
+    // DDL-3fd: spk lint targets the specs corpus and tolerates exit 2
+    // (nothing-to-lint) — plain-openspec repos without specodelic frontmatter
+    // must not be blocked until they adopt the dual format.
+    assert!(lefthook.contains("run: spk lint openspec/specs || test $? -eq 2"));
+    // ...but a real violation exit (≠ 0/2) still gates: the template must
+    // keep the || rescue scoped to exit 2 only.
+    assert!(!lefthook.contains("spk lint openspec/specs || true"));
     for line in lefthook.lines() {
         if line.contains("ddl-ah-check") || line.contains("ddl-pretender-gate") {
             assert!(
