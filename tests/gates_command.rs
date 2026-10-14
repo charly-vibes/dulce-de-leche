@@ -4,6 +4,7 @@
 //! lefthook hard gates (managed blocks INSIDE `commands:`), tool-data
 //! .gitignore entries, beads no-db stamping — idempotent on re-run.
 
+mod common;
 use assert_cmd::Command;
 use std::path::Path;
 use std::time::Duration;
@@ -33,23 +34,8 @@ fn stub_incitaciones_on_path(cmd: &mut Command, temp: &tempfile::TempDir) {
 fn ddl_cmd() -> (Command, tempfile::TempDir) {
     let temp = tempfile::tempdir().unwrap();
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.current_dir(temp.path());
-    // Strip git's inherited environment: under a lefthook pre-push run the
-    // spawned ddl (and any `git init` it performs) would inherit GIT_DIR
-    // from the hook and operate on the parent repo instead of the fixture.
-    for var in [
-        "GIT_DIR",
-        "GIT_WORK_TREE",
-        "GIT_INDEX_FILE",
-        "GIT_OBJECT_DIRECTORY",
-        "GIT_COMMON_DIR",
-        "GIT_CONFIG",
-        "GIT_CONFIG_GLOBAL",
-        "GIT_CONFIG_SYSTEM",
-        "GIT_NAMESPACE",
-    ] {
-        cmd.env_remove(var);
-    }
     stub_incitaciones_on_path(&mut cmd, &temp);
     (cmd, temp)
 }

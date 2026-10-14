@@ -4,6 +4,7 @@
 //! test CLI parsing and help text here. The upgrade logic is tested via
 //! unit tests in the installer module.
 
+mod common;
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::time::Duration;
@@ -16,6 +17,7 @@ const CMD_TIMEOUT: Duration = Duration::from_secs(10);
 #[test]
 fn test_upgrade_help_has_tool_arg() {
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.arg("upgrade").arg("--help");
     cmd.timeout(CMD_TIMEOUT);
     cmd.assert()
@@ -27,6 +29,7 @@ fn test_upgrade_help_has_tool_arg() {
 #[test]
 fn test_upgrade_help_shows_description() {
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.arg("upgrade").arg("--help");
     cmd.timeout(CMD_TIMEOUT);
     cmd.assert()
@@ -48,6 +51,7 @@ fn test_upgrade_unknown_tool_is_fast() {
 #[test]
 fn test_upgrade_unknown_flag_errors() {
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.arg("upgrade").arg("--unknown-flag");
     cmd.timeout(CMD_TIMEOUT);
     cmd.assert().failure();
@@ -57,6 +61,7 @@ fn test_upgrade_unknown_flag_errors() {
 fn ddl_cmd() -> (Command, tempfile::TempDir) {
     let temp = tempfile::tempdir().unwrap();
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.current_dir(temp.path());
     (cmd, temp)
 }

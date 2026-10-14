@@ -3,6 +3,7 @@
 //! Covers the gh#30 bug class: phase-1 symlink migration must be safe on
 //! git-tracked config dirs (refuse/skip with guidance), and `--undo` must
 //! clear all manifest residue (`migration_state` back to `none`).
+mod common;
 
 use assert_cmd::Command;
 use predicates::prelude::*;
@@ -29,6 +30,7 @@ fn ddl_cmd() -> (Command, tempfile::TempDir) {
     )
     .unwrap();
     let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
     cmd.current_dir(temp.path());
     cmd.timeout(CMD_TIMEOUT);
     (cmd, temp)
