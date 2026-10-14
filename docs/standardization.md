@@ -219,3 +219,65 @@ matrix; and an ecosystem landing link in the book SUMMARY and README status
 block (§7 — the fleet's front door, enforced by the `s7_ecosystem_landing_*`
 conformance tests). Deviations must be documented in the tool's
 `docs/src/status.md`.
+
+## 8. Reproducible environments — Nix/devenv (spike DDL-irv)
+
+> **Status:** DECIDED (2026-10-13, spike `DDL-irv`). Spike evidence lives in the
+> per-repo files listed below; wai way tracks the Reproducible-environments
+> check under `wai-bvn7`.
+
+ddl's promise is collapsing "a dozen install paths, config formats, and
+version drifts" into one install — but the one install itself spans
+homebrew/scoop/crates/cargo/npm, each with its own drift (PATH precedence
+conflicts, bd needing a pinned GitHub release because no versioned
+homebrew-core formula exists, tarball exec-bit issues, MSRV drift). Nix via
+[devenv.sh](https://devenv.sh) was evaluated as an additional fleet install
+path.
+
+### 8.1 Decision — granularity: per-repo devenv
+
+**Adopted: one `devenv.nix` + `devenv.yaml` per repo**, pinning that repo's
+toolchain from its own `versions.ddl.toml` values. **One fleet flake in ddl is
+deferred** until cross-repo duplication of tool pins becomes real pain.
+
+Evidence: the pattern is already proven in four repos — `gently`, `wanna`,
+`tambor`, and `wild` each carry a hand-written `devenv.nix`/`devenv.yaml`
+(see `gently/devenv.nix` for the annotated template). All four CI workflows
+ran green on first run (53s–1m13s, cachix devenv cache), and the local loop
+resolved every tool in all repo shells via distrobox (nix 2.35 single-user +
+devenv 2.4.0). Fleet pins are few and stable; a central flake would add a
+single point of coupling without removing real duplication yet.
+
+`versions.ddl.toml` remains the source of truth for versions; a repo's
+`devenv.nix` mirrors it declaratively for humans, CI, and ephemeral agent
+sandboxes. Tools unavailable at pinned versions in nixpkgs (crates.io pins,
+bd's GitHub-release pin) stay provisioned by ddl and are noted in the
+`devenv.nix` comment rather than duplicated — drift is caught by review, and
+by the §4 pin file as the canonical reference.
+
+### 8.2 Decision — nix in `versions.ddl.toml` `[tools]`: not now
+
+Nix/devenv is **not** added to `[tools]` at this time. It is an environment
+*provider*, not an installed dependency of the fleet; per §4, `[tools]` pins
+what CI installs. Revisit when either: (a) a repo's `devenv.nix` pins drift
+from `versions.ddl.toml` more than once (mechanize the mirror then), or
+(b) nix becomes a real install path for a fleet binary (e.g. a
+`flake.nix` packaging `ddl` itself), at which point an entry like
+`nix = "2.35"` would pin the provider.
+
+### 8.3 Constraints and the local loop
+
+- **Additive, macOS/Linux only.** Nix has no native Windows support; scoop
+  stays canonical on Windows. The devenv path never replaces brew/crates
+  install paths — it is one more reproducible consumer of the same pins.
+- **No host-level nix on Bluefin 44** (atomic/ublue; maintainers explicitly
+  do not support Nix — ublue-os/bluefin#3606). The canonical local loop is
+  **distrobox**: a `devenv` container (`quay.io/fedora/fedora:41`, isolated
+  home under `~/.dbx-homes/devenv`) with nix single-user + devenv; `/var/home`
+  is bind-mounted so repos work in place. A devcontainer with devenv is the
+  documented alternative; CI-only verification is the fallback. Repo CI uses
+  `determinate-systems/nix-installer-action` on runners, where nix installs
+  cleanly.
+- Every devenv environment must verify honestly: `devenv shell -- just gates`
+  (or the repo's QA entry point) fails loudly on pin mismatch instead of
+  silently succeeding on nixpkgs versions (see gently's Graph::Easy comment).
