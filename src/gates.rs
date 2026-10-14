@@ -49,6 +49,13 @@ pub const PRE_PUSH_BLOCK: &str = "    # ddl:managed:start (pre-push)
       run: ah check
     # ddl:managed:end (pre-push)";
 
+/// The canonical lefthook.yml template written when a repo has none
+/// (DDL-fw7): managed gate blocks plus the beads hook chaining the
+/// ddl.repo.bd-hooks doctor check demands — a fresh `ddl init -y --gates`
+/// must leave `ddl doctor` clean with no second manual pass.
+/// `{pre_commit}` / `{pre_push}` interpolate the managed blocks.
+pub const CANONICAL_LEFTHOOK_TEMPLATE: &str = "# lefthook.yml — ddl-managed gates (created by `ddl init --gates`)\n# Managed blocks: markers `# ddl:managed:start/end (hook)` — edit around them.\n\npre-commit:\n  commands:\n    bd:\n      run: bd hooks run pre-commit\n{pre_commit}\n\npre-push:\n  commands:\n    bd:\n      run: bd hooks run pre-push\n{pre_push}\n";
+
 /// Ensure lefthook gates exist in `content` (None = file missing).
 /// Returns the new content and what changed.
 ///
@@ -66,11 +73,14 @@ pub fn ensure_lefthook_gates(content: Option<&str>) -> Result<(String, Change)> 
     ];
 
     let mut lines: Vec<String> = match content {
-        None => vec![
-            "# lefthook.yml — ddl-managed gates (created by `ddl init --gates`)".to_string(),
-            "# Managed blocks: markers `# ddl:managed:start/end (hook)` — edit around them."
-                .to_string(),
-        ],
+        // format! needs a literal first argument — the template is a
+        // public const, so interpolate with targeted replaces instead.
+        None => CANONICAL_LEFTHOOK_TEMPLATE
+            .replace("{pre_commit}", PRE_COMMIT_BLOCK)
+            .replace("{pre_push}", PRE_PUSH_BLOCK)
+            .lines()
+            .map(|l| l.to_string())
+            .collect(),
         Some(text) => text.lines().map(|l| l.to_string()).collect(),
     };
     let created = content.is_none();
@@ -450,6 +460,11 @@ pre-push:
         assert!(out.contains("pre-push:"));
         assert!(out.contains(PRE_COMMIT_BLOCK));
         assert!(out.contains(PRE_PUSH_BLOCK));
+        // DDL-fw7: the created file must already chain the beads hooks —
+        // `ddl init -y --gates` then `ddl doctor` must be clean for
+        // ddl.repo.bd-hooks without a second manual pass.
+        assert!(out.contains("bd hooks run pre-commit"));
+        assert!(out.contains("bd hooks run pre-push"));
         // managed entries must live INSIDE commands: (indent > 2)
         for line in out.lines() {
             if line.contains("ddl-ah-check") || line.contains("ddl-pretender-gate") {

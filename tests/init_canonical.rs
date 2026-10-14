@@ -88,6 +88,10 @@ fn version_stub(version: &str) -> String {
 }
 
 fn ddl_init(temp: &tempfile::TempDir) -> assert_cmd::assert::Assert {
+    ddl_init_args(temp, &["init", "--yes", "--human", "--no-install"])
+}
+
+fn ddl_init_args(temp: &tempfile::TempDir, args: &[&str]) -> assert_cmd::assert::Assert {
     let mut cmd = Command::cargo_bin("ddl").unwrap();
     cmd.current_dir(temp.path());
     cmd.timeout(CMD_TIMEOUT);
@@ -99,7 +103,7 @@ fn ddl_init(temp: &tempfile::TempDir) -> assert_cmd::assert::Assert {
             ("wai", &version_stub("wai 2026.9.28")),
         ],
     );
-    cmd.args(["init", "--yes", "--human", "--no-install"]);
+    cmd.args(args);
     cmd.assert()
 }
 
@@ -187,4 +191,55 @@ fn test_init_reconciles_preexisting_install_into_manifest() {
     );
     assert_eq!(wai["status"], "installed");
     assert_eq!(wai["installed"], "2026.9.28");
+}
+
+// ===================== doctor clean after init (the MUST) =====================
+
+/// The ticket MUST: `ddl init -y` on a fresh stock charly repo leaves
+/// `ddl doctor` clean for the repo.* checks (0 fail, 0 warn). A stock charly
+/// repo carries the fleet-standard files (LICENSE, CHANGELOG, fmt-check
+/// justfile); everything else — managed blocks, pins, manifest inventory,
+/// gates wiring — is init's job.
+#[test]
+fn test_init_gates_leaves_doctor_repo_checks_clean() {
+    let temp = stock_repo();
+    // Fleet-standard files a stock charly repo already commits.
+    std::fs::write(
+        temp.path().join("LICENSE"),
+        "MIT License\n\nPermission is hereby granted...\n",
+    )
+    .unwrap();
+    std::fs::write(temp.path().join("CHANGELOG.md"), "# Changelog\n").unwrap();
+    std::fs::write(
+        temp.path().join("justfile"),
+        "fmt:\n    cargo fmt\n\nfmt-check:\n    cargo fmt -- --check\n",
+    )
+    .unwrap();
+
+    ddl_init_args(
+        &temp,
+        &["init", "--yes", "--human", "--no-install", "--gates"],
+    );
+
+    let mut cmd = Command::cargo_bin("ddl").unwrap();
+    cmd.current_dir(temp.path());
+    cmd.timeout(CMD_TIMEOUT);
+    cmd.args(["doctor", "--json"]);
+    let out = cmd.assert().success().get_output().stdout.clone();
+    let envelope: serde_json::Value = serde_json::from_slice(&out).unwrap();
+    let diags = envelope["data"]["diagnostics"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let repo_findings: Vec<String> = diags
+        .iter()
+        .filter(|d| {
+            d["check"].as_str().unwrap_or("").starts_with("ddl.repo.") && d["level"] != "pass"
+        })
+        .map(|d| format!("{} {}: {}", d["check"], d["level"], d["detail"]))
+        .collect();
+    assert!(
+        repo_findings.is_empty(),
+        "ddl init -y --gates must leave ddl doctor clean for ddl.repo.* checks:\n{repo_findings:?}"
+    );
 }
