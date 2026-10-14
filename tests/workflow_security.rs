@@ -60,31 +60,64 @@ fn job_sections(doc: &str) -> Vec<(String, Vec<&str>)> {
     jobs
 }
 
+/// Assert every `uses:` spec in `doc` is pinned to a full 40-hex SHA.
+/// Returns the number of actions checked, or an error describing the first
+/// violation — shared by the positive and negative fixtures.
+fn assert_all_actions_pinned(doc: &str) -> Result<usize, String> {
+    let mut pinned = 0;
+    for line in doc.lines() {
+        let Some(idx) = line.find("uses:") else {
+            continue;
+        };
+        let spec = line[idx + 5..]
+            .trim()
+            .trim_matches('"')
+            .split('#')
+            .next()
+            .unwrap()
+            .trim();
+        if spec.starts_with("./") {
+            continue; // local action, no pin needed
+        }
+        let Some((_, version)) = spec.split_once('@') else {
+            return Err(format!("action without pin: {spec}"));
+        };
+        if !(version.len() == 40 && version.chars().all(|c| c.is_ascii_hexdigit())) {
+            return Err(format!(
+                "action `{spec}` must use a full 40-hex commit SHA, got `{version}`"
+            ));
+        }
+        pinned += 1;
+    }
+    Ok(pinned)
+}
+
 #[test]
 fn every_third_party_action_is_pinned_to_full_commit_sha() {
     for wf in ["release.yml", "ci.yml"] {
         let doc = read(&format!(".github/workflows/{wf}"));
-        let mut pinned = 0;
-        for line in doc.lines() {
-            let Some(idx) = line.find("uses:") else {
-                continue;
-            };
-            let spec = line[idx + 5..].trim().trim_matches('"');
-            assert!(
-                !spec.starts_with("./"),
-                "{wf}: local action should not need pinning: {spec}"
-            );
-            let Some((_, version)) = spec.split_once('@') else {
-                panic!("{wf}: action without pin: {spec}");
-            };
-            assert!(
-                version.len() == 40 && version.chars().all(|c| c.is_ascii_hexdigit()),
-                "{wf}: action `{spec}` must use a full 40-hex commit SHA, got `{version}`"
-            );
-            pinned += 1;
-        }
+        let pinned = assert_all_actions_pinned(&doc).unwrap_or_else(|e| panic!("{wf}: {e}"));
         assert!(pinned > 0, "{wf}: fixture found no actions to check");
     }
+}
+
+/// Negative fixture: the shared pin checker must REJECT mutable refs.
+#[test]
+fn negative_pinning_checker_rejects_mutable_refs() {
+    for bad in [
+        "- uses: actions/checkout@v4",
+        "- uses: actions/checkout@main",
+        "- uses: Swatinem/rust-cache@82a92a6e8fbeee089604da2575dc567ae9ddea", // 39 hex
+    ] {
+        let err = assert_all_actions_pinned(&format!("steps:\n{bad}\n"))
+            .expect_err("checker must reject mutable ref");
+        assert!(err.contains("must use a full 40-hex commit SHA") || err.contains("without pin"));
+    }
+    // Full SHAs (with or without a version comment) still pass.
+    assert_all_actions_pinned(
+        "steps:\n  - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0\n",
+    )
+    .expect("full SHA must pass");
 }
 
 #[test]
@@ -152,7 +185,10 @@ fn publish_depends_on_test_and_security_jobs_for_the_tagged_commit() {
             "publish must need `{dep}`; failed/skipped/cancelled prerequisites must prevent publication"
         );
     }
-    for (name, required) in [("test", "cargo test --locked"), ("security", "cargo audit")] {
+    for (name, required) in [
+        ("test", "cargo test --locked"),
+        ("security", "just advisory"),
+    ] {
         let job = jobs
             .iter()
             .find(|(n, _)| *n == name)
