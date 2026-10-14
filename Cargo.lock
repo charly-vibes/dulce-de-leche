@@ -454,6 +454,7 @@ dependencies = [
  "fs2",
  "genesis-vibes",
  "indicatif 0.17.11",
+ "libc",
  "miette",
  "owo-colors",
  "predicates",

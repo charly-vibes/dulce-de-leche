@@ -69,6 +69,117 @@ where
     unreachable!("retry loop always returns")
 }
 
+/// SEC-05 (DDL-sg8): refuse manifest writes that links could redirect
+/// outside the project.
+///
+/// Two checks run before every manifest write path:
+/// 1. The manifest path itself must not be a symlink (checked via
+///    `symlink_metadata`, so dangling links are caught too). Even an
+///    in-project link is untrusted: it can be swapped between check and
+///    write, and a write through it lands at the target, wherever that is.
+/// 2. The `.ddl/` directory must not be a link pointing outside the project
+///    root. In-project directory links (e.g. `.ddl` -> `.internal-ddl`)
+///    stay allowed — they cannot escape the tree.
+///
+/// Rationale (DDL-sg8): these checks are companions to the real enforcement
+/// in [`open_manifest_no_follow`], which refuses to follow a link at the
+/// manifest path inside the `open()` itself — closing the check-then-open
+/// race these path-based checks inherently have.
+///
+/// Missing/dangling ancestors degrade to "allow": the subsequent `open()`
+/// then fails (or creates) naturally, mirroring today's behavior for
+/// genuinely absent directories; the guard only rejects link-mediated
+/// redirection.
+pub fn ensure_manifest_write_is_local(manifest_path: &Path) -> Result<()> {
+    if is_symlink(manifest_path) {
+        return Err(DdlError::Other(format!(
+            "refusing to write manifest: {} is a symlink (SEC-05: manifest links must not redirect writes outside the project)",
+            manifest_path.display()
+        )));
+    }
+
+    let Some(ddl_dir) = manifest_path.parent() else {
+        return Ok(());
+    };
+    let Some(root) = ddl_dir.parent() else {
+        return Ok(());
+    };
+    let (Ok(root), Ok(resolved)) = (std::fs::canonicalize(root), std::fs::canonicalize(ddl_dir))
+    else {
+        return Ok(());
+    };
+    if !resolved.starts_with(&root) {
+        return Err(DdlError::Other(format!(
+            "refusing to write manifest: {} links to {}, outside the project root {} (SEC-05)",
+            ddl_dir.display(),
+            resolved.display(),
+            root.display()
+        )));
+    }
+    Ok(())
+}
+
+/// Open the manifest for read/write without following a link at the final
+/// path component (SEC-05, DDL-sg8).
+///
+/// [`ensure_manifest_write_is_local`] runs before every open, but a check
+/// and a later open are two syscalls: a link swapped in between them would
+/// still be followed. Opening with `O_NOFOLLOW` (Unix) resp.
+/// `FILE_FLAG_OPEN_REPARSE_POINT` (Windows) makes the refusal happen inside
+/// the open itself, so the last line of defense cannot be raced past.
+/// Dangling links are refused too: `O_NOFOLLOW` + `O_CREAT` fails with ELOOP
+/// on a trailing symlink.
+fn open_manifest_no_follow(path: &Path) -> Result<std::fs::File> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut opts = OpenOptions::new();
+        opts.create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .custom_flags(libc::O_NOFOLLOW);
+        opts.open(path).map_err(|e| symlink_open_error(path, e))
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // FILE_FLAG_OPEN_REPARSE_POINT: open the reparse point itself
+        // instead of following it to the target.
+        const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+        let mut opts = OpenOptions::new();
+        opts.create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
+        opts.open(path).map_err(|e| symlink_open_error(path, e))
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(path)
+            .map_err(|e| symlink_open_error(path, e))
+    }
+}
+
+/// Map a failed no-follow open to a user-facing error. When the path is (or
+/// now is) a link, name it explicitly; otherwise surface the raw error.
+fn symlink_open_error(path: &Path, e: std::io::Error) -> DdlError {
+    if is_symlink(path) {
+        DdlError::Other(format!(
+            "refusing to open manifest: {} is a symlink (SEC-05: manifest links must not redirect writes outside the project)",
+            path.display()
+        ))
+    } else {
+        DdlError::Io(e)
+    }
+}
+
 /// ddl's own configuration, written to `.ddl/config.toml`.
 ///
 /// Implements `genesis::config::ConfigFile` for standard read/write/validate.
@@ -224,7 +335,11 @@ impl DdlDir {
 
         let manifest = Manifest::new();
         let manifest_path = path.join("manifest.json");
-        manifest.save(&manifest_path)?;
+        ensure_manifest_write_is_local(&manifest_path)?;
+        // Write through a no-follow open (SEC-05): std::fs::write would
+        // follow a link swapped in after the guard check.
+        let mut file = open_manifest_no_follow(&manifest_path)?;
+        write_manifest_to(&mut file, &manifest)?;
 
         Ok(Self {
             path: path.to_path_buf(),
@@ -273,13 +388,8 @@ impl DdlDir {
     }
 
     fn try_save_manifest(&self, manifest_path: &Path) -> Result<()> {
-        let mut file = OpenOptions::new()
-            .create(true)
-            .truncate(false)
-            .read(true)
-            .write(true)
-            .open(manifest_path)
-            .map_err(DdlError::Io)?;
+        ensure_manifest_write_is_local(manifest_path)?;
+        let mut file = open_manifest_no_follow(manifest_path)?;
         file.lock_exclusive().map_err(DdlError::Io)?;
         write_manifest_to(&mut file, &self.manifest)
     }
@@ -292,16 +402,13 @@ impl DdlDir {
     pub fn record_tool(&mut self, name: &str, entry: ToolEntry) -> Result<()> {
         let manifest_path = self.manifest_path();
         with_sharing_retry(|| {
+            ensure_manifest_write_is_local(&manifest_path)?;
             // Single-handle read-modify-write: the LockFileEx byte-range lock
             // held by this handle blocks every other handle on Windows (see
             // save_manifest), so re-reading and writing must use this handle.
-            let mut file = OpenOptions::new()
-                .create(true)
-                .truncate(false)
-                .read(true)
-                .write(true)
-                .open(&manifest_path)
-                .map_err(DdlError::Io)?;
+            // The open itself refuses link redirection (SEC-05) so the guard
+            // cannot be raced past by a check-then-open swap.
+            let mut file = open_manifest_no_follow(&manifest_path)?;
             file.lock_exclusive().map_err(DdlError::Io)?;
 
             // Re-read manifest from disk inside the lock to get the latest
@@ -830,4 +937,81 @@ fn is_symlink(path: &Path) -> bool {
             }
         })
         .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod sec05_tests {
+    use super::*;
+
+    /// SEC-05 (DDL-sg8), link-swap coverage: after the swap from a regular
+    /// manifest to a link, the no-follow open itself refuses — no prior
+    /// check is involved, so the check-then-open race window cannot be used
+    /// to get a write through.
+    #[test]
+    fn no_follow_open_refuses_manifest_swapped_to_symlink() {
+        let dir = tempfile();
+        let manifest = dir.path().join("manifest.json");
+        std::fs::write(&manifest, "{}").unwrap();
+
+        // Regular file: open succeeds (plain save path).
+        open_manifest_no_follow(&manifest).unwrap();
+
+        // Swap in a link pointing at an outside file; the open itself must
+        // refuse even though no path-based check has run since the swap.
+        let outside = dir.path().join("outside.json");
+        std::fs::write(&outside, "harmless").unwrap();
+        #[cfg(unix)]
+        {
+            std::fs::remove_file(&manifest).unwrap();
+            std::os::unix::fs::symlink(&outside, &manifest).unwrap();
+        }
+        #[cfg(windows)]
+        {
+            std::fs::remove_file(&manifest).unwrap();
+            std::os::windows::fs::symlink_file(&outside, &manifest)
+                .expect("symlink_file requires admin/dev-mode privileges");
+        }
+
+        let err = open_manifest_no_follow(&manifest).unwrap_err();
+        assert!(err.to_string().contains("symlink"), "got: {err}");
+        // The outside file must be untouched.
+        assert_eq!(std::fs::read_to_string(&outside).unwrap(), "harmless");
+    }
+
+    /// SEC-05 (DDL-sg8): a dangling link at the manifest path is refused by
+    /// the no-follow open, and the dangling target is not created.
+    #[cfg(unix)]
+    #[test]
+    fn no_follow_open_refuses_dangling_link() {
+        let dir = tempfile();
+        let manifest = dir.path().join("manifest.json");
+        std::os::unix::fs::symlink(dir.path().join("nowhere.json"), &manifest).unwrap();
+
+        let err = open_manifest_no_follow(&manifest).unwrap_err();
+        assert!(err.to_string().contains("symlink"), "got: {err}");
+        assert!(!dir.path().join("nowhere.json").exists());
+    }
+
+    /// SEC-05 (DDL-sg8): the no-follow open must not have regressed to
+    /// following links — a link to an in-project file is still refused,
+    /// because any manifest link can be swapped between check and write.
+    #[cfg(unix)]
+    #[test]
+    fn no_follow_open_refuses_even_in_project_link() {
+        let dir = tempfile();
+        let manifest = dir.path().join("manifest.json");
+        let inside = dir.path().join("inside.json");
+        std::fs::write(&inside, "keep").unwrap();
+        std::os::unix::fs::symlink(&inside, &manifest).unwrap();
+
+        assert!(open_manifest_no_follow(&manifest).is_err());
+        assert_eq!(std::fs::read_to_string(&inside).unwrap(), "keep");
+    }
+
+    fn tempfile() -> tempfile::TempDir {
+        tempfile::Builder::new()
+            .prefix("ddl-sec05")
+            .tempdir()
+            .expect("tempdir")
+    }
 }
