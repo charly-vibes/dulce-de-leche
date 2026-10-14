@@ -82,7 +82,7 @@ fn init_help_lists_every_registry_tool() {
 
 use assert_cmd::Command;
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Timeout for each test — init with --no-install should be instant.
 const CMD_TIMEOUT: Duration = Duration::from_secs(10);
@@ -254,4 +254,49 @@ fn gates_flag_still_works_alongside_cascade() {
     let lefthook = read(temp.path(), "lefthook.yml");
     assert!(lefthook.contains("# ddl:managed:start (pre-commit)"));
     assert!(read(temp.path(), ".beads/config.yaml").contains("no-db: true"));
+}
+
+// ===================== DDL-1z1 (SEC-02): init cascade child runtime budget =====================
+//
+// A tool init command that hangs must be terminated within the configured
+// deadline plus one second, the run must fail (exit status identifies the
+// exhausted budget), and the diagnostics — human and JSON — must name the
+// budget instead of silently hanging or falling back.
+
+#[test]
+fn hanging_init_child_killed_and_budget_identified() {
+    let (mut cmd, temp) = ddl_cmd();
+    stub_tools(&mut cmd, &temp, &[("bd", "sleep 60")]);
+    cmd.env("DDL_CHILD_DEADLINE_SECS", "1");
+    cmd.args(["init", "--yes", "--tools", "bd", "--no-install", "--human"]);
+    let start = Instant::now();
+    // Human mode: the resume summary (naming the exhausted budget) is on
+    // stdout; the non-zero exit status identifies the budget exhaustion.
+    cmd.assert()
+        .failure()
+        .stdout(predicates::str::contains("budget exceeded: child-runtime"));
+    let elapsed = start.elapsed();
+    assert!(
+        elapsed < Duration::from_secs(2),
+        "hanging init child must be terminated within deadline + 1s; took {elapsed:?}"
+    );
+}
+
+#[test]
+fn hanging_init_child_budget_identified_in_json() {
+    let (mut cmd, temp) = ddl_cmd();
+    stub_tools(&mut cmd, &temp, &[("bd", "sleep 60")]);
+    cmd.env("DDL_CHILD_DEADLINE_SECS", "1");
+    cmd.args(["init", "--yes", "--tools", "bd", "--no-install"]);
+    // Piped stdout auto-selects JSON mode; the error envelope must name the
+    // exhausted budget.
+    let start = Instant::now();
+    cmd.assert()
+        .failure()
+        .stderr(predicates::str::contains("budget"));
+    let elapsed = start.elapsed();
+    assert!(
+        elapsed < Duration::from_secs(2),
+        "hanging init child must be terminated within deadline + 1s; took {elapsed:?}"
+    );
 }
