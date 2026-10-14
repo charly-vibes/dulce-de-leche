@@ -350,6 +350,16 @@ pub const MANAGED_TOOLS: &[Tool] = &[
         category: ToolCategory::Extension,
         maturity: Maturity::Experimental,
     },
+    Tool {
+        name: "wild",
+        description: "Contract-based compatibility checking for software updates",
+        crate_name: "wild-vibes",
+        formula_name: "wild",
+        repo: "charly-vibes/wild",
+        npm_package: None,
+        category: ToolCategory::Extension,
+        maturity: Maturity::Experimental,
+    },
 ];
 
 /// Find a tool by name (case-insensitive; matches the canonical name or

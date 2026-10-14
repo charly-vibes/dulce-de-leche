@@ -56,6 +56,7 @@ impl CompatibilityMatrix {
             ("specodelic", ">=0.1.0"),
             ("bd", ">=0.0.0"),
             ("openspec", ">=0.0.0"),
+            ("wild", ">=0.0.0"),
         ]
         .into_iter()
         .map(|(k, v)| (k.to_string(), v.to_string()))

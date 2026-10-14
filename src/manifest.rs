@@ -256,7 +256,8 @@ pub const EMBEDDED_COMPATIBILITY: &str = r#"{
     "specodelic": ">=0.1.0",
     "funkalization": ">=0.1.0",
     "bd": ">=0.0.0",
-    "openspec": ">=0.0.0"
+    "openspec": ">=0.0.0",
+    "wild": ">=0.0.0"
 }"#;
 
 #[cfg(test)]

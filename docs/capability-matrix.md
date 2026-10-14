@@ -17,5 +17,6 @@ Intent → tool mapping for the charly-vibes ecosystem, generated from ddl's too
 | turu | `turu` | Deterministic knowledge workspace management (whisper-vibes) | recommended | beta |
 | specodelic | `specodelic` | Markdown spec format (Intent/Constraints/Model/Properties) and the CLI that lints, compiles, verifies, and refactors it | extension | experimental |
 | funkalization | `funkalization` | Visual semantic design workspace — versioned design semantics, obligations, scoped evidence, loss-reporting adapters | extension | experimental |
+| wild | `wild` | Contract-based compatibility checking for software updates | extension | experimental |
 
-Install any of these with `ddl install <name>` — 12 tools total.
+Install any of these with `ddl install <name>` — 13 tools total.
