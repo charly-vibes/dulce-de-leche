@@ -160,6 +160,31 @@ Rows are in-org repos only; external consumers (bd, openspec, turu) appear as
 `ddl status` is the runtime check: the registry drift test enforces the
 README block, and each tool's status page links back to ddl.
 
+### 4.1 Per-repo `ddl init --gates` rollout (DDL-d73)
+
+Fleet sweep running `ddl init --gates -y --no-install` per repo (one PR each,
+branch `ddl/init-gates-sweep`) and wiring lefthook gates, DDL managed blocks,
+tool-data `.gitignore` entries, and the `versions.ddl.toml` pin. Closure
+per repo: `ddl doctor --json` reports zero `ddl.repo.*` warnings.
+
+| Repo | Swept | `ddl.repo.*` residual | PR |
+|---|---|---|---|
+| wai | ✅ | none | charly-vibes/wai#49 |
+| espectacular (`ah`) | ✅ | `ddl.repo.bd-hooks` (lefthook not chaining `bd hooks run`) | charly-vibes/espectacular#45 |
+| testaruda | ✅ | `ddl.repo.license` (LICENSE text vs declared Apache-2.0) | charly-vibes/testaruda#72 |
+| specodelic | ✅ | `ddl.repo.bd-hooks`, `ddl.repo.changelog` | charly-vibes/specodelic#14 |
+| genesis | ✅ | `ddl.repo.blocks` (openspec block missing) | charly-vibes/genesis#14 |
+| dont | ◻ skipped | init partial-failure (tool-config steps fail on already-initialised `.dont`); needs continuation run | — |
+| pretender | ◻ skipped | same as dont | — |
+| vampiro | ◻ skipped | same as dont | — |
+| incitaciones | ◻ skipped | same as dont | — |
+| whisper (`turu`) | ◻ skipped | same as dont | — |
+
+Skipped repos are **not force-fitted** (anti-goal): their tool-config steps
+(e.g. `dont init`) refuse to run on already-initialised projects, so `init`
+aborts before writing gates. A continuation run should pre-declare existing
+state or run `init` with per-tool `--force` semantics before sweeping.
+
 ## 5. Motivation & status block (the "why / how mature")
 
 Every tool README starts with the standard block, immediately after the
