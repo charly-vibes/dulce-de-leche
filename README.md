@@ -65,12 +65,13 @@ drift-tested in `tests/tool_registry_drift.rs`.
 brew tap charly-vibes/charly
 brew install dulce-de-leche
 
-# macOS & Linux (curl — resolves the latest release automatically)
-V=$(basename "$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
-  https://github.com/charly-vibes/dulce-de-leche/releases/latest)" | sed 's/^v//')
-TGT="$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/^x86_64$/amd64/; s/^aarch64$/arm64/')"
-curl -fsSL "https://github.com/charly-vibes/dulce-de-leche/releases/download/v${V}/ddl_${V}_${TGT}.tar.gz" | tar xz
-chmod +x ddl && sudo mv ddl /usr/local/bin/
+# macOS & Linux (curl — stable bootstrap; verifies the release sha256
+# against the release's checksums.txt BEFORE extraction/execution —
+# fail-closed: a tampered or unverified archive is never installed)
+curl -fsSL https://raw.githubusercontent.com/charly-vibes/dulce-de-leche/main/install.sh | bash
+
+# Pin a specific version instead of latest:
+curl -fsSL https://raw.githubusercontent.com/charly-vibes/dulce-de-leche/main/install.sh | DDL_VERSION=0.8.0 bash
 
 # Verify it runs
 ddl --version

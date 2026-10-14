@@ -60,8 +60,13 @@ fmt-check:
 
 # === CI Commands ===
 
+# Executable fixture tests for the install.sh bootstrap (DDL-1ay / SEC-03):
+# tampered/missing checksums must install nothing; clean fixture must install.
+bootstrap-fixtures:
+    bash tests/install_sh_fixtures.sh
+
 # Full CI pipeline
-ci: fmt-check lint test build-release
+ci: fmt-check lint test bootstrap-fixtures build-release
     @echo "✅ CI pipeline passed"
 
 # Dependency advisory audit (RustSec). Used by the release workflow's
