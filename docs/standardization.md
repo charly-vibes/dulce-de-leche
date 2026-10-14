@@ -174,16 +174,17 @@ per repo: `ddl doctor --json` reports zero `ddl.repo.*` warnings.
 | testaruda | ✅ | `ddl.repo.license` (LICENSE text vs declared Apache-2.0) | charly-vibes/testaruda#72 |
 | specodelic | ✅ | `ddl.repo.bd-hooks`, `ddl.repo.changelog` | charly-vibes/specodelic#14 |
 | genesis | ✅ | `ddl.repo.blocks` (openspec block missing) | charly-vibes/genesis#14 |
-| dont | ◻ skipped | init partial-failure (tool-config steps fail on already-initialised `.dont`); needs continuation run | — |
-| pretender | ◻ skipped | same as dont | — |
-| vampiro | ◻ skipped | same as dont | — |
-| incitaciones | ◻ skipped | same as dont | — |
-| whisper (`turu`) | ◻ skipped | same as dont | — |
+| dont | ✅ | `ddl.repo.bd-hooks` (lefthook not chaining `bd hooks run`); main's `ah check` has 4 pre-existing slug-collisions | charly-vibes/dont#27 |
+| pretender | ✅ | `ddl.repo.license` (Cargo.toml declares no license field), `ddl.repo.bd-hooks` | charly-vibes/pretender#49 |
+| vampiro | ✅ | none | charly-vibes/vampiro#46 |
+| incitaciones | ✅ | `ddl.repo.bd-hooks` (lefthook not chaining `bd hooks run`) | charly-vibes/incitaciones#2 |
+| whisper (`turu`) | ✅ | none | charly-vibes/whisper#4 |
 
-Skipped repos are **not force-fitted** (anti-goal): their tool-config steps
-(e.g. `dont init`) refuse to run on already-initialised projects, so `init`
-aborts before writing gates. A continuation run should pre-declare existing
-state or run `init` with per-tool `--force` semantics before sweeping.
+Continuation run (2026-10-14, post-#81): the original partial-failure blocker
+was fixed — tool-config failures are now advisory and gates wiring always
+completes — so all five previously-skipped repos were swept with
+`ddl init --gates -y --no-install` against each repo's `main` (throwaway
+worktrees).
 
 ## 5. Motivation & status block (the "why / how mature")
 
