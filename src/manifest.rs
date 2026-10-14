@@ -10,6 +10,12 @@
 //! *produce* an empty or partial file: all on-disk manifest replacement is
 //! staged + fsynced + renamed atomically (see `dot_ddl::write_manifest_atomic`
 //! and `Manifest::save`), never truncated in place.
+//!
+//! Rationale (DDL-5bs, SEC-04): the manifest stays the *install inventory*
+//! (what is installed); artifact identities live in a separate install lock
+//! (`InstallLock`, `.ddl/lock.json`) so inventory bookkeeping can never
+//! corrupt a recorded version/URL/digest identity, and a locked replay can
+//! reproduce the exact verified bytes.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -127,6 +133,104 @@ impl Default for Manifest {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// A recorded artifact identity for one tool installation (DDL-5bs, SEC-04).
+///
+/// This is what a locked replay reproduces: the exact version, the concrete
+/// (tag-pinned) artifact URL the verified bytes came from, the sha256 digest
+/// those bytes matched under the DDL-yts/wof policies, and the day the
+/// identity was recorded (a deterministic time input for the release-age
+/// policy — never the wall clock).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LockEntry {
+    pub tool: String,
+    pub version: String,
+    pub artifact_url: String,
+    pub sha256: String,
+    pub recorded_epoch_day: u64,
+}
+
+/// The install lock: `.ddl/lock.json`, the identity record of what was
+/// verified (DDL-5bs, SEC-04).
+///
+/// Distinct from the [`Manifest`] inventory by design: the lock can be
+/// replayed, shared and audited without touching inventory state, and
+/// inventory mutations cannot corrupt an artifact identity.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InstallLock {
+    #[serde(default)]
+    pub entries: HashMap<String, LockEntry>,
+}
+
+impl InstallLock {
+    /// Create a new empty lock.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Load the lock from a file path. A missing file is an empty lock —
+    /// the only migration state (v1 is the first lock schema; tools replay
+    /// nothing until the next verified install records an identity).
+    pub fn load(path: &Path) -> Result<Self> {
+        if !path.exists() {
+            return Ok(Self::new());
+        }
+        let contents = std::fs::read_to_string(path).map_err(DdlError::Io)?;
+        Self::parse(&contents)
+    }
+
+    /// Parse a lock from a JSON string. An empty string (freshly created
+    /// file) yields an empty lock, matching the manifest's fresh-creation
+    /// window semantics.
+    pub fn parse(contents: &str) -> Result<Self> {
+        if contents.trim().is_empty() {
+            return Ok(Self::new());
+        }
+        let lock: InstallLock = serde_json::from_str(contents).map_err(DdlError::Serde)?;
+        Ok(lock)
+    }
+
+    /// Save the lock as an atomic staged replace (same pattern as
+    /// [`Manifest::save`], DDL-8u8): a crash leaves either the old or the new
+    /// lock, never a partial file.
+    pub fn save(&self, path: &Path) -> Result<()> {
+        write_file_atomic(
+            path,
+            &serde_json::to_string_pretty(self).map_err(DdlError::Serde)?,
+        )
+    }
+
+    /// Record (or replace) a tool's artifact identity.
+    pub fn record(&mut self, entry: LockEntry) {
+        self.entries.insert(entry.tool.clone(), entry);
+    }
+
+    /// Get a tool's recorded identity, if any.
+    pub fn get(&self, tool: &str) -> Option<&LockEntry> {
+        self.entries.get(tool)
+    }
+}
+
+/// Atomically replace a file with `contents`: stage to a temp sibling,
+/// fsync, rename. Shared by the manifest and install-lock saves so both
+/// publish either the complete old or the complete new file.
+fn write_file_atomic(path: &Path, contents: &str) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(DdlError::Io)?;
+    }
+    let tmp_path = path.with_extension("json.tmp");
+    {
+        use std::io::Write;
+        let mut file = std::fs::File::create(&tmp_path).map_err(DdlError::Io)?;
+        file.write_all(contents.as_bytes()).map_err(DdlError::Io)?;
+        file.sync_all().map_err(DdlError::Io)?;
+    }
+    if let Err(e) = std::fs::rename(&tmp_path, path) {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(DdlError::Io(e));
+    }
+    Ok(())
 }
 
 /// The compatibility matrix embedded in the binary.

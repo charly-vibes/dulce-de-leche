@@ -24,6 +24,15 @@
 //! `EXPECTED_PROVENANCE_REPOSITORY` / `EXPECTED_PROVENANCE_WORKFLOW`; the
 //! legacy transition (`DDL_ALLOW_UNVERIFIED_RELEASE=1`) may authorize a
 //! *missing* manifest but never a *contradicting* one.
+//!
+//! Rationale (DDL-5bs, SEC-04): installs used to float — binary installs
+//! resolved `releases/latest`, cargo had no `--version`/`--locked`, npm was
+//! `@latest`. Replay now resolves the artifact purely from the recorded lock
+//! identity (`manifest::InstallLock`): the replay path has no latest input at
+//! all, so two locked replays select identical versions, URLs and digests
+//! even when latest changes. Only explicit upgrades resolve latest, and they
+//! must clear the configurable release-age policy (deterministic `*_epoch_day`
+//! inputs, no wall clock) before the lock is updated atomically.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -37,7 +46,7 @@ fn verbose_print(verbose: bool, msg: &str) {
 }
 
 use crate::error::{DdlError, Result};
-use crate::manifest::{Manifest, ToolEntry};
+use crate::manifest::{InstallLock, LockEntry, Manifest, ToolEntry};
 use crate::platform::{MANAGED_TOOLS, Os, PackageManager, Platform, Tool};
 
 /// Verification outcome of a binary release download (DDL-yts).
@@ -89,6 +98,107 @@ pub enum ChecksumLookup {
     /// absent from the manifest), or the fetch failed. The string is the
     /// human-readable reason used in rejection diagnostics.
     Unavailable(&'static str),
+}
+
+/// Replay policy (DDL-5bs, SEC-04): resolve the artifact purely from the
+/// recorded lock identity.
+///
+/// The signature takes the lock and the tool name ONLY — there is no
+/// latest-version input, so the replay path cannot resolve latest without an
+/// API change. The returned identity feeds the existing verification policy
+/// unchanged (DDL-yts checksum / DDL-wof provenance still run on the fetched
+/// bytes).
+pub fn replay_decision<'a>(lock: &'a InstallLock, tool: &str) -> Result<&'a LockEntry> {
+    lock.get(tool).ok_or_else(|| {
+        DdlError::InstallFailed(format!(
+            "no recorded install identity for {tool}; replay resolves only recorded identities — run `ddl install {tool}` to record one"
+        ))
+    })
+}
+
+/// Replay command for a Cargo-installed tool: exact version, locked
+/// dependency graph (DDL-5bs). Never a floating or latest reference.
+pub fn cargo_replay_args(crate_name: &str, version: &str) -> Vec<String> {
+    vec![
+        "install".into(),
+        crate_name.into(),
+        "--version".into(),
+        version.into(),
+        "--locked".into(),
+    ]
+}
+
+/// Replay command for an npm-installed tool: the selected package version,
+/// never `@latest` (DDL-5bs).
+pub fn npm_replay_args(package: &str, version: &str) -> Vec<String> {
+    vec![
+        "install".into(),
+        "-g".into(),
+        format!("{package}@{version}"),
+    ]
+}
+
+/// A latest release resolved by an EXPLICIT upgrade (DDL-5bs).
+///
+/// Unlike the replay path, upgrades are the only place latest resolution
+/// happens, and the candidate carries its publication day so the release-age
+/// policy is a deterministic function of explicit time inputs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReleaseCandidate {
+    pub version: String,
+    pub artifact_url: String,
+    pub sha256: String,
+    pub published_epoch_day: u64,
+}
+
+/// Outcome of an explicit upgrade decision (DDL-5bs).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UpgradeDecision {
+    /// The candidate is identical to the recorded identity.
+    UpToDate,
+    /// The candidate is younger than the configured minimum release age; the
+    /// lock is NOT updated. `reason` names the policy and the age shortfall.
+    Deferred { reason: String },
+    /// The resolved change, old identity → new identity. The caller presents
+    /// it and persists the new entry via `InstallLock::save` (atomic).
+    Upgrade { from: LockEntry, to: LockEntry },
+}
+
+/// Decide an explicit upgrade against the release-age policy (DDL-5bs).
+///
+/// `min_release_age_days` is the configurable supply-chain cool-down;
+/// `today_epoch_day` is the deterministic time input (epoch days, UTC).
+pub fn upgrade_decision(
+    current: &LockEntry,
+    candidate: &ReleaseCandidate,
+    min_release_age_days: u64,
+    today_epoch_day: u64,
+) -> Result<UpgradeDecision> {
+    if candidate.version == current.version
+        && candidate.artifact_url == current.artifact_url
+        && candidate.sha256 == current.sha256
+    {
+        return Ok(UpgradeDecision::UpToDate);
+    }
+    let age = today_epoch_day.saturating_sub(candidate.published_epoch_day);
+    if age < min_release_age_days {
+        return Ok(UpgradeDecision::Deferred {
+            reason: format!(
+                "release {} is {age} day(s) old; the release-age policy requires at least {min_release_age_days} day(s)",
+                candidate.version
+            ),
+        });
+    }
+    Ok(UpgradeDecision::Upgrade {
+        from: current.clone(),
+        to: LockEntry {
+            tool: current.tool.clone(),
+            version: candidate.version.clone(),
+            artifact_url: candidate.artifact_url.clone(),
+            sha256: candidate.sha256.clone(),
+            recorded_epoch_day: today_epoch_day,
+        },
+    })
 }
 
 /// Result of a single tool installation attempt.
