@@ -2536,6 +2536,94 @@ pub fn install_selected_tools(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ===== DDL-uu8 (SEC-04): restricted-privilege policy =====
+
+    #[test]
+    fn scope_authorization_matrix() {
+        // GlobalSkill requires explicit DDL_ALLOW_GLOBAL_SKILL=1.
+        assert!(scope_authorize_with(ExecutionScope::GlobalSkill, |_| None).is_err());
+        assert!(
+            scope_authorize_with(ExecutionScope::GlobalSkill, |v| {
+                if v == ALLOW_GLOBAL_SKILL_ENV {
+                    Some("1".into())
+                } else {
+                    None
+                }
+            })
+            .is_ok()
+        );
+        // PackageBuild and ToolInit are authorized by the explicit
+        // user-invoked command itself (no extra grant).
+        assert!(scope_authorize_with(ExecutionScope::PackageBuild, |_| None).is_ok());
+        assert!(scope_authorize_with(ExecutionScope::ToolInit, |_| None).is_ok());
+    }
+
+    #[test]
+    fn scope_rejection_message_names_the_authorization_variable() {
+        let err = scope_authorize_with(ExecutionScope::GlobalSkill, |_| None).unwrap_err();
+        assert!(err.to_string().contains(ALLOW_GLOBAL_SKILL_ENV));
+    }
+
+    #[test]
+    fn write_roots_reject_out_of_scope_paths() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("project");
+        std::fs::create_dir_all(&project).unwrap();
+        // Inside the project root: approved for tool-init.
+        assert!(
+            check_write_root(
+                ExecutionScope::ToolInit,
+                &project.join("openspec"),
+                Some(&project)
+            )
+            .is_ok()
+        );
+        // Outside every approved root: rejected.
+        assert!(
+            check_write_root(
+                ExecutionScope::ToolInit,
+                Path::new("/etc/passwd"),
+                Some(&project)
+            )
+            .is_err()
+        );
+        // The global-skill scope's declared target is ~/.agents/skills.
+        if let Some(skills_dir) = crate::skills::global_skills_dir() {
+            assert!(
+                check_write_root(
+                    ExecutionScope::GlobalSkill,
+                    &skills_dir.join("commit"),
+                    Some(&project)
+                )
+                .is_ok()
+            );
+            assert!(
+                check_write_root(
+                    ExecutionScope::GlobalSkill,
+                    Path::new("/etc/passwd"),
+                    Some(&project)
+                )
+                .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn child_env_allowlist_excludes_credentials() {
+        assert!(CHILD_ENV_ALLOWLIST.contains(&"PATH"));
+        assert!(CHILD_ENV_ALLOWLIST.contains(&"HOME"));
+        assert!(!CHILD_ENV_ALLOWLIST.contains(&"DDL_TEST_CANARY_CREDENTIAL"));
+        assert!(!CHILD_ENV_ALLOWLIST.contains(&"GITHUB_TOKEN"));
+    }
+
+    #[test]
+    fn child_policy_platform_matrix_is_supported() {
+        // The env-allowlist + authorization mechanism is portable across the
+        // platforms ddl supports; anything else must fail closed.
+        assert!(child_policy_supported());
+    }
+
     #[test]
     fn test_parse_version_line_variants() {
         assert_eq!(parse_version_line("ddl", "ddl 0.6.0"), Some("0.6.0".into()));
