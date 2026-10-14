@@ -1,88 +1,89 @@
-# AGENT-SUMMARY — DDL-9e7 (SEC-07): Surface and retry failed Homebrew/Scoop release propagation
+# AGENT-SUMMARY — DDL-hsn: networked-mock e2e test for checksum-mismatch abort
 
 ## What was implemented
 
-- **`scripts/update-homebrew.py` / `scripts/update-scoop.py`** — refactored
-  into verifiable, testable units (pure `build_formula` / `build_manifest`,
-  `verify_release_inputs`, module-level CLI guard). Both now **refuse to
-  write any output** unless the declared version, asset tag
-  (`tag == "v" + version`), and every referenced asset checksum correspond;
-  verification failure exits 2 with a clear error. Rendering is
-  deterministic, so a retry against an already-updated tap/bucket is a
-  byte-identical no-op (idempotent).
-- **`.github/workflows/release.yml`** — removed unconditional
-  `continue-on-error: true` from both channel steps. Semantics now:
-  - missing `TAP_GITHUB_TOKEN` → channel reported as `disabled`
-    (intentional, non-failure, `::notice`);
-  - real update failure → `MAX_ATTEMPTS=3` idempotent retry with recorded
-    machine-readable status files (`updated` / `unchanged` / `failed`);
-  - new **Release health (channel propagation)** step (`if: always()`)
-    aggregates outcomes into the job summary and **fails the job** when any
-    channel is `failed` — a visible incomplete-distribution result.
-  - Retry is confined to the channel steps; the GitHub release and
-    crates.io publish are never re-run. DDL-bas/DDL-wof invariants
-    (credential scoping, provenance, SHA-pinned actions, gates) untouched.
-- **`tests/test_release_channels.py`** — the required meter deliverable
-  (15 unittest cases): script verification (positive/negative), CLI
-  refusal, idempotency, and structural workflow assertions (no blind
-  continue-on-error, disabled-vs-failed, retry confinement, release-health
-  failure path).
-- **`openspec/changes/surface-channel-propagation/`** — DESIGN-lane
-  proposal + `release-pipeline` spec delta documenting the release-health
-  semantics (not an unreviewed protocol break; no interface changes).
+- **`tests/install_policy.rs`** — new self-contained `checksum_mismatch_e2e`
+  module (clearly separated from the unit-policy fixtures per the CO-MOD
+  note; no shared state):
+  - a std-only HTTP/1.1 mock (TcpListener, no new dependencies) serving a
+    GitHub-release surface: latest-release lookup, release asset,
+    `checksums.txt`, `provenance.json`; every served request path is
+    recorded so tests can prove the client was actually routed to the mock;
+  - `mismatched_download_aborts_without_installing` — drives the REAL
+    `ddl install wai` binary (`CARGO_BIN_EXE_ddl`) in a hermetic sandbox
+    (temp HOME → isolated `~/.ddl/bin` destination, temp CWD → isolated
+    `.ddl` manifest, stripped PATH → no preinstalled managed tools and
+    structurally zero cargo, proxy vars removed). checksums.txt lists a
+    well-formed 64-hex digest that matches nothing. Asserts the Must
+    criteria: **nonzero exit**, error reported as a checksum rejection,
+    **destination untouched**, **no cargo fallback** (`no "cargo install"`
+    in output), and the mock served the full lookup chain.
+  - `matching_download_installs_verified` — the valid counterpart: honest
+    digest + DDL-wof provenance manifest built from the lib's trust-root
+    constants (`EXPECTED_PROVENANCE_REPOSITORY`/`_WORKFLOW`, not
+    re-hardcoded). Asserts success, "sha256 verified" status, extracted
+    binary content at the destination, and that checksums.txt +
+    provenance.json were consulted.
+- **`src/installer.rs`** — narrow test-only seam:
+  `test_release_base_url()` honors `DDL_TEST_RELEASE_BASE_URL` **only**
+  when (a) the binary was built with debug assertions (`cargo test`/dev
+  build) and (b) the value targets loopback (`http://127.0.0.1`,
+  `http://localhost`, `http://[::1]`). Release builds always talk to
+  api.github.com/github.com — supply-chain safe (SEC-03). Documented with
+  Purpose/Responsibilities/Rationale. `install_binary`'s release-lookup
+  and download URLs route through `release_api_base()` /
+  `release_download_base()`; the mock URLs keep the
+  `releases/download/<tag>/` shape so DDL-wof tag extraction is exercised
+  unchanged.
 
-## TDD evidence
+## TDD evidence (red → green)
 
-- Red first: `tests/test_release_channels.py` committed at `358b34a` with
-  7 failures + 6 import errors against the then-current code.
-- Green after implementation: **15/15 pass**
-  (`python3 -m unittest discover -s tests -p "test_release_channels*.py"` → OK).
-- Embedded workflow shell validated with `bash -n` (all three new/changed
-  run blocks).
+- **Red** (`4046245`): both e2e tests fail — the child ignored the env var,
+  talked to real GitHub, and the mock received **zero** requests; full
+  suite otherwise green (fmt/clippy pass, all pre-existing tests pass).
+- **Green** (`770227c`): with the seam, both tests pass. Stable across 3
+  consecutive re-runs.
+- No existing assertions weakened; existing checksum/provenance unit
+  coverage intact (22/22 in install_policy.rs).
 
-## Quality gates
+## Test results
 
-- `cargo fmt --all`, `cargo clippy --all-targets -- -D warnings`: clean.
-- `cargo test --locked`: all suites pass except pre-existing environmental
-  failure `s2_live_book_sites_return_200` (live-network docs test) —
-  verified it fails identically on base commit `01aa578` via a temp
-  worktree, so it is unrelated to this change.
-- Hook note: lefthook pre-commit/pre-push invoke `bd hooks run` (bd
-  commands are forbidden for this agent) and `just pre-push` fails in the
-  sandbox; commits/pushes used `--no-verify` with fmt/clippy/test run
-  manually as required.
+- `cargo test --locked --test install_policy`: **22 passed, 0 failed**
+  (20 pre-existing + 2 new).
+- `cargo test --locked` full suite: all green **except** one pre-existing,
+  environmental failure — `standard_conformance::s2_live_book_sites_return_200`
+  ("no Pages-deploying repos detected"): it scans sibling repo checkouts on
+  disk and fails identically with my diff stashed (verified on clean HEAD).
+  Unrelated to this change.
+- `cargo fmt --all` and `cargo clippy --all-targets -- -D warnings`: clean.
 
 ## Commits
 
-- `358b34a` — test(SEC-07/DDL-9e7): red fixtures for channel propagation failure surfacing
-- `fb118f3` — fix(SEC-07/DDL-9e7): surface and retry failed channel propagation
-- `603ce27` — docs(SEC-07/DDL-9e7): openspec change proposal for channel propagation health
+- `4046245` — test(ddl-hsn): add networked-mock e2e regression for
+  checksum-mismatch abort (red)
+- `770227c` — fix(ddl-hsn): debug-only loopback release-endpoint seam makes
+  e2e checksum tests green
 
 ## PR
 
-- https://github.com/charly-vibes/dulce-de-leche/pull/68 (draft → ready)
+https://github.com/charly-vibes/dulce-de-leche/pull/72 (ready for review,
+not merged — per protocol).
 
-## Acceptance criteria
+## Notes / decisions
 
-- [x] Injected tap/bucket failure → visible incomplete-distribution result
-      (release-health step fails the job + summary table).
-- [x] Retry idempotent, never republishes crate or release (retry confined
-      to channel steps; deterministic re-render; status files).
-- [x] Version/tag/checksum asserted before committing either channel
-      update (`verify_release_inputs`, exit 2, no write on refusal).
-- [x] Disabled channels distinguished from failure (`disabled` vs
-      `failed` outcomes; legend documented in the summary).
-- [x] Failing fixtures first (red commit), green after, existing
-      regression coverage intact.
-- [x] New files open with Purpose/Responsibilities/Rationale headers.
-
-## Residual gaps / decisions
-
-- The `release-health` failure path is covered structurally (YAML
-  assertions), not by executing GitHub Actions; live-workflow verification
-  happens on the next tagged release.
-- `sleep 5` fixed backoff chosen over exponential backoff to keep the
-  retry loop simple and bounded (3 attempts ≈ 10 s overhead on failure).
-- Per the ticket's CO-MOD note, release.yml channel logic stayed
-  independent of the DDL-bas/DDL-wof shared-revision concerns; no
-  coordination conflict introduced.
+- Zero dependency changes; `Cargo.lock` untouched.
+- Provenance fixture initially declared the tool's own repo
+  (`charly-vibes/wai`) and was rejected by DDL-wof's trust root; fixed by
+  importing the lib constants — the discriminator between the scenarios is
+  now strictly the digest, as the ticket intends.
+- **Hook carve-out (noted per constraint 5):** the pre-push `gates` hook
+  (`just pre-push`) failed environmentally, not on this diff: the hook env
+  exports `GIT_DIR` (main checkout's `.git`), and `doctor_command` tests
+  spawn `git init` children that inherit it → "could not lock config file
+  …/.git/config". The same tests pass standalone in this worktree (verified
+  directly, twice). fmt/clippy/test were run manually before every commit.
+  Pushes therefore used `git push --no-verify`; commits used the normal
+  path (pre-commit hooks passed).
+- No openspec change proposal drafted: no install/manifest-protocol
+  behavior change ships to release builds (the seam is debug-build-only),
+  so no spec delta is warranted; the test itself is the deliverable.
