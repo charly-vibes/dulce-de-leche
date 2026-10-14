@@ -58,8 +58,7 @@ run_install() {
     DDL_VERSION="1.2.3" \
         DDL_BASE_URL="file://$fixture" \
         DDL_INSTALL_DIR="$dest" \
-        "$@" \
-        bash "$INSTALL_SH" >/dev/null 2>&1
+        env "$@" bash "$INSTALL_SH" >/dev/null 2>&1
 }
 
 assert_no_executable_installed() {
