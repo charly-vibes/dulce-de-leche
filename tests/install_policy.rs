@@ -404,3 +404,192 @@ fn authorization_does_not_rescue_a_published_mismatch() {
         .expect_err("explicit authorization must not bypass a published mismatch");
     assert!(matches!(err, DdlError::ChecksumMismatch { .. }));
 }
+
+// ============================================================================
+// DDL-5bs (SEC-04): replay tool installations from exact versions and
+// artifact identities. Fixture notes:
+//   - The replay path takes the lock ONLY — there is no latest-version input,
+//     so zero latest resolution holds by construction.
+//   - Time is explicit (`*_epoch_day`); no test touches the wall clock.
+//   - The lock is a separate file/schema from the manifest inventory.
+// ============================================================================
+
+mod replay_lock {
+    use dulce_de_leche::installer::{
+        ReleaseCandidate, UpgradeDecision, cargo_replay_args, npm_replay_args, replay_decision,
+        upgrade_decision,
+    };
+    use dulce_de_leche::manifest::{InstallLock, LockEntry, Manifest};
+
+    const URL_V1: &str =
+        "https://github.com/charly-vibes/wai/releases/download/v2026.10.3/wai-x86_64.tar.gz";
+    const URL_V2: &str =
+        "https://github.com/charly-vibes/wai/releases/download/v2026.11.0/wai-x86_64.tar.gz";
+    const SHA_V1: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const SHA_V2: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+    fn recorded(day: u64) -> LockEntry {
+        LockEntry {
+            tool: "wai".into(),
+            version: "2026.10.3".into(),
+            artifact_url: URL_V1.into(),
+            sha256: SHA_V1.into(),
+            recorded_epoch_day: day,
+        }
+    }
+
+    fn candidate(version: &str, url: &str, sha: &str, published: u64) -> ReleaseCandidate {
+        ReleaseCandidate {
+            version: version.into(),
+            artifact_url: url.into(),
+            sha256: sha.into(),
+            published_epoch_day: published,
+        }
+    }
+
+    #[test]
+    fn locked_replay_selects_recorded_identity_even_when_latest_changes() {
+        let mut lock = InstallLock::new();
+        lock.record(recorded(20_470));
+
+        // `releases/latest` moved to a newer release between record and replay.
+        // The replay path has no latest input at all — the decision depends
+        // only on the lock, so the newer release cannot leak in.
+        let entry = replay_decision(&lock, "wai").expect("replay must resolve from the lock");
+        assert_eq!(entry.version, "2026.10.3");
+        assert_eq!(entry.artifact_url, URL_V1);
+        assert_eq!(entry.sha256, SHA_V1);
+        assert_eq!(entry.recorded_epoch_day, 20_470);
+
+        // Two locked replays are identical even as "latest" drifts.
+        let again = replay_decision(&lock, "wai").expect("second replay");
+        assert_eq!(entry, again);
+    }
+
+    #[test]
+    fn replay_without_recorded_identity_fails_with_offline_semantics() {
+        let lock = InstallLock::new();
+        let err = replay_decision(&lock, "wai")
+            .expect_err("replay must never fall back to floating latest");
+        match &err {
+            dulce_de_leche::error::DdlError::InstallFailed(msg) => {
+                assert!(msg.contains("wai"), "diagnostic names the tool: {msg}");
+                assert!(
+                    msg.contains("ddl install"),
+                    "diagnostic instructs recording an identity: {msg}"
+                );
+                assert!(
+                    !msg.to_lowercase().contains("latest"),
+                    "offline semantics must not suggest latest resolution: {msg}"
+                );
+            }
+            other => panic!("expected InstallFailed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cargo_replay_pins_exact_version_and_locked_dependencies() {
+        let args = cargo_replay_args("wai", "2026.10.3");
+        let joined = args.join(" ");
+        assert!(args.contains(&"--version".to_string()));
+        assert!(args.contains(&"2026.10.3".to_string()));
+        assert!(args.contains(&"--locked".to_string()));
+        assert!(!joined.contains("latest"));
+    }
+
+    #[test]
+    fn npm_replay_uses_selected_package_version() {
+        let args = npm_replay_args("@fission-ai/openspec", "0.2.1");
+        assert_eq!(args, vec!["install", "-g", "@fission-ai/openspec@0.2.1"]);
+        assert!(!args.join(" ").contains("@latest"));
+    }
+
+    #[test]
+    fn explicit_upgrade_reports_resolved_changes() {
+        let lock = InstallLock::new();
+        let mut lock = lock;
+        lock.record(recorded(20_470));
+        let decision = upgrade_decision(
+            lock.get("wai").expect("recorded"),
+            &candidate("2026.11.0", URL_V2, SHA_V2, 20_500),
+            0, // no cool-down
+            20_507,
+        )
+        .expect("upgrade decision");
+        match decision {
+            UpgradeDecision::Upgrade { from, to } => {
+                assert_eq!(from.version, "2026.10.3");
+                assert_eq!(from.sha256, SHA_V1);
+                assert_eq!(to.version, "2026.11.0");
+                assert_eq!(to.artifact_url, URL_V2);
+                assert_eq!(to.sha256, SHA_V2);
+            }
+            other => panic!("expected Upgrade, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn release_age_policy_defers_fresh_releases_deterministically() {
+        let mut lock = InstallLock::new();
+        lock.record(recorded(20_470));
+        let cand = candidate("2026.11.0", URL_V2, SHA_V2, 20_500);
+
+        // Published 20_500, today 20_502 → age 2 < 7 → deferred, lock intact.
+        let decision = upgrade_decision(lock.get("wai").unwrap(), &cand, 7, 20_502).unwrap();
+        match decision {
+            UpgradeDecision::Deferred { reason } => {
+                assert!(reason.contains("7"), "reason names the policy: {reason}");
+            }
+            other => panic!("expected Deferred, got {other:?}"),
+        }
+
+        // Today 20_507 → age 7 ≥ 7 → allowed. Deterministic in `today`.
+        let decision = upgrade_decision(lock.get("wai").unwrap(), &cand, 7, 20_507).unwrap();
+        assert!(matches!(decision, UpgradeDecision::Upgrade { .. }));
+    }
+
+    #[test]
+    fn identical_candidate_is_up_to_date() {
+        let mut lock = InstallLock::new();
+        lock.record(recorded(20_470));
+        let same = candidate("2026.10.3", URL_V1, SHA_V1, 20_400);
+        let decision = upgrade_decision(lock.get("wai").unwrap(), &same, 0, 20_507).unwrap();
+        assert!(matches!(decision, UpgradeDecision::UpToDate));
+    }
+
+    #[test]
+    fn lock_file_round_trips_atomically_and_leaves_no_temp_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("lock.json");
+        let mut lock = InstallLock::new();
+        lock.record(recorded(20_470));
+        lock.save(&path).expect("save");
+
+        let reloaded = InstallLock::load(&path).expect("load");
+        assert_eq!(reloaded, lock);
+
+        let leftovers: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(Result::ok)
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.ends_with(".tmp"))
+            .collect();
+        assert!(
+            leftovers.is_empty(),
+            "no temp files left behind: {leftovers:?}"
+        );
+    }
+
+    #[test]
+    fn absent_lock_file_loads_as_empty_and_inventory_stays_distinct() {
+        let dir = tempfile::tempdir().unwrap();
+        let lock = InstallLock::load(&dir.path().join("lock.json")).expect("absent → empty");
+        assert!(lock.get("wai").is_none());
+
+        // The inventory manifest keeps its own schema — a legacy manifest
+        // still parses and shares no structure with the lock.
+        let legacy = r#"{"ddl_version":"0.7.0","migration_state":"none","tools":{}}"#;
+        let m = Manifest::parse(legacy).expect("legacy manifest unchanged");
+        assert!(m.tools.is_empty());
+    }
+}
