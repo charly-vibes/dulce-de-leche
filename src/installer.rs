@@ -1583,7 +1583,10 @@ fn extract_zip_staged(bytes: &[u8], staging: &Path, tool_name: &str, url: &str) 
         let mut entry = archive
             .by_index(i)
             .map_err(|e| DdlError::Other(e.to_string()))?;
-        let name = entry.name().to_string();
+        let name = entry
+            .name()
+            .map_err(|e| DdlError::Other(e.to_string()))?
+            .into_owned();
         let base = name
             .trim_end_matches('/')
             .rsplit('/')
