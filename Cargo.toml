@@ -53,10 +53,6 @@ semver = "1"
 # Cross-platform symlinks
 fs2 = "0.4"
 
-# O_NOFOLLOW for race-free manifest opens (SEC-05); unix-only
-[target.'cfg(unix)'.dependencies]
-libc = "0.2"
-
 # Progress indicators
 indicatif = "0.17"
 
@@ -74,6 +70,13 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 
 # Shared infra crate (envelope, suggestions, scaffold)
 genesis-vibes = "0.13"
+
+# O_NOFOLLOW for race-free manifest opens (SEC-05); unix-only.
+# Keep target-gated deps in their own section at the END of the file — a
+# mid-list header silently made every following dep unix-only and broke
+# the Windows release build (sha2/genesis unresolved on msvc).
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [dev-dependencies]
 assert_cmd = "2"
