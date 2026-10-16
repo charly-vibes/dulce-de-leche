@@ -52,7 +52,7 @@ jobs:
     steps:
       - name: Checkout
         if: ${{ inputs.build_from_source }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Rust
         if: ${{ inputs.build_from_source }}
