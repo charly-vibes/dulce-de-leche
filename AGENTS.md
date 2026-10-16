@@ -194,3 +194,16 @@ bd close <id>         # Complete work
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
 <!-- END BEADS INTEGRATION -->
+
+## Test runner (DDL standard — recorded in DDL-85p, dulce-de-leche repo)
+
+- **TDD loop**: agents run `just test` (testaruda exec loop, working diff)
+  instead of `cargo test` directly — it selects the affected test set,
+  runs only those tests, and ingests results for future selection.
+  Tolerance contract: exit 0/10/20 green; NOT CALIBRATED with 0 actual
+  failures is a vacuous pass (tambor-cpd policy), with failures it
+  blocks. `just test-blast` previews the affected set without running
+  anything.
+- **Full suite**: `just test-full` is the plain cargo test run. The push
+  gate remains lefthook pre-push (testaruda select/exec + the other
+  gates); selection is for fast feedback, never a gate substitute.
