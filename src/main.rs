@@ -398,7 +398,7 @@ fn cmd_init(
         } else {
             output::print_success(
                 &format!(
-                    "gates wired: lefthook {}, gitignore +{} entries, beads {}",
+                    "gates wired: lefthook {}, gitignore +{} entries, beads {}, export {}, staged +{}",
                     match report.lefthook {
                         dulce_de_leche::gates::Change::Created => "created",
                         dulce_de_leche::gates::Change::Updated => "updated",
@@ -409,7 +409,9 @@ fn cmd_init(
                         dulce_de_leche::gates::BeadsChange::Created => "created",
                         dulce_de_leche::gates::BeadsChange::FlippedToNoDb => "flipped to no-db",
                         dulce_de_leche::gates::BeadsChange::Unchanged => "unchanged",
-                    }
+                    },
+                    if report.beads_exported { "yes" } else { "no" },
+                    report.beads_staged.len(),
                 ),
                 args.is_json(),
             );
@@ -503,6 +505,18 @@ fn print_gates_report(report: &dulce_de_leche::gates::WiringReport) {
         );
     }
     println!("  ✓ .beads/config.yaml: {}", beads_label(report.beads));
+    if report.beads_exported {
+        println!("  ✓ .beads/issues.jsonl: exported from existing DB before no-db flip");
+    }
+    if report.beads_staged.is_empty() {
+        println!("  ✓ .beads/issues.jsonl: already tracked by git");
+    } else {
+        println!(
+            "  ✓ .beads: staged {} (global gitignore excludes .beads/ → added with -f)",
+            report.beads_staged.join(", ")
+        );
+        println!("  → commit the staged beads files to land the tracked export");
+    }
     println!("  → run `lefthook install` to activate the hooks (core.hooksPath shim)");
 }
 

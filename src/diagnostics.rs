@@ -796,6 +796,92 @@ impl DoctorCheck for RepoChangelogCheck {
     }
 }
 
+/// Check the repo's beads tracked-export invariant (DDLBeads).
+///
+/// The 2026-10 sweep found three failure shapes across the workspace:
+/// db-mode configs never flipped to no-db, exports missing entirely
+/// (funkalization), and exports present but untracked/stale (gently,
+/// uarup). This check flags all of them with their one-line fixes.
+pub struct RepoBeadsExportCheck;
+
+impl DoctorCheck for RepoBeadsExportCheck {
+    fn name(&self) -> &'static str {
+        "ddl.repo.beads-export"
+    }
+    fn description(&self) -> &'static str {
+        "Check that .beads/issues.jsonl exists, is tracked, and is fresh"
+    }
+    fn run(
+        &self,
+        repo_root: &Path,
+    ) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
+        let Some(root) = find_git_root(repo_root) else {
+            return Ok(vec![]);
+        };
+        let beads_dir = root.join(".beads");
+        if !beads_dir.is_dir() {
+            return Ok(vec![]);
+        }
+        let config_path = beads_dir.join("config.yaml");
+        let config = config_path
+            .exists()
+            .then(|| std::fs::read_to_string(&config_path))
+            .transpose()
+            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+        let config_no_db = config
+            .as_deref()
+            .is_some_and(|t| t.lines().any(|l| l.trim_start().starts_with("no-db: true")));
+        let jsonl = beads_dir.join("issues.jsonl");
+        let jsonl_lines = jsonl
+            .exists()
+            .then(|| std::fs::read_to_string(&jsonl).map(|t| t.lines().count()))
+            .transpose()
+            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+        let tracked = std::process::Command::new("git")
+            .args(["ls-files", "--error-unmatch", ".beads/issues.jsonl"])
+            .current_dir(&root)
+            .stdin(std::process::Stdio::null())
+            .output()
+            .ok()
+            .map(|o| o.status.success());
+        let bd_count = crate::gates::find_in_path("bd").and_then(|bd| {
+            std::process::Command::new(bd)
+                .arg("count")
+                .current_dir(&root)
+                .stdin(std::process::Stdio::null())
+                .output()
+                .ok()
+                .filter(|o| o.status.success())
+                .and_then(|o| {
+                    String::from_utf8_lossy(&o.stdout)
+                        .trim()
+                        .parse::<u64>()
+                        .ok()
+                })
+        });
+        let input = crate::gates::BeadsExportProblemsInput {
+            beads_dir_exists: true,
+            config_exists: config.is_some(),
+            config_no_db,
+            embeddeddolt_exists: beads_dir.join("embeddeddolt").is_dir(),
+            issues_jsonl_exists: jsonl.is_file(),
+            issues_jsonl_tracked: tracked,
+            issues_jsonl_lines: jsonl_lines,
+            bd_count,
+        };
+        Ok(crate::gates::detect_beads_export_problems(&input)
+            .into_iter()
+            .map(|problem| {
+                LintResult::with_fix(
+                    problem,
+                    Severity::Warning,
+                    "bd export -o .beads/issues.jsonl && git add -f .beads/issues.jsonl",
+                )
+            })
+            .collect())
+    }
+}
+
 /// Check that incitaciones skills are installed globally.
 pub struct IncitacionesSkillsCheck;
 
@@ -1106,6 +1192,7 @@ fn register_repo_checks(runner: &mut genesis::doctor::DoctorRunner) {
     runner.register(Box::new(RepoGatesCheck));
     runner.register(Box::new(RepoAgentBlocksCheck));
     runner.register(Box::new(RepoGitignoreCheck));
+    runner.register(Box::new(RepoBeadsExportCheck));
     runner.register(Box::new(RepoPinsCheck));
     runner.register(Box::new(RepoLicenseCheck));
     runner.register(Box::new(RepoFmtCheck));

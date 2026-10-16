@@ -290,12 +290,36 @@ pub fn ensure_beads_nodb(content: Option<&str>) -> (String, BeadsChange) {
     }
 }
 
+/// Snapshot of the beads export state `apply_gates_wiring` needs to decide
+/// whether a pre-flip export is required (DDLBeads: the funkalization trap —
+/// stamping `no-db: true` over an embedded-Dolt repo with no export makes
+/// every existing issue invisible to bd).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct BeadsExportInput {
+    /// `.beads/embeddeddolt/` exists (a Dolt database holds issues).
+    pub embeddeddolt_exists: bool,
+    /// `.beads/issues.jsonl` exists.
+    pub issues_jsonl_exists: bool,
+}
+
+/// True when the repo has beads data in a Dolt database but no JSONL export:
+/// the export must happen BEFORE `no-db: true` is stamped, otherwise bd
+/// (reading only the JSONL in no-db mode) reports an empty tracker.
+pub fn beads_export_needs_export(input: &BeadsExportInput) -> bool {
+    input.embeddeddolt_exists && !input.issues_jsonl_exists
+}
+
 /// Summary of the on-disk gates wiring for one run.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WiringReport {
     pub lefthook: Change,
     pub gitignore_added: Vec<String>,
     pub beads: BeadsChange,
+    /// `bd export -o .beads/issues.jsonl` was run (pre-flip data rescue).
+    pub beads_exported: bool,
+    /// Untracked beads files were staged with `git add -f` (the global
+    /// `~/.gitignore` excludes `.beads/`, so a plain add silently no-ops).
+    pub beads_staged: Vec<String>,
 }
 
 /// Apply the full gates wiring under `repo_root`:
@@ -328,8 +352,19 @@ pub fn apply_gates_wiring(repo_root: &std::path::Path) -> Result<WiringReport> {
         write(&gitignore_path, &gitignore_out)?;
     }
 
-    // 3. beads no-db stamping (creates .beads/ if absent)
-    let beads_path = repo_root.join(".beads").join("config.yaml");
+    // 3. beads export guard + no-db stamping (creates .beads/ if absent)
+    let beads_dir = repo_root.join(".beads");
+    let beads_path = beads_dir.join("config.yaml");
+    let export_input = BeadsExportInput {
+        embeddeddolt_exists: beads_dir.join("embeddeddolt").is_dir(),
+        issues_jsonl_exists: beads_dir.join("issues.jsonl").is_file(),
+    };
+    let mut beads_exported = false;
+    if beads_export_needs_export(&export_input) {
+        // Best-effort: bd may be missing or broken; failure must not abort
+        // wiring — the doctor's beads-export check re-flags it either way.
+        beads_exported = run_bd_export(repo_root);
+    }
     let (beads_out, beads) = ensure_beads_nodb(read(&beads_path)?.as_deref());
     if beads != BeadsChange::Unchanged {
         if let Some(parent) = beads_path.parent() {
@@ -338,11 +373,130 @@ pub fn apply_gates_wiring(repo_root: &std::path::Path) -> Result<WiringReport> {
         write(&beads_path, &beads_out)?;
     }
 
+    // 4. stage the JSONL export (and config) so the tracked-export invariant
+    // holds — `~/.gitignore` commonly excludes `.beads/`, hence `-f`.
+    let beads_staged = stage_beads_files(repo_root);
+
     Ok(WiringReport {
         lefthook,
         gitignore_added,
         beads,
+        beads_exported,
+        beads_staged,
     })
+}
+
+/// Run `bd export -o .beads/issues.jsonl` in `repo_root` (best-effort).
+/// Returns true only when the command ran and exited successfully.
+fn run_bd_export(repo_root: &std::path::Path) -> bool {
+    let Some(bd) = find_in_path("bd") else {
+        return false;
+    };
+    std::process::Command::new(bd)
+        .args(["export", "-o", ".beads/issues.jsonl"])
+        .current_dir(repo_root)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+/// Stage `.beads/issues.jsonl` (+ config, .gitignore) with `git add -f` when
+/// they exist but are untracked. Best-effort: returns the files successfully
+/// staged; failures (no git repo, no changes) yield an empty Vec.
+fn stage_beads_files(repo_root: &std::path::Path) -> Vec<String> {
+    let candidates = ["issues.jsonl", "config.yaml", ".gitignore"];
+    let existing: Vec<String> = candidates
+        .iter()
+        .filter(|f| repo_root.join(".beads").join(**f).is_file())
+        .map(|f| format!(".beads/{f}"))
+        .collect();
+    if existing.is_empty() {
+        return Vec::new();
+    }
+    let tracked = std::process::Command::new("git")
+        .args(["ls-files"])
+        .args(&existing)
+        .current_dir(repo_root)
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+        .unwrap_or_default();
+    let untracked: Vec<&String> = existing
+        .iter()
+        .filter(|f| !tracked.lines().any(|t| t.trim() == **f))
+        .collect();
+    if untracked.is_empty() {
+        return Vec::new();
+    }
+    let mut cmd = std::process::Command::new("git");
+    cmd.args(["add", "-f"]);
+    for f in &untracked {
+        cmd.arg(f);
+    }
+    cmd.current_dir(repo_root);
+    if cmd.output().map(|o| o.status.success()).unwrap_or(false) {
+        untracked.iter().map(|s| (*s).clone()).collect()
+    } else {
+        Vec::new()
+    }
+}
+
+/// Locate an executable on PATH (minimal, no external crates).
+pub fn find_in_path(name: &str) -> Option<std::path::PathBuf> {
+    let path = std::env::var_os("PATH")?;
+    std::env::split_paths(&path)
+        .map(|dir| dir.join(name))
+        .find(|p| p.is_file())
+}
+
+/// Input snapshot for [`detect_beads_export_problems`] (doctor-side, pure).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct BeadsExportProblemsInput {
+    pub beads_dir_exists: bool,
+    pub config_exists: bool,
+    pub config_no_db: bool,
+    pub embeddeddolt_exists: bool,
+    pub issues_jsonl_exists: bool,
+    /// `None` = unknown (not a git repo / git failed).
+    pub issues_jsonl_tracked: Option<bool>,
+    pub issues_jsonl_lines: Option<usize>,
+    /// `None` = bd missing or errored — staleness check skipped.
+    pub bd_count: Option<u64>,
+}
+
+/// Doctor findings for the tracked-export invariant (DDLBeads):
+/// `.beads/issues.jsonl` must exist, be git-tracked, and not lag the DB.
+/// Empty ⇒ healthy. Each finding carries its own fix command.
+pub fn detect_beads_export_problems(i: &BeadsExportProblemsInput) -> Vec<String> {
+    let mut problems = Vec::new();
+    if !i.beads_dir_exists {
+        return problems;
+    }
+    if i.config_exists && !i.config_no_db {
+        problems.push(
+            "beads config is not in no-db mode (issues.jsonl not the source of truth)".to_string(),
+        );
+    }
+    if i.embeddeddolt_exists && !i.issues_jsonl_exists {
+        problems.push(
+            "beads DB holds issues but .beads/issues.jsonl is missing — a no-db flip would hide them"
+                .to_string(),
+        );
+    }
+    if i.issues_jsonl_exists && i.issues_jsonl_tracked == Some(false) {
+        problems.push(
+            ".beads/issues.jsonl is not tracked by git (global gitignore excludes .beads/)"
+                .to_string(),
+        );
+    }
+    if let (Some(count), Some(lines)) = (i.bd_count, i.issues_jsonl_lines)
+        && count > lines as u64
+    {
+        problems.push(format!(
+            "stale issues.jsonl export ({lines} lines vs {count} issues in the DB)"
+        ));
+    }
+    problems
 }
 
 /// Read-only inspection of the on-disk lefthook gates wiring (DDL-6zn.5).
@@ -566,6 +720,29 @@ pre-commit:
     }
 
     #[test]
+    fn wiring_report_reports_export_and_staging_fields() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(".beads/embeddeddolt")).unwrap();
+        std::fs::write(
+            dir.path().join(".beads/config.yaml"),
+            "# Beads Configuration File\nno-db: false\n",
+        )
+        .unwrap();
+        // A JSONL pre-seeded so no bd subprocess result leaks into the assert.
+        std::fs::write(dir.path().join(".beads/issues.jsonl"), "{}").unwrap();
+        // No git repo here → staging is a no-op (best-effort).
+        let report = apply_gates_wiring(dir.path()).unwrap();
+        assert_eq!(report.beads, BeadsChange::FlippedToNoDb);
+        assert!(!report.beads_exported, "jsonl already present → no export");
+        assert!(
+            report.beads_staged.is_empty(),
+            "no git repo → nothing staged"
+        );
+        let config = std::fs::read_to_string(dir.path().join(".beads/config.yaml")).unwrap();
+        assert!(config.contains("no-db: true"));
+    }
+
+    #[test]
     fn beads_nodb_created_flipped_and_stable() {
         let (out, change) = ensure_beads_nodb(None);
         assert_eq!(change, BeadsChange::Created);
@@ -579,6 +756,110 @@ pre-commit:
         let (out3, change3) = ensure_beads_nodb(Some("# Beads Configuration File\nno-db: true\n"));
         assert_eq!(change3, BeadsChange::Unchanged);
         assert_eq!(out3, "# Beads Configuration File\nno-db: true\n");
+    }
+
+    #[test]
+    fn detect_beads_export_problems_covers_invariant() {
+        // No .beads at all → healthy (nothing to check).
+        let base = BeadsExportProblemsInput {
+            beads_dir_exists: false,
+            ..Default::default()
+        };
+        assert!(detect_beads_export_problems(&base).is_empty());
+
+        // Healthy no-db repo: tracked, fresh export.
+        let healthy = BeadsExportProblemsInput {
+            beads_dir_exists: true,
+            config_exists: true,
+            config_no_db: true,
+            embeddeddolt_exists: false,
+            issues_jsonl_exists: true,
+            issues_jsonl_tracked: Some(true),
+            issues_jsonl_lines: Some(41),
+            bd_count: Some(41),
+        };
+        assert!(detect_beads_export_problems(&healthy).is_empty());
+
+        // db-mode config without the flip.
+        let db_mode = BeadsExportProblemsInput {
+            beads_dir_exists: true,
+            config_exists: true,
+            config_no_db: false,
+            ..healthy
+        };
+        let p = detect_beads_export_problems(&db_mode);
+        assert!(p.iter().any(|m| m.contains("no-db mode")), "{p:?}");
+
+        // DB with data but no export (funkalization trap).
+        let no_export = BeadsExportProblemsInput {
+            beads_dir_exists: true,
+            embeddeddolt_exists: true,
+            issues_jsonl_exists: false,
+            issues_jsonl_tracked: None,
+            config_exists: true,
+            config_no_db: true,
+            ..Default::default()
+        };
+        let p = detect_beads_export_problems(&no_export);
+        assert!(
+            p.iter().any(|m| m.contains("issues.jsonl is missing")),
+            "{p:?}"
+        );
+
+        // Export present but untracked (gently trap).
+        let untracked = BeadsExportProblemsInput {
+            beads_dir_exists: true,
+            config_exists: true,
+            config_no_db: true,
+            issues_jsonl_exists: true,
+            issues_jsonl_tracked: Some(false),
+            ..healthy
+        };
+        let p = detect_beads_export_problems(&untracked);
+        assert!(p.iter().any(|m| m.contains("not tracked")), "{p:?}");
+
+        // Stale export (uarup/titi/XAct trap).
+        let stale = BeadsExportProblemsInput {
+            beads_dir_exists: true,
+            embeddeddolt_exists: false,
+            config_exists: true,
+            config_no_db: true,
+            issues_jsonl_exists: true,
+            issues_jsonl_tracked: Some(true),
+            issues_jsonl_lines: Some(3),
+            bd_count: Some(7),
+        };
+        let p = detect_beads_export_problems(&stale);
+        assert!(p.iter().any(|m| m.contains("stale")), "{p:?}");
+
+        // bd absent → staleness skipped, other checks still run.
+        let no_bd = BeadsExportProblemsInput {
+            beads_dir_exists: true,
+            embeddeddolt_exists: false,
+            config_exists: true,
+            config_no_db: true,
+            issues_jsonl_exists: true,
+            issues_jsonl_tracked: Some(true),
+            issues_jsonl_lines: Some(3),
+            bd_count: None,
+        };
+        assert!(detect_beads_export_problems(&no_bd).is_empty());
+    }
+
+    #[test]
+    fn beads_export_needs_export_only_when_db_exists_and_jsonl_missing() {
+        let input = |db: bool, jsonl: bool| BeadsExportInput {
+            embeddeddolt_exists: db,
+            issues_jsonl_exists: jsonl,
+        };
+        // DB with no export → the funkalization trap: flipping no-db would
+        // hide every issue. Export must happen first.
+        assert!(beads_export_needs_export(&input(true, false)));
+        // No DB (pure no-db repo or pre-init) → nothing to export.
+        assert!(!beads_export_needs_export(&input(false, false)));
+        assert!(!beads_export_needs_export(&input(false, true)));
+        // Export already present → no-op.
+        assert!(!beads_export_needs_export(&input(true, true)));
     }
 
     #[test]
