@@ -644,16 +644,20 @@ fn s7_ecosystem_landing_cross_linked() {
         // the canonical entry there; every other book links the live URL.
         // Escape hatch (specodelic-j0m): mdbook 0.5 materializes absolute-URL
         // SUMMARY entries as literal src/https:/... dirs, so books that ban
-        // absolute SUMMARY targets may host the link in index.md prose instead
-        // — discoverability is what §7 guards, not the specific file.
+        // absolute SUMMARY targets may host the link in their book's entry
+        // page prose instead (index.md, introduction.md, getting-started.md
+        // — whichever the repo uses as its landing chapter, DDL-dqp pattern).
+        // Discoverability is what §7 guards, not the specific file.
         let linked = if *name == "dulce-de-leche" {
             summary.contains("./ecosystem-map.md") || summary.contains(ECOSYSTEM_LANDING_URL)
         } else {
             summary.contains(ECOSYSTEM_LANDING_URL)
-                || read(&dir, "docs/src/index.md")
-                    .is_some_and(|idx| idx.contains(ECOSYSTEM_LANDING_URL))
-                || read(&dir, "docs/src/introduction.md")
-                    .is_some_and(|intro| intro.contains(ECOSYSTEM_LANDING_URL))
+                || ["index.md", "introduction.md", "getting-started.md"]
+                    .iter()
+                    .any(|page| {
+                        read(&dir, &format!("docs/src/{page}"))
+                            .is_some_and(|body| body.contains(ECOSYSTEM_LANDING_URL))
+                    })
         };
         assert!(
             linked,

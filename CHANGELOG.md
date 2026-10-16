@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-16
+
+Security-hardening release (SEC-01 through SEC-07 remediation) plus
+init/gates reliability and fleet-standard compliance.
+
+### Added
+
+- **`install.sh` — checksum-verified stable bootstrap** — the curl\|bash path
+  verifies a published SHA256 before installing ([DDL-1ay], SEC-03 green)
+- **Bounded downloads, extraction, and child execution** — timeouts, size
+  limits, and process groups across the install/upgrade paths ([DDL-1z1],
+  SEC-02 green)
+- **Stage-then-atomically-replace binary upgrades** — no more half-written
+  binaries on interrupted upgrades ([DDL-4oi], SEC-01 green)
+- **Install lock with artifact identities** — locked replay policy and
+  deterministic release-age upgrade policy ([DDL-5bs])
+- **Reject release downloads when verification is unavailable** — fail-closed
+  instead of silently skipping checksums ([DDL-yts])
+- **lefthook template chains bd hooks** — `init` writes the DDL block,
+  reconciles the manifest, and scaffolds pins ([DDL-fw7])
+- **Beads tracked-export invariant** — new `ddl.repo.beads-export` doctor
+  check plus a pre-flip export guard in gates wiring
+- **Fleet-standard compliance doctor checks** ([DDL-rod])
+- **Managed tool registry growth** — `wild` and `funkalization` (#12,
+  experimental); `dot_ddl` tracked check migrated onto `genesis::git`
+- **CI recipes** — advisory + secret-scan recipes backing the release
+  security gate
+
+### Fixed
+
+- **Atomic manifest replacement with dedicated lock file** ([DDL-8u8],
+  SEC-01) and **race-free no-follow manifest opens** closing the
+  check-then-open swap window; refuse manifest writes redirected by links
+  outside the project ([DDL-sg8], SEC-05)
+- **Reject artifacts from unexpected publisher/build identity** ([DDL-wof],
+  SEC-03/06)
+- **Surface and retry failed channel propagation** ([DDL-9e7], SEC-07)
+- **Release credentials scoped** — publish gated on tests + security (SEC-06)
+- **init UX** — config-step failures are advisory so gates wiring always
+  completes ([DDL-6ox]); skills-scope select only on interactive stdio;
+  `bd init` gets a 300s budget for the embedded Dolt bootstrap on loaded CI
+  runners
+- **Gates** — pre-commit template tolerates nothing-to-lint and gates
+  pretender diff-only ([DDL-3fd])
+
 ## [0.8.0] - 2026-10-08
 
 ### Added
