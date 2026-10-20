@@ -318,6 +318,20 @@ impl<'a> SetupWizard<'a> {
     }
 }
 
+// ── Failure-output parity (§2.4) ──────────────────────────────────
+
+/// Emit delegate-step failures exactly the way `ddl init` emits
+/// init-cascade failures in JSON mode: through
+/// [`crate::output::print_install_result`] with `success = false` —
+/// the same `{tool, success, message}` event keys and the same Warning
+/// envelope level. The wizard never forks the init failure serialization
+/// (parity pinned by tests/setup_wizard.rs).
+pub fn emit_failures_like_init(failures: &[StepFailure]) {
+    for f in failures.iter().filter(|f| f.step == WizardStep::Delegate) {
+        crate::output::print_install_result(false, &f.subject, &f.message, true);
+    }
+}
+
 // ── Production delegate (§2.3 reuse contract) ─────────────────────────
 
 /// The production delegate: every seam is backed by the exact code path
