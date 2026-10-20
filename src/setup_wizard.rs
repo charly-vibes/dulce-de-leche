@@ -20,9 +20,9 @@
 //! `ddl doctor` checks for verify. Duplicating any of that here would
 //! fork the init contract; this module only sequences and reports.
 //!
-//! The module is deliberately self-contained (std + serde only) so
-//! tests/setup_wizard.rs can include it by path until §2.3 wires it into
-//! the library.
+//! §2.3 wired this module into the library (`pub mod setup_wizard;` in
+//! lib.rs) and backed the seams with the init/install paths via
+//! [`InitPathsDelegate`].
 
 use serde::Serialize;
 

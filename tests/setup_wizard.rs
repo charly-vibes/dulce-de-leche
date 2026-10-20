@@ -4,19 +4,13 @@
 //! Pins the five step transitions — pre-flight → migrate? → scope →
 //! delegate → verify — against a scripted fake delegate. The step machine
 //! orchestrates only; every real action flows through the
-//! [`setup_wizard::WizardDelegate`] seams that (per §2.3) will be backed by
-//! the exact installer/gates code paths `ddl init` uses.
+//! [`setup_wizard::WizardDelegate`] seams, backed (per §2.3) by the exact
+//! installer/gates code paths `ddl init` uses.
 //!
-//! The module is included by path because §2.2's file scope is
-//! src/setup_wizard.rs + tests/setup_wizard.rs only; §2.3 wires it into
-//! the library and swaps this include for a normal `dulce_de_leche::`
-//! import.
+//! §2.3 wired the module into the library, so these tests import it via a
+//! normal `dulce_de_leche::` path instead of a `#[path]` include.
 
-#[path = "../src/setup_wizard.rs"]
-#[allow(dead_code)]
-mod setup_wizard;
-
-use setup_wizard::{
+use dulce_de_leche::setup_wizard::{
     MigrateDecision, PreFlightCheck, ScopeSelection, SetupWizard, StepFailure, WizardConfig,
     WizardDelegate, WizardStep,
 };
