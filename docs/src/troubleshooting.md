@@ -26,6 +26,8 @@ Check available tools:
 - `openspec` — Spec-driven development
 - `incitaciones` — Prompts and skills for CLI LLM tools (npm)
 - `turu` — Knowledge workspace management (whisper-vibes)
+- `funkalization` — Visual semantic design workspace (experimental)
+- `wild` — Contract-based compatibility checking (experimental)
 
 (`ddl` itself is not installable via `ddl install` — it manages every tool
 except itself.)
@@ -48,6 +50,22 @@ ddl works offline for already-installed tools:
 - `ddl status` works offline
 - `ddl version` works offline (without `--check`)
 - `ddl upgrade` requires network access
+
+## An install or upgrade was interrupted
+
+Tool installs and binary upgrades are staged and only atomically swapped in
+after they succeed (see the release notes for 0.9.0). An interrupted install
+or upgrade leaves the previous working binary in place — re-run the same
+command and it resumes:
+
+```bash
+ddl install <tool>   # re-run; the failed attempt left no partial state
+ddl upgrade          # same — the old binary stays until the new one verifies
+```
+
+If `.ddl/manifest.json` looks inconsistent afterwards, `ddl status` reports
+what it sees and `ddl init --no-install` rebuilds the manifest from the
+tools already on disk.
 
 ## `cargo install bd` installs the wrong crate
 

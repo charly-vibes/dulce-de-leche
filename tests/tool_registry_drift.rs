@@ -92,6 +92,26 @@ fn ecosystem_map_mentions_every_tool() {
     }
 }
 
+// ── Book troubleshooting page (DDL-2rn) ───────────────────────────────
+
+/// docs/src/troubleshooting.md's "Tool not found" section lists the tools a
+/// user can `ddl install`. It drifted (funkalization + wild missing) without
+/// any test noticing — the README block and ecosystem-map were guarded, this
+/// page was not. Like the ecosystem map, it must mention every registry tool.
+const BOOK_TROUBLESHOOTING: &str = include_str!("../docs/src/troubleshooting.md");
+
+#[test]
+fn book_troubleshooting_mentions_every_tool() {
+    for name in registry_names() {
+        assert!(
+            BOOK_TROUBLESHOOTING.contains(name),
+            "tool `{name}` missing from docs/src/troubleshooting.md — the book's \
+             tool list drifts from the registry; add it to the 'Tool not found' \
+             section"
+        );
+    }
+}
+
 // ── Capability matrix (DDL-91a) ───────────────────────────────────────
 
 /// docs/capability-matrix.md is generated, not hand-written. The committed
