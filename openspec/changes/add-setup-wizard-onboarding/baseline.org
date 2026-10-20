@@ -1,0 +1,14 @@
+- ttfif_seconds=5.728726963 mode=baseline tools_healthy=3 init_rc=0 date=2026-10-20T16:30:28-03:00 flags=' --no-install'
+- ttfif_seconds=29.432810926 mode=baseline tools_healthy=3 init_rc=1 date=2026-10-20T16:31:02-03:00 flags='none'
+
+#+BEGIN_NOTE
+Interpretation (2026-10-20, machine: fedora linuxbrew x86_64):
+- config-only baseline (no installs): 5.73s to configured state.
+- full baseline FAILED to reach a healthy fleet: funkalization + wild have
+  no published release binaries for this platform and no cargo fallback
+  (init exit 1, partial failure). TTFIF to a FULLY healthy fleet is
+  currently unattainable on this platform — the gate comparison must
+  therefore use a defined tool subset (core+recommended, the 5 tools with
+  published binaries) or wait for funkalization/wild releases.
+  See corpus mandate 2026-10-19: funkalization is parked/experimental.
+#+END_NOTE
