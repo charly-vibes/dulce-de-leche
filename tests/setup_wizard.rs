@@ -323,6 +323,59 @@ fn guard_production_delegate_preflight_derives_from_installer_methods() {
 }
 
 // ---------------------------------------------------------------------------
+// §2.4 parity: the wizard's failure/resume output must match init's
+// summary contract exactly — same keys/levels in the JSON envelope, and
+// human resume lines already pinned byte-for-byte by the §2.3 guard.
+// JSON: wizard delegate-step failures must be emitted through init's own
+// emission path (output::print_install_result, success=false) so the
+// event keys and Warning envelope level are identical, never a forked
+// serialization.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn parity_json_failure_events_match_init_emission() {
+    use dulce_de_leche::output;
+    use dulce_de_leche::setup_wizard::emit_failures_like_init;
+
+    let failures = vec![
+        StepFailure {
+            step: WizardStep::Delegate,
+            subject: "funkalization".into(),
+            message: "no platform binary and no cargo fallback".into(),
+        },
+        StepFailure {
+            step: WizardStep::Delegate,
+            subject: "openspec".into(),
+            message: "refused re-init".into(),
+        },
+    ];
+
+    // Wizard emission under a collector.
+    output::start_json_collection();
+    emit_failures_like_init(&failures);
+    let wizard_events = output::finish_json_collection().unwrap();
+
+    // Baseline: what `ddl init` itself emits for the same failures
+    // (init's JSON mode calls print_install_result(false, ...) per event).
+    output::start_json_collection();
+    for f in &failures {
+        output::print_install_result(false, &f.subject, &f.message, true);
+    }
+    let init_events = output::finish_json_collection().unwrap();
+
+    assert_eq!(
+        wizard_events, init_events,
+        "wizard JSON failure events must be identical to init's own emission \
+         (same {{tool, success, message}} keys, same Warning level)"
+    );
+    assert_eq!(wizard_events.len(), 2, "no subset acceptance: every failure event must be emitted");
+    for event in &wizard_events {
+        assert_eq!(event["success"], false, "failure events must carry success=false like init's");
+        assert!(event.get("tool").is_some() && event.get("message").is_some());
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Transition 5: verify always runs — even after a cascade failure — and
 // every failure lands in the resume summary (exit-non-zero contract).
 // ---------------------------------------------------------------------------
