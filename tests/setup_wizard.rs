@@ -17,8 +17,8 @@
 mod setup_wizard;
 
 use setup_wizard::{
-    MigrateDecision, PreFlightCheck, ScopeSelection, SetupWizard, WizardConfig, WizardDelegate,
-    WizardStep, StepFailure,
+    MigrateDecision, PreFlightCheck, ScopeSelection, SetupWizard, StepFailure, WizardConfig,
+    WizardDelegate, WizardStep,
 };
 use std::cell::RefCell;
 
