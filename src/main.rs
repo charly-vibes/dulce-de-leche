@@ -68,6 +68,10 @@ fn run(args: dulce_de_leche::cli::Args) -> Result<()> {
         Some(Commands::Upgrade { ref tool }) => cmd_upgrade(tool.as_deref(), &args),
         Some(Commands::Migrate { undo }) => cmd_migrate(undo, &args),
         Some(Commands::Scope) => cmd_scope(&args),
+        Some(Commands::Setup {
+            ref tools,
+            no_install,
+        }) => dulce_de_leche::cli::Args::cmd_setup(tools.clone(), no_install, args.yes, &args),
         Some(Commands::Completions { shell }) => {
             let mut cmd = dulce_de_leche::cli::Args::command();
             genesis::cli::generate_completions(&mut cmd, shell)?;
