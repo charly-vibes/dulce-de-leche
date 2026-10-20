@@ -4,19 +4,13 @@
 //! Pins the five step transitions — pre-flight → migrate? → scope →
 //! delegate → verify — against a scripted fake delegate. The step machine
 //! orchestrates only; every real action flows through the
-//! [`setup_wizard::WizardDelegate`] seams that (per §2.3) will be backed by
-//! the exact installer/gates code paths `ddl init` uses.
+//! [`setup_wizard::WizardDelegate`] seams, backed (per §2.3) by the exact
+//! installer/gates code paths `ddl init` uses.
 //!
-//! The module is included by path because §2.2's file scope is
-//! src/setup_wizard.rs + tests/setup_wizard.rs only; §2.3 wires it into
-//! the library and swaps this include for a normal `dulce_de_leche::`
-//! import.
+//! §2.3 wired the module into the library, so these tests import it via a
+//! normal `dulce_de_leche::` path instead of a `#[path]` include.
 
-#[path = "../src/setup_wizard.rs"]
-#[allow(dead_code)]
-mod setup_wizard;
-
-use setup_wizard::{
+use dulce_de_leche::setup_wizard::{
     MigrateDecision, PreFlightCheck, ScopeSelection, SetupWizard, StepFailure, WizardConfig,
     WizardDelegate, WizardStep,
 };
@@ -207,6 +201,185 @@ fn scope_flows_into_delegate_cascade_and_tools_narrow_it() {
         Some(ScopeSelection::Categories(vec!["ah".into(), "spk".into()])),
         "--tools must narrow the delegated scope to the requested tools"
     );
+}
+
+// ---------------------------------------------------------------------------
+// §2.3 reuse-contract guard: the wizard must never fork the init
+// resume-summary format. Delegate-step failures are the wizard's analog of
+// init-cascade failures, so they must render through init's OWN summary
+// builder (`installer::resume_summary`) — byte-for-byte. If the wizard
+// forks the format (its own format! string), this test fails on the next
+// init-side change to the summary contract.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn guard_delegate_failures_render_through_init_summary_builder() {
+    use dulce_de_leche::installer::{InitFailure, resume_summary};
+
+    let mut delegate = FakeDelegate::clean();
+    delegate.cascade_failures = vec![
+        StepFailure {
+            step: WizardStep::Delegate,
+            subject: "funkalization".into(),
+            message: "no platform binary and no cargo fallback".into(),
+        },
+        StepFailure {
+            step: WizardStep::Delegate,
+            subject: "openspec".into(),
+            message: "refused re-init".into(),
+        },
+    ];
+    let report = SetupWizard::new(config(vec![], false, true), &mut delegate).run();
+
+    let expected = resume_summary(&[
+        InitFailure {
+            tool: "funkalization".into(),
+            detail: "no platform binary and no cargo fallback".into(),
+        },
+        InitFailure {
+            tool: "openspec".into(),
+            detail: "refused re-init".into(),
+        },
+    ]);
+    assert_eq!(
+        report.resume_summary, expected,
+        "wizard delegate-step failures must render through installer::resume_summary, \
+         not a forked format"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// §2.3 guard (production delegate): InitPathsDelegate must DERIVE its
+// pre-flight checks from the installer's own method selection and
+// prerequisite checks — never a forked hardcoded list. If either side
+// drifts (installer adds/renames a method, or the wizard hardcodes its
+// own list), this shared-path assertion fails.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn guard_production_delegate_preflight_derives_from_installer_methods() {
+    use dulce_de_leche::dot_ddl::DdlDir;
+    use dulce_de_leche::installer::{InstallMethod, best_install_method};
+    use dulce_de_leche::platform::{MANAGED_TOOLS, Platform};
+    use dulce_de_leche::setup_wizard::InitPathsDelegate;
+
+    let temp = tempfile::tempdir().unwrap();
+    let ddl_dir = DdlDir::create_at(temp.path()).unwrap();
+    let platform = Platform::detect().unwrap();
+    // Expectation derived from the SAME scan the migrate path performs.
+    let legacy_count = ddl_dir.detect_legacy_configs().len();
+    let delegate = InitPathsDelegate::new(ddl_dir, platform.clone(), false, false, true);
+
+    // Independent recomputation of what init's install paths require.
+    let mut seen: Vec<InstallMethod> = Vec::new();
+    let expected: Vec<(String, bool)> = MANAGED_TOOLS
+        .iter()
+        .filter_map(|tool| {
+            let method = best_install_method(tool, &platform);
+            if seen.contains(&method) {
+                None
+            } else {
+                seen.push(method.clone());
+                Some((method.to_string(), method.check_prerequisites().is_ok()))
+            }
+        })
+        .collect();
+
+    let checks = delegate.pre_flight();
+    let actual: Vec<(String, bool)> = checks.iter().map(|c| (c.name.clone(), c.ok)).collect();
+    assert_eq!(
+        actual, expected,
+        "wizard pre-flight must check exactly the install methods \
+         init's install paths select, via InstallMethod::check_prerequisites"
+    );
+
+    // The migrate seam must route through the same legacy-config scan
+    // ddl migrate uses: the decision mirrors detect_legacy_configs()
+    // exactly (one dry-run line per legacy config), never a forked heuristic.
+    match delegate.migrate_decision(true) {
+        MigrateDecision::Fresh => assert_eq!(
+            legacy_count, 0,
+            "Fresh decision but the migrate scan found legacy configs"
+        ),
+        MigrateDecision::Migrate { dry_run } => {
+            assert!(legacy_count > 0, "Migrate decision but the scan found none");
+            assert_eq!(
+                dry_run.len(),
+                legacy_count,
+                "dry-run report must cover every legacy config the migrate scan found"
+            );
+        }
+    }
+
+    // The verify seam must route through the ddl status report: every
+    // verify failure names a managed tool (not an invented subject).
+    for failure in delegate.verify() {
+        assert!(
+            MANAGED_TOOLS.iter().any(|t| t.name == failure.subject),
+            "verify failures must come from the ddl status report, got: {:?}",
+            failure
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// §2.4 parity: the wizard's failure/resume output must match init's
+// summary contract exactly — same keys/levels in the JSON envelope, and
+// human resume lines already pinned byte-for-byte by the §2.3 guard.
+// JSON: wizard delegate-step failures must be emitted through init's own
+// emission path (output::print_install_result, success=false) so the
+// event keys and Warning envelope level are identical, never a forked
+// serialization.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn parity_json_failure_events_match_init_emission() {
+    use dulce_de_leche::output;
+    use dulce_de_leche::setup_wizard::emit_failures_like_init;
+
+    let failures = vec![
+        StepFailure {
+            step: WizardStep::Delegate,
+            subject: "funkalization".into(),
+            message: "no platform binary and no cargo fallback".into(),
+        },
+        StepFailure {
+            step: WizardStep::Delegate,
+            subject: "openspec".into(),
+            message: "refused re-init".into(),
+        },
+    ];
+
+    // Wizard emission under a collector.
+    output::start_json_collection();
+    emit_failures_like_init(&failures);
+    let wizard_events = output::finish_json_collection().unwrap();
+
+    // Baseline: what `ddl init` itself emits for the same failures
+    // (init's JSON mode calls print_install_result(false, ...) per event).
+    output::start_json_collection();
+    for f in &failures {
+        output::print_install_result(false, &f.subject, &f.message, true);
+    }
+    let init_events = output::finish_json_collection().unwrap();
+
+    assert_eq!(
+        wizard_events, init_events,
+        "wizard JSON failure events must be identical to init's own emission \
+         (same {{tool, success, message}} keys, same Warning level)"
+    );
+    assert_eq!(
+        wizard_events.len(),
+        2,
+        "no subset acceptance: every failure event must be emitted"
+    );
+    for event in &wizard_events {
+        assert_eq!(
+            event["success"], false,
+            "failure events must carry success=false like init's"
+        );
+        assert!(event.get("tool").is_some() && event.get("message").is_some());
+    }
 }
 
 // ---------------------------------------------------------------------------

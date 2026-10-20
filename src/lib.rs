@@ -14,6 +14,7 @@ pub mod installer;
 pub mod manifest;
 pub mod output;
 pub mod platform;
+pub mod setup_wizard;
 pub mod skills;
 
 // Re-export DdlConfig for use in tests and by downstream consumers.
