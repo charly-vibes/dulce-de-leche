@@ -120,6 +120,19 @@ pub enum Commands {
     /// Show which .ddl/ is active
     Scope,
 
+    /// Guided first-time setup — walk from zero to a verified-initialized
+    /// repo (wizard step machine lands in §2.2; currently a placeholder
+    /// entry point that pins the wire contract)
+    Setup {
+        /// Comma-separated list of tools to install (default: all)
+        #[arg(long, value_name = "TOOLS")]
+        tools: Option<String>,
+
+        /// Skip tool installation, only configure existing tools
+        #[arg(long)]
+        no_install: bool,
+    },
+
     /// Generate shell completions
     Completions {
         /// The shell to generate completions for
@@ -178,6 +191,59 @@ impl Args {
     /// Convenience: is JSON output requested or auto-detected?
     pub fn is_json(&self) -> bool {
         self.format.is_json()
+    }
+
+    /// Comma-separated, trimmed, non-empty tool names from a `--tools`
+    /// value (shared shape with `Init::tools` parsing).
+    fn parse_tools(tools: Option<&str>) -> Vec<String> {
+        tools
+            .map(|raw| {
+                raw.split(',')
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// SetupWizard entry point (openspec add-setup-wizard-onboarding §2.1).
+    ///
+    /// §2.2 replaces this placeholder with the full step machine in
+    /// `src/setup_wizard.rs` (pre-flight → migrate? → scope → delegate to
+    /// init/install paths → verify). Until then the command must still
+    /// parse and emit a machine envelope identifying itself as `setup` so
+    /// agents and scripts get a stable wire contract
+    /// (pinned by tests/setup_command.rs).
+    pub fn cmd_setup(
+        tools: Option<String>,
+        no_install: bool,
+        yes: bool,
+        args: &Args,
+    ) -> crate::error::Result<()> {
+        if args.is_json() {
+            let data = serde_json::json!({
+                "command": "setup",
+                "status": "not_implemented",
+                "tools": Self::parse_tools(tools.as_deref()),
+                "no_install": no_install,
+                "yes": yes,
+            });
+            let json_str = crate::output::json_output(
+                crate::VERSION,
+                true,
+                genesis::envelope::EnvelopeKind::Info,
+                data,
+                vec![],
+                vec![],
+            )?;
+            println!("{json_str}");
+        } else {
+            println!("ddl setup: guided setup wizard is not implemented yet.");
+            println!("In the meantime run `ddl init --yes` for the scripted path,");
+            println!("or `ddl init` for the guided flow.");
+        }
+        Ok(())
     }
 
     /// Convenience: is human output requested or auto-detected?
