@@ -15,7 +15,11 @@ of the fleet's command surface.
 - **THEN** the wizard guides them through install, optional migration, tool
   selection, gates wiring, and verification
 - **AND** the process ends with `ddl status` reporting every selected tool
-  healthy and `ddl doctor` repo checks passing
+  healthy (or explicitly reporting a tool as unavailable on the platform,
+  with no partial-failure ambiguity) and `ddl doctor` repo checks passing
+  for the checks the wizard itself writes (managed blocks, gates, pins,
+  gitignore) — the same scoping as the DDL-gef pin-contract framing: checks
+  that depend on external tool versions are out of the wizard's guarantee
 
 #### Scenario: Wizard failure is resumable
 
@@ -23,6 +27,37 @@ of the fleet's command surface.
 - **THEN** the wizard exits non-zero with a summary naming the exact
   re-run/finish commands, leaving no partial repo state beyond what the
   standard `ddl init` flow would leave
+
+### Requirement: Scripted invocation
+
+The system SHALL support `ddl setup --yes` as a scripted, deterministic run
+that accepts defaults at every prompt (used by the TTFIF harness and by
+agents), and SHALL refuse the interactive wizard when stdout is not a TTY
+and `--yes` is absent, pointing to `ddl init --yes`.
+
+#### Scenario: Agent runs the wizard non-interactively
+
+- **WHEN** `ddl setup --yes` runs with no TTY
+- **THEN** the wizard completes with defaults and the same end-state
+  guarantees as the interactive flow
+
+#### Scenario: Interactive wizard without a TTY
+
+- **WHEN** `ddl setup` runs without `--yes` and stdout is not a TTY
+- **THEN** the command exits non-zero with a message pointing to
+  `ddl init --yes`
+
+### Requirement: Pre-flight reports environment gaps
+
+The wizard SHALL detect missing prerequisites and unavailable network
+before installing, reporting each as a named, actionable state.
+
+#### Scenario: No network access
+
+- **WHEN** the wizard's pre-flight detects network unavailability
+- **THEN** the wizard reports which steps will fail and offers to proceed
+  with offline-safe steps only (config without installs), instead of
+  failing mid-install
 
 ### Requirement: Non-interactive paths are unaffected
 

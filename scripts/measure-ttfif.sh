@@ -43,9 +43,16 @@ git -C "$tmp_repo" init -q
 echo "# stock repo files a new user would have" > "$tmp_repo/README.md"
 
 export HOME="$tmp_home"
-# Realistic new-user PATH: system dirs + wherever the pinned fleet already
-# lives (cargo bin + brew + npm global). NOT the repo's .ddl/bin.
-export PATH="/usr/local/bin:/usr/bin:/bin:$HOME/.cargo/bin:/home/linuxbrew/.linuxbrew/bin"
+# True new-user PATH: system dirs only. Fleet tools are NOT on PATH here —
+# a real new user has none, and preinstalling some (brew/cargo) would bias
+# the baseline down (CORR-002, rule-of-5 review of this proposal). The
+# pinned-toolset PATH variant belongs in CI, not in this harness.
+export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+# Optionally expose a pinned toolset for subset runs:
+#   TTFIF_TOOL_PATH=/path/to/pinned/bin scripts/measure-ttfif.sh baseline
+if [ -n "${TTFIF_TOOL_PATH:-}" ]; then
+  export PATH="$TTFIF_TOOL_PATH:$PATH"
+fi
 
 first_cmd="$ddl_bin init --yes --human$extra_flags"
 start="$(date +%s.%N)"
@@ -59,9 +66,12 @@ init_rc=$?
 set -e
 
 status_out="$(cd "$tmp_repo" && "$ddl_bin" status --json 2>/dev/null || true)"
-healthy="$(echo "$status_out" | grep -o '"level": *"healthy"' | wc -l)"
+# grep exits 1 on zero matches — with pipefail+set -e that kills the script
+# exactly when a run has 0 healthy tools (the true new-user case). Guard it.
+healthy="$(echo "$status_out" | { grep -o '"level": *"healthy"' || true; } | wc -l)"
 end="$(date +%s.%N)"
-ttfif="$(echo "$end - $start" | bc)"
+ttfif="$(awk -v a="$end" -v b="$start" 'BEGIN{printf "%.3f", a-b}')"
+[ -n "${TTFIF_DEBUG:-}" ] && echo "DBG start=$start end=$end init_rc=$init_rc out_head=$(echo "$out" | head -1)" >&2
 
 line="ttfif_seconds=$ttfif mode=$mode tools_healthy=${healthy} init_rc=$init_rc date=$(date -Iseconds) flags='${extra_flags:-none}'"
 echo "$line"
