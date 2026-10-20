@@ -249,6 +249,80 @@ fn guard_delegate_failures_render_through_init_summary_builder() {
 }
 
 // ---------------------------------------------------------------------------
+// §2.3 guard (production delegate): InitPathsDelegate must DERIVE its
+// pre-flight checks from the installer's own method selection and
+// prerequisite checks — never a forked hardcoded list. If either side
+// drifts (installer adds/renames a method, or the wizard hardcodes its
+// own list), this shared-path assertion fails.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn guard_production_delegate_preflight_derives_from_installer_methods() {
+    use dulce_de_leche::dot_ddl::DdlDir;
+    use dulce_de_leche::installer::{InstallMethod, best_install_method};
+    use dulce_de_leche::platform::{MANAGED_TOOLS, Platform};
+    use dulce_de_leche::setup_wizard::InitPathsDelegate;
+
+    let temp = tempfile::tempdir().unwrap();
+    let ddl_dir = DdlDir::create_at(temp.path()).unwrap();
+    let platform = Platform::detect().unwrap();
+    // Expectation derived from the SAME scan the migrate path performs.
+    let legacy_count = ddl_dir.detect_legacy_configs().len();
+    let delegate = InitPathsDelegate::new(ddl_dir, platform.clone(), false, false, true);
+
+    // Independent recomputation of what init's install paths require.
+    let mut seen: Vec<InstallMethod> = Vec::new();
+    let expected: Vec<(String, bool)> = MANAGED_TOOLS
+        .iter()
+        .filter_map(|tool| {
+            let method = best_install_method(tool, &platform);
+            if seen.contains(&method) {
+                None
+            } else {
+                seen.push(method.clone());
+                Some((method.to_string(), method.check_prerequisites().is_ok()))
+            }
+        })
+        .collect();
+
+    let checks = delegate.pre_flight();
+    let actual: Vec<(String, bool)> = checks.iter().map(|c| (c.name.clone(), c.ok)).collect();
+    assert_eq!(
+        actual, expected,
+        "wizard pre-flight must check exactly the install methods \
+         init's install paths select, via InstallMethod::check_prerequisites"
+    );
+
+    // The migrate seam must route through the same legacy-config scan
+    // ddl migrate uses: the decision mirrors detect_legacy_configs()
+    // exactly (one dry-run line per legacy config), never a forked heuristic.
+    match delegate.migrate_decision(true) {
+        MigrateDecision::Fresh => assert_eq!(
+            legacy_count, 0,
+            "Fresh decision but the migrate scan found legacy configs"
+        ),
+        MigrateDecision::Migrate { dry_run } => {
+            assert!(legacy_count > 0, "Migrate decision but the scan found none");
+            assert_eq!(
+                dry_run.len(),
+                legacy_count,
+                "dry-run report must cover every legacy config the migrate scan found"
+            );
+        }
+    }
+
+    // The verify seam must route through the ddl status report: every
+    // verify failure names a managed tool (not an invented subject).
+    for failure in delegate.verify() {
+        assert!(
+            MANAGED_TOOLS.iter().any(|t| t.name == failure.subject),
+            "verify failures must come from the ddl status report, got: {:?}",
+            failure
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Transition 5: verify always runs — even after a cascade failure — and
 // every failure lands in the resume summary (exit-non-zero contract).
 // ---------------------------------------------------------------------------
