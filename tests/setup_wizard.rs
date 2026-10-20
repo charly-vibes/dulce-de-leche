@@ -368,9 +368,16 @@ fn parity_json_failure_events_match_init_emission() {
         "wizard JSON failure events must be identical to init's own emission \
          (same {{tool, success, message}} keys, same Warning level)"
     );
-    assert_eq!(wizard_events.len(), 2, "no subset acceptance: every failure event must be emitted");
+    assert_eq!(
+        wizard_events.len(),
+        2,
+        "no subset acceptance: every failure event must be emitted"
+    );
     for event in &wizard_events {
-        assert_eq!(event["success"], false, "failure events must carry success=false like init's");
+        assert_eq!(
+            event["success"], false,
+            "failure events must carry success=false like init's"
+        );
         assert!(event.get("tool").is_some() && event.get("message").is_some());
     }
 }
