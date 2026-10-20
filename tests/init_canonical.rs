@@ -202,6 +202,51 @@ fn test_init_reconciles_preexisting_install_into_manifest() {
 /// gates wiring — is init's job.
 #[test]
 fn test_init_gates_leaves_doctor_repo_checks_clean() {
+    // DDL-gef: the doctor-clean contract below holds only when the tools
+    // the init cascade runs on PATH behave like the fleet-pinned versions
+    // (versions.ddl.toml). Found the hard way: openspec 1.14.2 dropped the
+    // OPENSPEC:START managed block that 0.19.0 (the pin) writes in init, so
+    // dev machines with an unpinned openspec failed this test while pinned
+    // CI passed. Dev machines install unpinned BY DESIGN — skip with the
+    // drift named; CI installs the pins (ci.yml) and exercises the contract.
+    const BLOCK_WRITERS: &[(&str, &str)] = &[
+        // (tool, pin key in versions.ddl.toml)
+        ("wai", "wai"),
+        ("openspec", "openspec"),
+        ("bd", "bd"),
+    ];
+    let pins: std::collections::HashMap<String, String> =
+        dulce_de_leche::manifest::parse_fleet_pins(dulce_de_leche::manifest::FLEET_VERSIONS_PIN)
+            .into_iter()
+            .collect();
+    let mut drifts: Vec<String> = Vec::new();
+    for (bin, pin_key) in BLOCK_WRITERS {
+        let pinned = pins
+            .get(*pin_key)
+            .unwrap_or_else(|| panic!("pin file has no entry for `{pin_key}`"));
+        let on_path = Command::new(bin)
+            .arg("--version")
+            .output()
+            .ok()
+            .map(|o| String::from_utf8_lossy(&o.stdout).to_string());
+        match on_path {
+            Some(v) if v.contains(pinned.as_str()) => {}
+            Some(v) => drifts.push(format!(
+                "{bin} on PATH is `{}` but fleet pin is `{pinned}`",
+                v.lines().next().unwrap_or("").trim()
+            )),
+            None => drifts.push(format!("{bin} not on PATH — its init cannot run")),
+        }
+    }
+    if !drifts.is_empty() {
+        eprintln!(
+            "SKIPPED (environment out of pin contract) — doctor-clean contract \
+             requires fleet-pinned tools on PATH; drifts: {drifts:?}. \
+             Fix: install the pinned versions (see versions.ddl.toml / ci.yml)."
+        );
+        return;
+    }
+
     let temp = stock_repo();
     // Fleet-standard files a stock charly repo already commits.
     std::fs::write(
