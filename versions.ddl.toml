@@ -5,9 +5,12 @@
 # requires this file to exist.
 #
 # §4 matrix row (ddl): pretender ✅ · wai ✅ · bd ✅ · openspec ✅ · dont ✅
+# testaruda ✅ — the DDL-85p test runner (`just test`); CI must install it
+# or the test recipe cannot run at all (first CI run after 7afce34 caught it).
 # CI installs these pinned (see ci.yml).
 
 [tools]
+testaruda = "0.5.7"        # crates.io — DDL-85p test runner (wai ci.yml pins the same)
 wai = "2026.10.10"      # crates.io: wai-cli — fixes wai init hanging on non-TTY select (fresh dir, stdin closed) in CI cascades
 pretender = "0.7.0"        # crates.io — 0.7.0: gate-by-default + advisory lease TTL (pretender-1te)
 dont = "0.2.2"             # crates.io: dont-cli

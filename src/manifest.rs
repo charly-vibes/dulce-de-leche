@@ -260,9 +260,48 @@ pub const EMBEDDED_COMPATIBILITY: &str = r#"{
     "wild": ">=0.0.0"
 }"#;
 
+/// Parse the `[tools]` entries of a `versions.ddl.toml`-shaped pin file
+/// into `(name, version)` pairs (DDL-gef). The pins file is the fleet's
+/// CI-install contract; the e2e doctor-clean test probes the live PATH
+/// tools against these to decide whether the environment is in contract.
+/// Lines that are comments, blank, or section headers are ignored.
+pub fn parse_fleet_pins(text: &str) -> Vec<(String, String)> {
+    text.lines()
+        .filter_map(|line| {
+            let (name, rest) = line.trim().split_once('=')?;
+            let name = name.trim().to_string();
+            if name.is_empty() || name.starts_with('#') || name.starts_with('[') {
+                return None;
+            }
+            let version = rest.split('#').next()?.trim();
+            // fleet pins are always double-quoted; anything else (TOML
+            // single-quoted strings, arrays, bare keys) is not a pin entry
+            let version = version.strip_prefix('"')?.strip_suffix('"')?;
+            Some((name, version.to_string()))
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fleet_pins_parse_names_and_versions() {
+        let pins = parse_fleet_pins(crate::manifest::FLEET_VERSIONS_PIN);
+        assert!(pins.contains(&("wai".to_string(), "2026.10.10".to_string())));
+        assert!(pins.contains(&("openspec".to_string(), "0.19.0".to_string())));
+        assert!(pins.contains(&("bd".to_string(), "1.3.0".to_string())));
+        // self-pin: hyphenated key, matching the crate version
+        assert!(pins.contains(&("dulce-de-leche".to_string(), "0.9.0".to_string())));
+    }
+
+    #[test]
+    fn fleet_pins_parse_ignores_headers_comments_and_blank_lines() {
+        let text = "[tools]\n\n# comment line\nwai = \"2026.10.10\"      # trailing comment\n[other]\nfoo = 'bar'\n";
+        let pins = parse_fleet_pins(text);
+        assert_eq!(pins, vec![("wai".to_string(), "2026.10.10".to_string())]);
+    }
 
     #[test]
     fn old_manifest_json_without_inited_field_parses_with_empty_default() {

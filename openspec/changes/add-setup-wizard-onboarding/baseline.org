@@ -1,0 +1,27 @@
+- ttfif_seconds=5.728726963 mode=baseline tools_healthy=3 init_rc=0 date=2026-10-20T16:30:28-03:00 flags=' --no-install'
+- ttfif_seconds=29.432810926 mode=baseline tools_healthy=3 init_rc=1 date=2026-10-20T16:31:02-03:00 flags='none'
+
+#+BEGIN_NOTE
+Interpretation (2026-10-20, machine: fedora linuxbrew x86_64):
+- config-only baseline (no installs): 5.73s to configured state.
+- full baseline FAILED to reach a healthy fleet: funkalization + wild have
+  no published release binaries for this platform and no cargo fallback
+  (init exit 1, partial failure). TTFIF to a FULLY healthy fleet is
+  currently unattainable on this platform — the gate comparison must
+  therefore use a defined tool subset (core+recommended, the 5 tools with
+  published binaries) or wait for funkalization/wild releases.
+  See corpus mandate 2026-10-19: funkalization is parked/experimental.
+#+END_NOTE
+- ttfif_seconds=.009975794 mode=baseline tools_healthy=0 init_rc=0 date=2026-10-20T16:38:08-03:00 flags=' --no-install'
+- ttfif_seconds=.008856159 mode=baseline tools_healthy=0 init_rc=0 date=2026-10-20T16:39:59-03:00 flags=' --no-install'
+- ttfif_seconds=0.010 mode=baseline tools_healthy=0 init_rc=0 date=2026-10-20T16:40:25-03:00 flags=' --no-install'
+- ttfif_seconds=33.802 mode=baseline tools_healthy=0 init_rc=1 date=2026-10-20T16:40:59-03:00 flags='none'
+#+BEGIN_NOTE
+Harness vintage note (2026-10-20): runs before the CORR-002 fix are biased —
+their PATH leaked preinstalled brew fleet tools (bd/openspec/incitaciones),
+so "config-only" measured 5.73s with tool inits running and 3 tools healthy.
+Post-fix canonical runs (true new-user PATH, nothing preinstalled):
+config-only 0.010s; full flow 33.802s (still partial failure: funkalization/
+wild have no platform binaries). The earlier full-flow runs (29.43s) suffer
+the same leak and are superseded by the post-fix run.
+#+END_NOTE
