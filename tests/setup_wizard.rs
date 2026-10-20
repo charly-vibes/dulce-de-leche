@@ -204,6 +204,51 @@ fn scope_flows_into_delegate_cascade_and_tools_narrow_it() {
 }
 
 // ---------------------------------------------------------------------------
+// §2.3 reuse-contract guard: the wizard must never fork the init
+// resume-summary format. Delegate-step failures are the wizard's analog of
+// init-cascade failures, so they must render through init's OWN summary
+// builder (`installer::resume_summary`) — byte-for-byte. If the wizard
+// forks the format (its own format! string), this test fails on the next
+// init-side change to the summary contract.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn guard_delegate_failures_render_through_init_summary_builder() {
+    use dulce_de_leche::installer::{InitFailure, resume_summary};
+
+    let mut delegate = FakeDelegate::clean();
+    delegate.cascade_failures = vec![
+        StepFailure {
+            step: WizardStep::Delegate,
+            subject: "funkalization".into(),
+            message: "no platform binary and no cargo fallback".into(),
+        },
+        StepFailure {
+            step: WizardStep::Delegate,
+            subject: "openspec".into(),
+            message: "refused re-init".into(),
+        },
+    ];
+    let report = SetupWizard::new(config(vec![], false, true), &mut delegate).run();
+
+    let expected = resume_summary(&[
+        InitFailure {
+            tool: "funkalization".into(),
+            detail: "no platform binary and no cargo fallback".into(),
+        },
+        InitFailure {
+            tool: "openspec".into(),
+            detail: "refused re-init".into(),
+        },
+    ]);
+    assert_eq!(
+        report.resume_summary, expected,
+        "wizard delegate-step failures must render through installer::resume_summary, \
+         not a forked format"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Transition 5: verify always runs — even after a cascade failure — and
 // every failure lands in the resume summary (exit-non-zero contract).
 // ---------------------------------------------------------------------------
