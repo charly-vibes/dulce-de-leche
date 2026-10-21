@@ -121,8 +121,8 @@ pub enum Commands {
     Scope,
 
     /// Guided first-time setup — walk from zero to a verified-initialized
-    /// repo (wizard step machine lands in §2.2; currently a placeholder
-    /// entry point that pins the wire contract)
+    /// repo via the wizard step machine (pre-flight → migrate → scope →
+    /// delegate → verify, backed by the exact `ddl init` code paths)
     Setup {
         /// Comma-separated list of tools to install (default: all)
         #[arg(long, value_name = "TOOLS")]
@@ -207,28 +207,69 @@ impl Args {
             .unwrap_or_default()
     }
 
-    /// SetupWizard entry point (openspec add-setup-wizard-onboarding §2.1).
+    /// SetupWizard entry point (openspec add-setup-wizard-onboarding §2.2).
     ///
-    /// §2.2 replaces this placeholder with the full step machine in
-    /// `src/setup_wizard.rs` (pre-flight → migrate? → scope → delegate to
-    /// init/install paths → verify). Until then the command must still
-    /// parse and emit a machine envelope identifying itself as `setup` so
-    /// agents and scripts get a stable wire contract
-    /// (pinned by tests/setup_command.rs).
+    /// Runs the five-step machine from `src/setup_wizard.rs` (pre-flight →
+    /// migrate? → scope → delegate to init/install paths → verify) through
+    /// the production [`crate::setup_wizard::InitPathsDelegate`] — the same
+    /// code paths `ddl init` uses, never a fork. The JSON envelope carries
+    /// the per-step outcomes plus the machine verdict and resume summary,
+    /// still identifying itself via `data.command == "setup"` with the
+    /// flag passthrough (pinned by tests/setup_command.rs). Step failures
+    /// keep init's exit-non-zero contract.
     pub fn cmd_setup(
         tools: Option<String>,
         no_install: bool,
         yes: bool,
         args: &Args,
     ) -> crate::error::Result<()> {
+        use crate::setup_wizard::{InitPathsDelegate, SetupWizard, WizardConfig};
+
+        let platform = crate::platform::Platform::detect().ok_or_else(|| {
+            crate::error::DdlError::UnsupportedPlatform("Could not detect platform".to_string())
+        })?;
+
+        let parsed_tools = Self::parse_tools(tools.as_deref());
+        let verbose = args.verbose_quiet.raw_count() >= 1;
+        // Same non-interactive rule as cmd_init's init cascade: -y or JSON.
+        let non_interactive = yes || args.is_json();
+
+        let ddl_dir = crate::dot_ddl::DdlDir::find_or_create()?;
+        let mut delegate =
+            InitPathsDelegate::new(ddl_dir, platform, no_install, verbose, non_interactive);
+        let config = WizardConfig {
+            tools: parsed_tools.clone(),
+            no_install,
+            yes,
+        };
+        let report = SetupWizard::new(config, &mut delegate).run();
+
         if args.is_json() {
+            let steps: Vec<serde_json::Value> = report
+                .steps
+                .iter()
+                .map(|s| {
+                    serde_json::json!({
+                        "step": s.step.label(),
+                        "status": s.status,
+                        "failures": s.failures,
+                        "detail": s.detail,
+                    })
+                })
+                .collect();
             let data = serde_json::json!({
                 "command": "setup",
-                "status": "not_implemented",
-                "tools": Self::parse_tools(tools.as_deref()),
+                "tools": parsed_tools,
                 "no_install": no_install,
                 "yes": yes,
+                "steps": steps,
+                "ok": report.ok,
+                "resume_summary": report.resume_summary,
             });
+            // Envelope-level ok stays true: the command ran and reported.
+            // The machine verdict lives in data.ok; the exit code carries
+            // failure (below) and main routes the error envelope to stderr,
+            // so stdout keeps exactly one JSON document.
             let json_str = crate::output::json_output(
                 crate::VERSION,
                 true,
@@ -239,9 +280,28 @@ impl Args {
             )?;
             println!("{json_str}");
         } else {
-            println!("ddl setup: guided setup wizard is not implemented yet.");
-            println!("In the meantime run `ddl init --yes` for the scripted path,");
-            println!("or `ddl init` for the guided flow.");
+            println!("ddl setup — guided setup wizard");
+            for step in &report.steps {
+                if step.status == "ok" {
+                    println!("  ✓ {}", step.step.label());
+                } else {
+                    println!("  ✗ {}", step.step.label());
+                    for f in &step.failures {
+                        println!("      {} — {}", f.subject, f.message);
+                    }
+                }
+            }
+            if !report.resume_summary.is_empty() {
+                println!();
+                println!("Setup did not finish — resume manually or re-run:");
+                for line in &report.resume_summary {
+                    println!("{line}");
+                }
+            }
+        }
+
+        if !report.ok {
+            return Err(crate::error::DdlError::PartialFailure);
         }
         Ok(())
     }
