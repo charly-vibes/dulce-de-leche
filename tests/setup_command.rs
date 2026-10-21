@@ -83,9 +83,8 @@ fn test_setup_json_envelope_runs_step_machine() {
         "the five wizard steps must run in canonical order"
     );
     for s in steps {
-        assert_eq!(
-            s["status"].as_str(),
-            Some("ok").or(Some("failed")),
+        assert!(
+            s["status"] == "ok" || s["status"] == "failed",
             "each step reports ok|failed, got {s}"
         );
     }
