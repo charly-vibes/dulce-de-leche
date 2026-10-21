@@ -49,3 +49,17 @@
   - Rule-of-5 + TypeSafe (jev-1.13.0): both HIGH findings returned <0.8 confidence → REVIEW_REQUIRED; lesson: 'ticket state snapshot' findings are drift claims — verify against live repos, not ticket text.
   - Push-blocker test fixes on ddl: (1) s7 escape hatch extended to introduction.md (DDL-dqp moved SUMMARY links into prose; dont has no index.md); (2) hanging_child orphan check → pgrep -f -x 'sleep 60' (bare grep -F false-positives on unrelated sleep 600 watchers — seen from a stale gently monitor). main CI green 154dc4e.
   - **Next:** HITL release pass across 9 repos closes DDL-3av; fleet hygiene: whisper ah-check gate, dont spk-lint hook bug (bd ticket filed by dont session).
+- 2026-10-20T20:19:23Z [id:6f1d8a65459c9e7d1516e54b7f6c4bc5f8bc79b45b8125b0f6c8806594658ddd] ### 2026-10-20 17:19 — snap
+  - PR #93 merged to main (a1bd06e): DDL-2rn troubleshooting drift+guard test, DDL-gef pin-contract e2e skip (parse_fleet_pins), DDL-g6w slice 1 (setup-wizard openspec proposal + scripts/measure-ttfif.sh + baseline). Local branch deleted; working tree clean.
+  - Two latent CI gaps surfaced and fixed in the PR: testaruda was never installed in CI (DDL-85p recipe landed on main after the last CI run — PR #93 was the first to run just test), and pytest was missing for the testaruda python adapter. Both pinned (testaruda@0.5.7, pytest==9.0.3); CI green, merged.
+  - Sibling repos pushed earlier: funkalization 51a895d (spec-deploy in book), specodelic c589c05 (openspec pin 1.14.2) — DDL-glq closed.
+  - **Next:** two decision items parked with the user: (1) approve openspec change add-setup-wizard-onboarding → implement wizard tasks §2 + ttfif_core gate comparison; (2) go/no-go on wai-yp2l failure census (2–5 days, wai repo). Any new work starts fresh from main.
+
+### 2026-10-21 ~10:30 — setup-wizard orchestration COMPLETE (5 waves, 4 PRs), gate = PARK
+- Autonomous implementation of add-setup-wizard-onboarding §2 via headless pi agents in ddl-worktrees: PR #94 (.1 CLI+red tests), #95 (.2 step machine; 1 CI flake rerun), #96 (.3 reuse-contract InitPathsDelegate + .4 summary parity; real fmt drift caught by CI), #97 (.8 wiring gap — agent timed out pre-push, orchestrator pushed+PR'd), #98 (.5 docs+llm pair), #99 (.6 gate capture, run by orchestrator after 2 agent infra failures: 429 rate-limit + auth outage).
+- **Gate outcome: PARK.** median wizard 18.463s vs baseline 16.128s (3 runs/mode, same machine, 9 healthy) → criterion 1 fails per design.md; TTFIF dominated by identical network installs, wizard adds ~2.3s orchestration overhead. DDL-g6w.7 (release/CHANGELOG) blocked pending user decision on wizard disposition.
+- **P1 filed: fleet releases publish no provenance.json** → post-DDL-yts fail-closed verification rejects ALL installs in clean-room; measurement needed DDL_ALLOW_UNVERIFIED_RELEASE=1. Real new-user path is broken without the override.
+- Harness fix banked: measure-ttfif.sh status probe needs $HOME/.ddl/bin on PATH (was always 0 healthy).
+- Flake family (DDL-01q/xr4 init_cascade) hit CI twice this session; also local-vs-CI rustfmt drift caught by fmt-check after agent claimed clean (worktree agents should run `cargo fmt --all` as last step before push).
+- Worktrees + branches cleaned; all pushed through 05b6bb0.
+- **Next:** user decisions — (1) wizard disposition (keep experimental / remove / re-scope per design's criterion-2 path), (2) green-light P1 provenance.json release-pipeline fix across fleet repos.
