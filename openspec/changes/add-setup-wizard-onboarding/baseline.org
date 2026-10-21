@@ -25,3 +25,49 @@ config-only 0.010s; full flow 33.802s (still partial failure: funkalization/
 wild have no platform binaries). The earlier full-flow runs (29.43s) suffer
 the same leak and are superseded by the post-fix run.
 #+END_NOTE
+- ttfif_seconds=23.263 mode=baseline tools_healthy=0 init_rc=1 date=2026-10-21T10:13:57-03:00 flags='none'
+- ttfif_seconds=14.484 mode=baseline tools_healthy=0 init_rc=1 date=2026-10-21T10:14:12-03:00 flags='none'
+- ttfif_seconds=15.237 mode=baseline tools_healthy=0 init_rc=1 date=2026-10-21T10:14:27-03:00 flags='none'
+- ttfif_seconds=17.597 mode=baseline tools_healthy=0 init_rc=1 date=2026-10-21T10:15:58-03:00 flags='none'
+- ttfif_seconds=15.717 mode=baseline tools_healthy=0 init_rc=1 date=2026-10-21T10:16:13-03:00 flags='none'
+- ttfif_seconds=17.060 mode=baseline tools_healthy=0 init_rc=1 date=2026-10-21T10:16:30-03:00 flags='none'
+- ttfif_seconds=14.808 mode=baseline tools_healthy=9 init_rc=1 date=2026-10-21T10:17:41-03:00 flags='none'
+- ttfif_seconds=16.128 mode=baseline tools_healthy=9 init_rc=1 date=2026-10-21T10:17:57-03:00 flags='none'
+- ttfif_seconds=16.503 mode=baseline tools_healthy=9 init_rc=1 date=2026-10-21T10:18:13-03:00 flags='none'
+- ttfif_seconds=18.730 mode=wizard tools_healthy=9 init_rc=1 date=2026-10-21T10:18:34-03:00 flags='none'
+- ttfif_seconds=18.432 mode=wizard tools_healthy=9 init_rc=1 date=2026-10-21T10:18:53-03:00 flags='none'
+- ttfif_seconds=18.463 mode=wizard tools_healthy=9 init_rc=1 date=2026-10-21T10:19:11-03:00 flags='none'
+
+** DECISION GATE RUN — 2026-10-21 (DDL-g6w.6) **
+
+Environment: same machine as 2026-10-20 baseline; release binary at
+merge 2370d48 (+ wizard fully wired, DDL-g6w.8/PR #97). Both modes run with
+DDL_ALLOW_UNVERIFIED_RELEASE=1 — REQUIRED because no fleet release publishes
+provenance.json, so post-DDL-yts fail-closed verification rejects every
+download (P1 ticket filed; without the override tools_healthy=0, init_rc=1).
+
+Harness fix this session: status probe now prepends $HOME/.ddl/bin to PATH
+(real post-init shell state); previously tools_healthy was always 0.
+
+| mode     | runs (s)                | median | healthy | init_rc |
+|----------+-------------------------+--------+---------+---------|
+| baseline | 14.808 16.128 16.503    | 16.128 | 9       | 1 (partial: funkalization/wild no binaries) |
+| wizard   | 18.730 18.432 18.463    | 18.463 | 9       | 1 (same partial) |
+
+Gate criterion 1 (median wizard <= median baseline): 18.463 > 16.128 → **FAIL**.
+Gate criterion 2 (strictly fewer manual decisions): unmeasured — harness runs
+non-interactive (-y) in both modes; moot because criterion 1 already fails.
+
+Analysis: TTFIF is dominated by identical network installs in both paths;
+the wizard adds ~2.3s orchestration overhead (pre-flight + step machine +
+verify) and removes zero network time. In non-interactive capture the wizard
+is a strict superset of init's work.
+
+** GATE OUTCOME: PARK ** (per design.md: "If (1) fails, park.")
+
+- Do NOT proceed to tasks §3 (release/CHANGELOG) — DDL-g6w.7 stays parked.
+- Wizard code (§2.1–2.5 wiring) is merged and functional; keeping it is a
+  user decision, but the measurement does not justify promoting it as the
+  default entry point.
+- Blocking follow-up: P1 provenance.json gap — the unverified-override is a
+  measurement workaround, not a shipping path.
