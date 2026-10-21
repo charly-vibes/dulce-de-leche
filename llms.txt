@@ -13,6 +13,7 @@ Leer en español: https://charly-vibes.github.io/charly-vibes/
 ## Commands
 
 - `ddl init` — installs & configures the whole toolset
+- `ddl setup` — guided first-time setup wizard: pre-flight → migrate? → scope → the same install cascade as init → verify
 - `ddl status` — shows health of all tools at a glance
 - `ddl migrate` — moves existing configs under `.ddl/`
 - `ddl upgrade` — updates everything to latest compatible versions

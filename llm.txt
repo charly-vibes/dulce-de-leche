@@ -12,6 +12,9 @@ installs, status pages) and enforces them fleet-wide with a conformance test
 (`tests/standard_conformance.rs`) that checks every sibling repo.
 
 - **`ddl init`** — installs & configures the whole toolset
+- **`ddl setup`** — guided first-time setup: pre-flight checks, fresh-vs-migrate
+  choice, scope selection, then the same install cascade as `ddl init`, ending
+  with a verify pass (non-zero exit + resume summary on failure, like init)
 - **`ddl status`** — shows health of all tools at a glance
 - **`ddl migrate`** — moves existing configs under `.ddl/`
 - **`ddl upgrade`** — updates everything to latest compatible versions
