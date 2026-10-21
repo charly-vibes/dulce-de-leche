@@ -8,6 +8,7 @@
 
 - [Installation](./installation.md)
 - [Quick Start](./quick-start.md)
+- [Setup Wizard](./setup.md)
 - [Commands](./commands.md)
 - [Troubleshooting](./troubleshooting.md)
 
