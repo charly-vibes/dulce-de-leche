@@ -81,8 +81,7 @@ fn fallback_only_when_cargo_available() {
 // ---------------------------------------------------------------------------
 
 use dulce_de_leche::installer::{
-    EXPECTED_PROVENANCE_REPOSITORY, EXPECTED_PROVENANCE_WORKFLOW, ProvenanceLookup,
-    ProvenanceManifest, enforce_provenance_policy,
+    EXPECTED_PROVENANCE_WORKFLOW, ProvenanceLookup, ProvenanceManifest, enforce_provenance_policy,
 };
 
 /// The asset filename carved out of FIXTURE_URL's last path segment.
@@ -116,7 +115,7 @@ fn provenance_policy(
 fn provenance_with_expected_identity_and_matching_digest_is_accepted() {
     let status = provenance_policy(
         ProvenanceLookup::Published(manifest(
-            EXPECTED_PROVENANCE_REPOSITORY,
+            "acme/tool", // repository that published FIXTURE_URL (URL-derived, DDL-9x4.1)
             EXPECTED_PROVENANCE_WORKFLOW,
             "v1.0.0",
             FIXTURE_DIGEST,
@@ -128,6 +127,65 @@ fn provenance_with_expected_identity_and_matching_digest_is_accepted() {
     assert_eq!(status, VerificationStatus::Verified);
 }
 
+/// DDL-9x4.1: the expected publisher repository is the repository the asset
+/// is being downloaded FROM (URL-derived), not ddl's own repository — a
+/// well-formed manifest for any fleet repo must pass identity for its own
+/// release URL. Red test: this fails while the policy compares against the
+/// hardcoded ddl-own constant.
+#[test]
+fn provenance_manifest_matching_url_identity_is_accepted_for_non_ddl_repos() {
+    let status = provenance_policy(
+        ProvenanceLookup::Published(manifest(
+            "acme/tool", // repository that published FIXTURE_URL
+            EXPECTED_PROVENANCE_WORKFLOW,
+            "v1.0.0",
+            FIXTURE_DIGEST,
+        )),
+        Some("v1.0.0"),
+        false,
+    )
+    .unwrap();
+    assert_eq!(status, VerificationStatus::Verified);
+}
+
+/// DDL-9x4.1: identity stays enforced — a manifest naming a repository other
+/// than the one the asset is fetched from is rejected even when everything
+/// else matches.
+#[test]
+fn provenance_manifest_naming_a_different_repository_than_the_url_is_rejected() {
+    let err = provenance_policy(
+        ProvenanceLookup::Published(manifest(
+            "evil/tool", // URL is acme/tool
+            EXPECTED_PROVENANCE_WORKFLOW,
+            "v1.0.0",
+            FIXTURE_DIGEST,
+        )),
+        Some("v1.0.0"),
+        false,
+    )
+    .unwrap_err();
+    assert!(matches!(err, DdlError::ChecksumUnavailable { .. }));
+}
+
+/// DDL-9x4.1: unverified-authorization still does NOT bypass identity — a
+/// mismatched repository is rejected even with allow_unverified=true
+/// (DDL-wof: authorization only bridges a MISSING manifest).
+#[test]
+fn unverified_authorization_does_not_bypass_url_identity_mismatch() {
+    let err = provenance_policy(
+        ProvenanceLookup::Published(manifest(
+            "evil/tool",
+            EXPECTED_PROVENANCE_WORKFLOW,
+            "v1.0.0",
+            FIXTURE_DIGEST,
+        )),
+        Some("v1.0.0"),
+        true,
+    )
+    .unwrap_err();
+    assert!(matches!(err, DdlError::ChecksumUnavailable { .. }));
+}
+
 #[test]
 fn altered_bytes_are_rejected_against_the_provenance_digest() {
     // Provenance binds the artifact digest to the publisher identity; bytes
@@ -136,7 +194,7 @@ fn altered_bytes_are_rejected_against_the_provenance_digest() {
     let other = "d121be3103007b41edf96f8262925f8c7d61894afe9a041843b631f69445bc57";
     let err = provenance_policy(
         ProvenanceLookup::Published(manifest(
-            EXPECTED_PROVENANCE_REPOSITORY,
+            "acme/tool", // repository that published FIXTURE_URL (URL-derived, DDL-9x4.1)
             EXPECTED_PROVENANCE_WORKFLOW,
             "v1.0.0",
             other,
@@ -178,7 +236,7 @@ fn wrong_repository_identity_is_rejected() {
 fn wrong_workflow_identity_is_rejected() {
     let err = provenance_policy(
         ProvenanceLookup::Published(manifest(
-            EXPECTED_PROVENANCE_REPOSITORY,
+            "acme/tool", // repository that published FIXTURE_URL (URL-derived, DDL-9x4.1)
             "Nightly",
             "v1.0.0",
             FIXTURE_DIGEST,
@@ -200,7 +258,7 @@ fn wrong_release_tag_is_rejected() {
     // asset was fetched from — identity does not match the build in use.
     let err = provenance_policy(
         ProvenanceLookup::Published(manifest(
-            EXPECTED_PROVENANCE_REPOSITORY,
+            "acme/tool", // repository that published FIXTURE_URL (URL-derived, DDL-9x4.1)
             EXPECTED_PROVENANCE_WORKFLOW,
             "v0.9.0",
             FIXTURE_DIGEST,
@@ -259,7 +317,7 @@ fn authorization_never_rescues_altered_bytes() {
     let other = "d121be3103007b41edf96f8262925f8c7d61894afe9a041843b631f69445bc57";
     let err = provenance_policy(
         ProvenanceLookup::Published(manifest(
-            EXPECTED_PROVENANCE_REPOSITORY,
+            "acme/tool", // repository that published FIXTURE_URL (URL-derived, DDL-9x4.1)
             EXPECTED_PROVENANCE_WORKFLOW,
             "v1.0.0",
             other,
@@ -281,7 +339,7 @@ fn untagged_archive_url_cannot_be_provenance_checked() {
         "https://example.com/nightly/tool.tar.gz",
         None,
         ProvenanceLookup::Published(manifest(
-            EXPECTED_PROVENANCE_REPOSITORY,
+            "acme/tool", // repository that published FIXTURE_URL (URL-derived, DDL-9x4.1)
             EXPECTED_PROVENANCE_WORKFLOW,
             "v1.0.0",
             FIXTURE_DIGEST,
