@@ -362,7 +362,9 @@ fn untagged_archive_url_cannot_be_provenance_checked() {
 // ---------------------------------------------------------------------------
 
 use dulce_de_leche::error::DdlError;
-use dulce_de_leche::installer::{ChecksumLookup, VerificationStatus, enforce_checksum_policy};
+use dulce_de_leche::installer::{
+    ChecksumLookup, VerificationStatus, enforce_checksum_policy, verify_release_bytes,
+};
 
 const FIXTURE_BYTES: &[u8] = b"ddl-fixture-binary";
 /// sha256(b"ddl-fixture-binary")
@@ -461,6 +463,117 @@ fn authorization_does_not_rescue_a_published_mismatch() {
     let err = policy(ChecksumLookup::Published(other.to_string()), true)
         .expect_err("explicit authorization must not bypass a published mismatch");
     assert!(matches!(err, DdlError::ChecksumMismatch { .. }));
+}
+
+// ============================================================================
+// DDL-9x4.11.1: checksums-only verification channel for external-origin
+// tools (e.g. bd from gastownhall/beads). External releases can never
+// publish our provenance.json, so installs verify through the release's
+// checksums.txt / per-asset digest instead — surfaced as a DISTINCT status
+// (`ChecksumsVerified`) so logs and doctor can tell the weaker channel from
+// full provenance verification. Anti-goal: charly-vibes origins NEVER fall
+// back to checksums-only — provenance identity stays mandatory for them.
+// ============================================================================
+
+const EXTERNAL_URL: &str =
+    "https://github.com/gastownhall/beads/releases/download/v0.9.0/beads_0.9.0_linux_amd64.tar.gz";
+const CHARLY_VIBES_URL: &str = "https://github.com/charly-vibes/wai/releases/download/v2026.10.21/wai_2026.10.21_linux_amd64.tar.gz";
+
+fn release_bytes(
+    url: &str,
+    checksum: ChecksumLookup,
+    provenance: ProvenanceLookup,
+    allow_unverified: bool,
+) -> Result<VerificationStatus, DdlError> {
+    verify_release_bytes(
+        "bd",
+        url,
+        checksum,
+        provenance,
+        FIXTURE_BYTES,
+        allow_unverified,
+    )
+}
+
+/// External origin + a published matching digest verifies through the weaker
+/// channel — no provenance manifest exists (or is required) for it.
+#[test]
+fn external_origin_with_matching_checksum_verifies_via_checksums_channel() {
+    let status = release_bytes(
+        EXTERNAL_URL,
+        ChecksumLookup::Published(FIXTURE_DIGEST.to_string()),
+        ProvenanceLookup::Unavailable("release publishes no provenance.json"),
+        false,
+    )
+    .unwrap();
+    assert_eq!(status, VerificationStatus::ChecksumsVerified);
+}
+
+/// Fail-closed is unchanged for external origins: no usable checksum means
+/// rejection, exactly as before the checksums channel existed.
+#[test]
+fn external_origin_without_checksums_is_still_rejected_fail_closed() {
+    let err = release_bytes(
+        EXTERNAL_URL,
+        ChecksumLookup::Unavailable("release publishes no checksum for the asset"),
+        ProvenanceLookup::Unavailable("release publishes no provenance.json"),
+        false,
+    )
+    .unwrap_err();
+    assert!(matches!(err, DdlError::ChecksumUnavailable { .. }));
+}
+
+/// The weaker channel never weakens a published mismatch: altered bytes are
+/// rejected against the external release's own checksums.txt.
+#[test]
+fn external_origin_checksum_mismatch_is_rejected() {
+    let other = "d121be3103007b41edf96f8262925f8c7d61894afe9a041843b631f69445bc57";
+    let err = release_bytes(
+        EXTERNAL_URL,
+        ChecksumLookup::Published(other.to_string()),
+        ProvenanceLookup::Unavailable("release publishes no provenance.json"),
+        false,
+    )
+    .unwrap_err();
+    assert!(matches!(err, DdlError::ChecksumMismatch { .. }));
+}
+
+/// Anti-goal guard: a charly-vibes release without provenance.json is still
+/// rejected fail-closed even when its checksums.txt would verify — the
+/// checksums channel is scoped to non-charly-vibes origins only.
+#[test]
+fn charly_vibes_origin_without_provenance_is_rejected_even_with_valid_checksums() {
+    let err = release_bytes(
+        CHARLY_VIBES_URL,
+        ChecksumLookup::Published(FIXTURE_DIGEST.to_string()),
+        ProvenanceLookup::Unavailable("release publishes no provenance.json"),
+        false,
+    )
+    .unwrap_err();
+    assert!(matches!(err, DdlError::ChecksumUnavailable { .. }));
+}
+
+/// A charly-vibes release with full provenance verifies at the STRONG level
+/// (not the weaker channel) — identity + digest, same as today.
+#[test]
+fn charly_vibes_origin_with_provenance_verifies_strong() {
+    let status = release_bytes(
+        CHARLY_VIBES_URL,
+        ChecksumLookup::Published(FIXTURE_DIGEST.to_string()),
+        ProvenanceLookup::Published(ProvenanceManifest {
+            repository: "charly-vibes/wai".to_string(),
+            workflow: EXPECTED_PROVENANCE_WORKFLOW.to_string(),
+            tag: "v2026.10.21".to_string(),
+            artifacts: [(
+                "wai_2026.10.21_linux_amd64.tar.gz".to_string(),
+                FIXTURE_DIGEST.to_string(),
+            )]
+            .into(),
+        }),
+        false,
+    )
+    .unwrap();
+    assert_eq!(status, VerificationStatus::Verified);
 }
 
 // ============================================================================

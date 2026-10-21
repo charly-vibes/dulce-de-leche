@@ -88,8 +88,15 @@ use crate::platform::{MANAGED_TOOLS, Os, PackageManager, Platform, Tool};
 /// `label()` is the machine-readable value used in JSON output events.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VerificationStatus {
-    /// sha256 matched the checksum published for the release.
+    /// sha256 matched the checksum published for the release, AND the
+    /// provenance manifest bound those bytes to the expected build identity
+    /// (charly-vibes origins).
     Verified,
+    /// sha256 matched the release's own checksums.txt / per-asset digest but
+    /// no provenance manifest was required: external origins (non-
+    /// charly-vibes) can never publish our provenance.json, so they verify
+    /// through the weaker checksums-only channel (DDL-9x4.11.1).
+    ChecksumsVerified,
     /// Installed without release-checksum verification, explicitly authorized
     /// by the user via `DDL_ALLOW_UNVERIFIED_RELEASE=1` (legacy transition).
     UnverifiedAuthorized,
@@ -102,6 +109,7 @@ impl VerificationStatus {
     pub fn label(self) -> &'static str {
         match self {
             Self::Verified => "verified",
+            Self::ChecksumsVerified => "checksums-verified",
             Self::UnverifiedAuthorized => "unverified-authorized",
             Self::Unverified => "unverified",
         }
@@ -112,6 +120,10 @@ impl VerificationStatus {
     pub fn suffix(self) -> String {
         match self {
             Self::Verified => " (sha256 verified)".to_string(),
+            Self::ChecksumsVerified => {
+                " (sha256 verified against the release's own checksums — external origin)"
+                    .to_string()
+            }
             Self::UnverifiedAuthorized => {
                 " (unverified — explicitly authorized via DDL_ALLOW_UNVERIFIED_RELEASE)".to_string()
             }
@@ -669,6 +681,67 @@ pub fn enforce_provenance_policy(
     }
 }
 
+/// DDL-9x4.11.1: origin-scoped verification of release archive bytes, as a
+/// pure decision (no network, no filesystem) so it can be regression-tested
+/// without connectivity. Combines the DDL-yts checksum policy and the DDL-wof
+/// provenance policy with one distinction neither enforces alone:
+///
+/// - charly-vibes origins (`github.com/charly-vibes/…`) keep the strict
+///   channel: checksum + provenance identity must BOTH accept. They NEVER
+///   fall back to checksums-only, no matter what the checksums.txt says.
+/// - external origins (e.g. bd from gastownhall/beads) can never publish our
+///   provenance.json, so they verify through the release's own
+///   checksums.txt / per-asset digest instead — accepted as
+///   [`VerificationStatus::ChecksumsVerified`], a deliberately distinct
+///   weaker status. No usable checksum still rejects fail-closed, and a
+///   published mismatch is never bypassed (same rules as DDL-yts).
+/// - Explicit `DDL_ALLOW_UNVERIFIED_RELEASE` authorization keeps its
+///   meaning for both channels: it only bridges a MISSING checksum, never a
+///   published mismatch or a charly-vibes identity violation.
+pub fn verify_release_bytes(
+    tool: &str,
+    url: &str,
+    checksum: ChecksumLookup,
+    provenance: ProvenanceLookup,
+    bytes: &[u8],
+    allow_unverified: bool,
+) -> Result<VerificationStatus> {
+    let charly_vibes_origin = charly_vibes_origin(url);
+    let status = enforce_checksum_policy(tool, url, checksum, bytes, allow_unverified)?;
+    if !charly_vibes_origin {
+        return Ok(match status {
+            // Weaker channel: checksum-authenticated only, no identity proof.
+            VerificationStatus::Verified => VerificationStatus::ChecksumsVerified,
+            other => other,
+        });
+    }
+    enforce_provenance_policy(
+        tool,
+        url,
+        release_tag_from_url(url),
+        provenance,
+        bytes,
+        allow_unverified,
+    )?;
+    Ok(status)
+}
+
+/// The GitHub organization whose releases must carry our provenance
+/// manifest (DDL-9x4.11.1): every other origin uses the checksums-only
+/// channel.
+const CHARLY_VIBES_ORG: &str = "charly-vibes";
+
+/// True when the archive URL points at a charly-vibes release — the only
+/// origin required to publish our provenance.json.
+fn charly_vibes_origin(archive_url: &str) -> bool {
+    expected_repository_from_url(archive_url)
+        .and_then(|repo| {
+            repo.split_once('/')
+                .map(|(owner, _)| owner == CHARLY_VIBES_ORG)
+        })
+        .unwrap_or(false)
+}
+
 /// Extract the release tag from a GitHub release download URL
 /// (`…/releases/download/<tag>/<asset>`). `None` when the URL does not carry
 /// one — provenance identity cannot be checked against a non-release URL.
@@ -962,6 +1035,10 @@ fn install_binary(tool: &Tool, platform: &Platform, verbose: bool) -> Result<Ver
         VerificationStatus::Verified => {
             eprintln!("  ✓ {} sha256 verified against release checksum", tool.name)
         }
+        VerificationStatus::ChecksumsVerified => eprintln!(
+            "  ✓ {} sha256 verified against the release's own checksums (external origin — no provenance manifest required)",
+            tool.name
+        ),
         VerificationStatus::UnverifiedAuthorized => eprintln!(
             "  ⚠ {} installed WITHOUT checksum verification ({}): explicitly authorized via DDL_ALLOW_UNVERIFIED_RELEASE",
             tool.name, download_url
@@ -1120,25 +1197,24 @@ fn verify_download(
     tool: &Tool,
     verbose: bool,
 ) -> Result<VerificationStatus> {
-    let status = enforce_checksum_policy(
+    let checksum = fetch_expected_checksum(archive_url, verbose);
+    // DDL-wof identity applies to charly-vibes origins only; external origins
+    // verify through the release's own checksums (DDL-9x4.11.1), so the
+    // provenance fetch is skipped there — a request that could never succeed
+    // (they publish no provenance.json) is not issued.
+    let provenance = if charly_vibes_origin(archive_url) {
+        fetch_provenance(archive_url, verbose)
+    } else {
+        ProvenanceLookup::Unavailable("not fetched (external origin)")
+    };
+    verify_release_bytes(
         tool.name,
         archive_url,
-        fetch_expected_checksum(archive_url, verbose),
+        checksum,
+        provenance,
         archive_bytes,
         unverified_authorized(),
-    )?;
-    // DDL-wof: identity must match too — checksum alone authenticates bytes
-    // against *some* published digest, provenance authenticates the publisher
-    // and build identity behind that digest.
-    enforce_provenance_policy(
-        tool.name,
-        archive_url,
-        release_tag_from_url(archive_url),
-        fetch_provenance(archive_url, verbose),
-        archive_bytes,
-        unverified_authorized(),
-    )?;
-    Ok(status)
+    )
 }
 
 /// Fetch a release archive, mapping the release-404
