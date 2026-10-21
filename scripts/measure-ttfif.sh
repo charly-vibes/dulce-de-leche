@@ -65,7 +65,11 @@ out="$(cd "$tmp_repo" && $first_cmd 2>&1)"
 init_rc=$?
 set -e
 
-status_out="$(cd "$tmp_repo" && "$ddl_bin" status --json 2>/dev/null || true)"
+# Harness fix (DDL-g6w.6): init installs into $HOME/.ddl/bin but status probes
+# PATH — a real user's post-init shell has the bin dir available, so expose it
+# for the status probe (and ONLY for the probe, not for the first command).
+status_path="$HOME/.ddl/bin:$PATH"
+status_out="$(cd "$tmp_repo" && env PATH="$status_path" "$ddl_bin" status --json 2>/dev/null || true)"
 # grep exits 1 on zero matches — with pipefail+set -e that kills the script
 # exactly when a run has 0 healthy tools (the true new-user case). Guard it.
 healthy="$(echo "$status_out" | { grep -o '"level": *"healthy"' || true; } | wc -l)"
