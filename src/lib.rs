@@ -6,6 +6,7 @@
 pub mod catalog;
 pub mod cli;
 pub mod compat;
+pub mod contract_bundle;
 pub mod diagnostics;
 pub mod dot_ddl;
 pub mod error;

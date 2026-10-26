@@ -207,7 +207,9 @@ pub enum UpgradeDecision {
     Deferred { reason: String },
     /// The resolved change, old identity → new identity. The caller presents
     /// it and persists the new entry via `InstallLock::save` (atomic).
-    Upgrade { from: LockEntry, to: LockEntry },
+    /// `to` is boxed: LockEntry grew past the clippy large-enum-variant
+    /// threshold when it gained the contract digest (wild-xgd).
+    Upgrade { from: LockEntry, to: Box<LockEntry> },
 }
 
 /// Decide an explicit upgrade against the release-age policy (DDL-5bs).
@@ -237,13 +239,16 @@ pub fn upgrade_decision(
     }
     Ok(UpgradeDecision::Upgrade {
         from: current.clone(),
-        to: LockEntry {
+        to: Box::new(LockEntry {
             tool: current.tool.clone(),
             version: candidate.version.clone(),
             artifact_url: candidate.artifact_url.clone(),
             sha256: candidate.sha256.clone(),
             recorded_epoch_day: today_epoch_day,
-        },
+            // Unknown until the candidate's bundle is fetched and verified
+            // during the upgrade — the shadow path records it then (wild-xgd).
+            contract_sha256: None,
+        }),
     })
 }
 

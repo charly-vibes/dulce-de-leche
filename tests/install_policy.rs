@@ -606,6 +606,7 @@ mod replay_lock {
             artifact_url: URL_V1.into(),
             sha256: SHA_V1.into(),
             recorded_epoch_day: day,
+            contract_sha256: None,
         }
     }
 

@@ -159,6 +159,12 @@ pub struct LockEntry {
     pub artifact_url: String,
     pub sha256: String,
     pub recorded_epoch_day: u64,
+    /// sha256 of the installed tool's verified contract.json (wild-xgd,
+    /// extending lock_pins_hashes). `None` for entries recorded before
+    /// bundle caching existed — a None never fabricates a base contract;
+    /// shadow checks against it yield `missing-base-contract` Unknown.
+    #[serde(default)]
+    pub contract_sha256: Option<String>,
 }
 
 /// The install lock: `.ddl/lock.json`, the identity record of what was
