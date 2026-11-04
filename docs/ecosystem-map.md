@@ -192,6 +192,7 @@ ddl manages a tool when all of the following hold:
 | **testaruda** | `testaruda`, `testaruda-adapter-rust`, `testaruda-adapter-python` | `testaruda` | ✓ | Test selection engine. Ascent Datalog + provenance semiring. SQLite store. |
 | **vampiro** | `vampiro` | `vampiro` | ✓ | Cross-language composition checking at call, module, effect, law, retry, resource, and trust boundaries. Crate workspace with per-language tracers. |
 | **wild** | `wild` | `wild-vibes` | — | Machine-checked compatibility and composition of software components, modelled as a category of contracts. `wild extract` / `wild check`. |
+| **bajan** | `bajan` | `bajan` | ✓ | Spec-driven knowledge-graph pipeline: ingest sources, extract claims, human-gated adoption and entity review. |
 | **whisper** | `turu` (aliases: `turututu`, `whisper`) | `whisper-vibes` | ✓ | Deterministic knowledge workspace management. Repo-local `.whisper/` + global `~/.whisper/` routing. Install-only under ddl — its state is home-dir global, not repo-local legacy config. |
 | **specodelic** | `specodelic`, `spk` | `specodelic` | ✓ | Markdown spec format (Intent / Constraints / Model / Properties) with the CLI that lints, compiles, verifies, and refactors it. Repo-local `.specs/` corpus. |
 | **funkalization** | `funkalization` | `funkalization` | — | Visual semantic design workspace. Versioned design semantics with typed design edits, generated obligations, scoped evidence, and loss-reporting adapters toward Specodelic and OpenSpec. Planned repo-local `.funkalization/` workspace. |

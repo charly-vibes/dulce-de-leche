@@ -28,6 +28,7 @@ Check available tools:
 - `turu` — Knowledge workspace management (whisper-vibes)
 - `funkalization` — Visual semantic design workspace (experimental)
 - `wild` — Contract-based compatibility checking (experimental)
+- `bajan` — Spec-driven knowledge-graph pipeline (experimental)
 
 (`ddl` itself is not installable via `ddl install` — it manages every tool
 except itself.)

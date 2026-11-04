@@ -17,3 +17,4 @@ dont = "0.2.2"             # crates.io: dont-cli
 dulce-de-leche = "0.9.0"   # crates.io (bin: ddl) — self
 openspec = "0.19.0"        # npm: @fission-ai/openspec
 bd = "1.3.0"               # beads — pinned GitHub release download (no versioned homebrew-core formula)
+bajan = "0.1.0"            # crates.io — spec-driven knowledge-graph pipeline (bajan-23s)

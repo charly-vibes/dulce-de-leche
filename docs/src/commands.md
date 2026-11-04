@@ -78,6 +78,7 @@ names **mismatch** (the rest install by their own name):
 | `ah` | `espectacular` | `charly-vibes/espectacular` |
 | `turu` | `whisper-vibes` | `charly-vibes/whisper` |
 | `wild` | `wild-vibes` | `charly-vibes/wild` |
+| `bajan` | `bajan` | `charly-vibes/bajan` |
 | `openspec` | `@fission-ai/openspec` (npm) | `fission-ai/openspec` |
 | `ddl` (this tool) | `dulce-de-leche` | `charly-vibes/dulce-de-leche` |
 

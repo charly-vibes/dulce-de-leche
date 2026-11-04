@@ -360,6 +360,16 @@ pub const MANAGED_TOOLS: &[Tool] = &[
         category: ToolCategory::Extension,
         maturity: Maturity::Experimental,
     },
+    Tool {
+        name: "bajan",
+        description: "Spec-driven knowledge-graph pipeline CLI — ingest sources, extract claims, human-gated adoption and entity review",
+        crate_name: "bajan",
+        formula_name: "bajan",
+        repo: "charly-vibes/bajan",
+        npm_package: None,
+        category: ToolCategory::Extension,
+        maturity: Maturity::Experimental,
+    },
 ];
 
 /// Find a tool by name (case-insensitive; matches the canonical name or

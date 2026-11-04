@@ -57,6 +57,7 @@ impl CompatibilityMatrix {
             ("bd", ">=0.0.0"),
             ("openspec", ">=0.0.0"),
             ("wild", ">=0.0.0"),
+            ("bajan", ">=0.1.0"),
         ]
         .into_iter()
         .map(|(k, v)| (k.to_string(), v.to_string()))

@@ -18,5 +18,6 @@ Intent → tool mapping for the charly-vibes ecosystem, generated from ddl's too
 | specodelic | `specodelic` | Markdown spec format (Intent/Constraints/Model/Properties) and the CLI that lints, compiles, verifies, and refactors it | extension | experimental |
 | funkalization | `funkalization` | Visual semantic design workspace — versioned design semantics, obligations, scoped evidence, loss-reporting adapters | extension | experimental |
 | wild | `wild` | Contract-based compatibility checking for software updates | extension | experimental |
+| bajan | `bajan` | Spec-driven knowledge-graph pipeline CLI — ingest sources, extract claims, human-gated adoption and entity review | extension | experimental |
 
-Install any of these with `ddl install <name>` — 13 tools total.
+Install any of these with `ddl install <name>` — 14 tools total.
