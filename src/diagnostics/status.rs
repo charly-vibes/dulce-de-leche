@@ -15,62 +15,68 @@ impl DdlStatusContributor {
     }
 }
 
+/// One status line for a managed tool: installed/on-PATH vs manifest-tracked.
+fn tool_status_item(tool: &crate::platform::Tool, ddl_dir: Option<&DdlDir>) -> StatusItem {
+    let installed = which(tool.name).is_some();
+    let version = installed
+        .then(|| get_tool_version(tool))
+        .flatten()
+        .unwrap_or_else(|| "?".to_string());
+
+    let config_ok = ddl_dir.is_some_and(|d| d.manifest.is_installed(tool.name));
+
+    let level = if !installed {
+        StatusLevel::Error
+    } else if !config_ok {
+        StatusLevel::Warning
+    } else {
+        StatusLevel::Healthy
+    };
+
+    let value = if installed {
+        format!("v{version} [{}/{}]", tool.category, tool.maturity)
+    } else {
+        format!("not installed [{}/{}]", tool.category, tool.maturity)
+    };
+
+    StatusItem {
+        label: tool.name.to_string(),
+        value,
+        level,
+    }
+}
+
+/// Aggregate summary over the tool items.
+fn section_summary(items: &[StatusItem]) -> String {
+    if items.iter().all(|i| i.level == StatusLevel::Healthy) {
+        return format!("{} tools healthy", items.len());
+    }
+    let errors = items
+        .iter()
+        .filter(|i| i.level == StatusLevel::Error)
+        .count();
+    let warnings = items
+        .iter()
+        .filter(|i| i.level == StatusLevel::Warning)
+        .count();
+    let healthy = items
+        .iter()
+        .filter(|i| i.level == StatusLevel::Healthy)
+        .count();
+    format!("{healthy} healthy, {warnings} warnings, {errors} errors")
+}
+
 impl StatusContributor for DdlStatusContributor {
     fn name(&self) -> &'static str {
         "ddl"
     }
     fn status(&self, _repo_root: &Path) -> std::result::Result<StatusSection, String> {
-        let mut items = Vec::new();
-        for tool in crate::platform::MANAGED_TOOLS {
-            let installed = which(tool.name).is_some();
-            let version = installed
-                .then(|| get_tool_version(tool))
-                .flatten()
-                .unwrap_or_else(|| "?".to_string());
+        let items: Vec<StatusItem> = crate::platform::MANAGED_TOOLS
+            .iter()
+            .map(|tool| tool_status_item(tool, self.ddl_dir.as_ref()))
+            .collect();
 
-            let config_ok = self
-                .ddl_dir
-                .as_ref()
-                .is_some_and(|d| d.manifest.is_installed(tool.name));
-
-            let level = if !installed {
-                StatusLevel::Error
-            } else if !config_ok {
-                StatusLevel::Warning
-            } else {
-                StatusLevel::Healthy
-            };
-
-            let value = if installed {
-                format!("v{version} [{}/{}]", tool.category, tool.maturity)
-            } else {
-                format!("not installed [{}/{}]", tool.category, tool.maturity)
-            };
-
-            items.push(StatusItem {
-                label: tool.name.to_string(),
-                value,
-                level,
-            });
-        }
-
-        let summary = if items.iter().all(|i| i.level == StatusLevel::Healthy) {
-            format!("{} tools healthy", items.len())
-        } else {
-            let errors = items
-                .iter()
-                .filter(|i| i.level == StatusLevel::Error)
-                .count();
-            let warnings = items
-                .iter()
-                .filter(|i| i.level == StatusLevel::Warning)
-                .count();
-            let healthy = items
-                .iter()
-                .filter(|i| i.level == StatusLevel::Healthy)
-                .count();
-            format!("{healthy} healthy, {warnings} warnings, {errors} errors")
-        };
+        let summary = section_summary(&items);
 
         let mut section = StatusSection::with_items("ddl", summary, items);
         if self.ddl_dir.is_none() {

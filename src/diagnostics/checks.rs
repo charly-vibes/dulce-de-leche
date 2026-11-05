@@ -149,18 +149,32 @@ impl DoctorCheck for ToolCheck {
         _repo_root: &Path,
     ) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
         let mut results = Vec::new();
-        let installed = which(self.tool.name).is_some();
+        if !self.check_installed(&mut results) {
+            return Ok(results);
+        }
+        self.check_manifest_tracking(&mut results);
+        self.run_nested_doctor(&mut results);
+        Ok(results)
+    }
+}
 
+impl ToolCheck {
+    /// Install check: a missing managed tool is an Error with the install
+    /// fix. Returns false when the tool is absent (nothing further to run).
+    fn check_installed(&self, results: &mut Vec<LintResult>) -> bool {
+        let installed = which(self.tool.name).is_some();
         if !installed {
             results.push(LintResult::with_fix(
                 format!("{} not installed", self.tool.name),
                 Severity::Error,
                 format!("ddl install {}", self.tool.name),
             ));
-            return Ok(results);
         }
+        installed
+    }
 
-        // Config check — untracked tools are a real warning
+    /// Config check — untracked tools are a real warning.
+    fn check_manifest_tracking(&self, results: &mut Vec<LintResult>) {
         if let Some(d) = &self.ddl_dir
             && !d.manifest.is_installed(self.tool.name)
         {
@@ -169,12 +183,15 @@ impl DoctorCheck for ToolCheck {
                 Severity::Warning,
             ));
         }
+    }
 
-        // Run doctor/diagnostic subcommand. DDL-6zn.4: version lines are NOT
-        // emitted as Advisory LintResults — genesis maps Advisory→Warn, which
-        // is why doctor used to report `pass: 0 warn: 37` while status said
-        // "10 healthy". Only real issues produce results; nested tool-doctor
-        // outcomes are classified structurally (never raw envelope text).
+    /// Run the tool's doctor/diagnostic subcommand. DDL-6zn.4: version lines
+    /// are NOT emitted as Advisory LintResults — genesis maps Advisory→Warn,
+    /// which is why doctor used to report `pass: 0 warn: 37` while status
+    /// said "10 healthy". Only real issues produce results; nested
+    /// tool-doctor outcomes are classified structurally (never raw
+    /// envelope text).
+    fn run_nested_doctor(&self, results: &mut Vec<LintResult>) {
         for cmd in &["doctor", "diagnostic", "check"] {
             let output = Command::new(self.tool.name).args([cmd, "--json"]).output();
             if let Ok(out) = output
@@ -185,11 +202,9 @@ impl DoctorCheck for ToolCheck {
                 let (severity, detail) =
                     crate::diagnostics::classify_nested_doctor(first_line, out.status.success());
                 results.push(LintResult::new(detail, severity));
-                return Ok(results);
+                return;
             }
         }
-
-        Ok(results)
     }
 }
 

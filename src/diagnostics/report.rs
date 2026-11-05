@@ -93,53 +93,60 @@ pub fn report_to_diagnostics(report: &genesis::doctor::DoctorReport) -> Diagnost
 /// - `ok:true` with N warnings → `(Warning, "doctor: ok (N warnings)")`
 /// - `ok:true` clean → `(Advisory, "doctor: ok")`
 /// - non-JSON legacy output → `(Advisory, "doctor: ran")`
-pub fn classify_nested_doctor(
+///
+/// Parse the nested doctor's JSON first line into (severity, warnings,
+/// is-json). A non-JSON line is Advisory; a JSON line with ok!=true is
+/// Error; ok with warnings is Warning; otherwise Advisory.
+fn classify_doctor_output(
     first_line: &str,
     exit_ok: bool,
-) -> (genesis::suite_linter::Severity, String) {
+) -> (genesis::suite_linter::Severity, usize, bool) {
     use genesis::suite_linter::Severity;
-    let sev = if !exit_ok {
-        Severity::Error
-    } else {
-        let parsed: std::result::Result<serde_json::Value, _> = serde_json::from_str(first_line);
-        match parsed {
-            Ok(v) => {
-                if v.get("ok").and_then(|o| o.as_bool()) != Some(true) {
-                    Severity::Error
-                } else if v
-                    .get("warnings")
-                    .and_then(|w| w.as_array())
-                    .is_some_and(|a| !a.is_empty())
-                {
-                    Severity::Warning
-                } else {
-                    Severity::Advisory
-                }
-            }
-            Err(_) => Severity::Advisory,
-        }
+    let parsed: std::result::Result<serde_json::Value, _> = serde_json::from_str(first_line);
+    let Ok(v) = parsed else {
+        let sev = if exit_ok {
+            Severity::Advisory
+        } else {
+            Severity::Error
+        };
+        return (sev, 0, false);
     };
-    let detail = match sev {
+    let warnings = v
+        .get("warnings")
+        .and_then(|w| w.as_array())
+        .map(|a| a.len())
+        .unwrap_or(0);
+    if v.get("ok").and_then(|o| o.as_bool()) != Some(true) {
+        (Severity::Error, warnings, true)
+    } else if warnings > 0 {
+        (Severity::Warning, warnings, true)
+    } else {
+        (Severity::Advisory, warnings, true)
+    }
+}
+
+/// Human detail line for the classified nested-doctor outcome.
+fn doctor_detail(sev: genesis::suite_linter::Severity, warnings: usize, is_json: bool) -> String {
+    use genesis::suite_linter::Severity;
+    match sev {
         Severity::Error => "doctor: failed".to_string(),
-        Severity::Warning => {
-            let warnings = serde_json::from_str::<serde_json::Value>(first_line)
-                .ok()
-                .and_then(|v| {
-                    v.get("warnings")
-                        .and_then(|w| w.as_array())
-                        .map(|a| a.len())
-                })
-                .unwrap_or(0);
-            format!("doctor: ok ({warnings} warnings)")
-        }
+        Severity::Warning => format!("doctor: ok ({warnings} warnings)"),
         Severity::Advisory => {
-            if serde_json::from_str::<serde_json::Value>(first_line).is_ok() {
+            if is_json {
                 "doctor: ok".to_string()
             } else {
                 "doctor: ran".to_string()
             }
         }
-    };
+    }
+}
+
+pub fn classify_nested_doctor(
+    first_line: &str,
+    exit_ok: bool,
+) -> (genesis::suite_linter::Severity, String) {
+    let (sev, warnings, is_json) = classify_doctor_output(first_line, exit_ok);
+    let detail = doctor_detail(sev, warnings, is_json);
     (sev, detail)
 }
 

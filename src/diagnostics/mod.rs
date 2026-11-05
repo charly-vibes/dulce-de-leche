@@ -77,15 +77,14 @@ pub fn which(cmd: &str) -> Option<std::path::PathBuf> {
 // ── DoctorCheck implementations ───────────────────────────────────────
 
 /// Check that the platform is supported.
-pub fn run_full_diagnostic(ddl_dir: Option<&DdlDir>, fix: bool) -> Result<Vec<String>> {
-    let runner = DoctorRunner::new(vec![
+/// Assemble the diagnostic runner: core checks, per-tool checks, and repo
+/// checks when invoked inside a git repository.
+fn build_diagnostic_runner(ddl_dir: Option<&DdlDir>) -> genesis::doctor::DoctorRunner {
+    let mut runner = DoctorRunner::new(vec![
         Box::new(PlatformCheck),
         Box::new(PrerequisitesCheck),
         Box::new(DdlDirCheck::new(ddl_dir.cloned())),
     ]);
-
-    // Add per-tool checks
-    let mut runner = runner;
     for tool in crate::platform::MANAGED_TOOLS {
         runner.register(Box::new(ToolCheck::new(tool, ddl_dir.cloned())));
     }
@@ -93,13 +92,11 @@ pub fn run_full_diagnostic(ddl_dir: Option<&DdlDir>, fix: bool) -> Result<Vec<St
     if find_git_root(Path::new(".")).is_some() {
         register_repo_checks(&mut runner);
     }
+    runner
+}
 
-    // Build report
-    let report = runner
-        .run(Path::new("."), fix)
-        .map_err(|e| crate::error::DdlError::Other(e.to_string()))?;
-
-    // Format as human-readable messages
+/// Format the doctor report as human-readable message lines.
+fn format_diagnostic_report(report: &genesis::doctor::DoctorReport) -> Vec<String> {
     let mut messages = Vec::new();
     messages.push("── Diagnostics ──".to_string());
     messages.push(format!(
@@ -119,14 +116,34 @@ pub fn run_full_diagnostic(ddl_dir: Option<&DdlDir>, fix: bool) -> Result<Vec<St
             messages.push(format!("     → Run: {fix_cmd}"));
         }
     }
+    messages
+}
 
-    // Apply DdlDir fixes when requested (create missing manifest, remove
-    // broken symlinks, etc.) and surface those messages.
-    if fix && let Some(d) = ddl_dir {
+/// Apply DdlDir fixes when requested (create missing manifest, remove broken
+/// symlinks, etc.) and surface those messages.
+fn apply_ddl_dir_fixes(ddl_dir: Option<&DdlDir>, messages: &mut Vec<String>) -> Result<()> {
+    if let Some(d) = ddl_dir.filter(|_| true) {
         let fix_messages = d.doctor(true)?;
         messages.push(String::new());
         messages.push("── Fixes ──".to_string());
         messages.extend(fix_messages);
+    }
+    Ok(())
+}
+
+pub fn run_full_diagnostic(ddl_dir: Option<&DdlDir>, fix: bool) -> Result<Vec<String>> {
+    let runner = build_diagnostic_runner(ddl_dir);
+
+    // Build report
+    let report = runner
+        .run(Path::new("."), fix)
+        .map_err(|e| crate::error::DdlError::Other(e.to_string()))?;
+
+    // Format as human-readable messages
+    let mut messages = format_diagnostic_report(&report);
+
+    if fix {
+        apply_ddl_dir_fixes(ddl_dir, &mut messages)?;
     }
 
     Ok(messages)
