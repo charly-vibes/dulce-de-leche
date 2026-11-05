@@ -35,13 +35,16 @@ const STEP_LABELS: [&str; 5] = ["pre-flight", "migrate", "scope", "delegate", "v
 
 #[test]
 fn test_setup_help_shows_description() {
-    Command::cargo_bin("ddl")
-        .unwrap()
-        .arg("setup")
-        .arg("--help")
+    let mut cmd = Command::cargo_bin("ddl").unwrap();
+    cmd.arg("setup").arg("--help");
+    let cmd_asserted = cmd
         .assert()
         .success()
         .stdout(predicate::str::contains("ddl setup").or(predicate::str::contains("setup")));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
 }
 
 /// RED-first regression test (DDL-g6w.8): `ddl setup --json` must run the
@@ -176,9 +179,12 @@ fn test_setup_tools_default_to_empty() {
 #[test]
 fn test_setup_human_mode_mentions_setup_and_steps() {
     let (mut cmd, _temp) = ddl_cmd();
-    cmd.args(["setup", "--human", "--no-install", "-y"])
+    let cmd_asserted = cmd
+        .args(["setup", "--human", "--no-install", "-y"])
         .assert()
         .stdout(predicate::str::contains("setup"))
         .stdout(predicate::str::contains("pre-flight"))
         .stdout(predicate::str::contains("verify"));
+    let stdout = String::from_utf8_lossy(&cmd_asserted.get_output().stdout);
+    assert!(stdout.contains("setup") && stdout.contains("pre-flight"));
 }

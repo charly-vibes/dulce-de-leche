@@ -18,9 +18,19 @@ fn tools_flag_accepts_crate_alias() {
     stub_tools(&mut cmd, &temp, &[("ah", "echo 'ah stub init'")]);
     cmd.args(["init", "--tools", "espectacular", "--no-install", "--human"]);
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .stdout(predicates::str::contains("Skipping installation"))
         .stderr(predicates::str::contains("ah initialized"));
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout)
+            .contains("Skipping installation"),
+        "output should contain expected text"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stderr).contains("ah initialized"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -37,10 +47,23 @@ fn tools_flag_tolerates_stray_commas() {
         "--human",
     ]);
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stderr(predicates::str::contains("dont initialized"))
         .stderr(predicates::str::contains("ah initialized"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stderr).contains("dont initialized"),
+        "output should contain expected text"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stderr).contains("ah initialized"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -48,9 +71,18 @@ fn tools_flag_unknown_name_fails_loudly() {
     let (mut cmd, _temp) = ddl_cmd();
     cmd.args(["init", "--tools", "ddd", "--no-install", "--human"]);
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert().failure();
-    cmd.assert()
+    let cmd_asserted = cmd.assert().failure();
+    assert!(
+        cmd_asserted.get_output().status.code() != Some(0),
+        "command should fail"
+    );
+    let cmd_asserted = cmd
+        .assert()
         .stderr(predicates::str::contains("Unknown tool 'ddd'"));
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stderr).contains("Unknown tool 'ddd'"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -58,9 +90,19 @@ fn tools_flag_self_name_names_the_repo() {
     let (mut cmd, _temp) = ddl_cmd();
     cmd.args(["init", "--tools", "dulce", "--no-install", "--human"]);
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert().failure();
-    cmd.assert()
+    let cmd_asserted = cmd.assert().failure();
+    assert!(
+        cmd_asserted.get_output().status.code() != Some(0),
+        "command should fail"
+    );
+    let cmd_asserted = cmd
+        .assert()
         .stderr(predicates::str::contains("charly-vibes/dulce-de-leche"));
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stderr)
+            .contains("charly-vibes/dulce-de-leche"),
+        "output should contain expected text"
+    );
 }
 
 /// DDL-6zn.8: init help examples are GENERATED from MANAGED_TOOLS —
@@ -278,11 +320,29 @@ fn failing_tool_init_fails_run_with_resume_summary() {
     cmd.args(["init", "--yes", "--no-install", "--human"]);
     cmd.timeout(CMD_TIMEOUT);
     // The old behavior swallowed init failures (exit 0, half-configured repo).
-    cmd.assert().failure();
-    cmd.assert()
+    let cmd_asserted = cmd.assert().failure();
+    assert!(
+        cmd_asserted.get_output().status.code() != Some(0),
+        "command should fail"
+    );
+    let cmd_asserted = cmd
+        .assert()
         .stdout(predicates::str::contains("Init cascade failed"))
         .stdout(predicates::str::contains("dont init"))
         .stdout(predicates::str::contains("ddl init --tools dont"));
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("Init cascade failed"),
+        "output should contain expected text"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("dont init"),
+        "output should contain expected text"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout)
+            .contains("ddl init --tools dont"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -322,7 +382,11 @@ fn green_cascade_exits_zero() {
     stub_tools(&mut cmd, &temp, &[("dont", "exit 0")]);
     cmd.args(["init", "--yes", "--no-install"]);
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert().success();
+    let cmd_asserted = cmd.assert().success();
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
 }
 
 #[test]
@@ -379,7 +443,11 @@ fn init_reaches_tool_only_at_ddl_bin_destination() {
     cmd.env("PATH", std::env::join_paths(&paths).unwrap());
     cmd.args(["init", "--yes", "--no-install", "--tools", "dont"]);
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert().success();
+    let cmd_asserted = cmd.assert().success();
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
 }
 
 #[test]

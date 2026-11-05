@@ -20,10 +20,23 @@ fn test_upgrade_help_has_tool_arg() {
     common::clean_git_env(&mut cmd);
     cmd.arg("upgrade").arg("--help");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("ddl upgrade"))
         .stdout(predicate::str::contains("TOOL"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("ddl upgrade"),
+        "output should contain expected text"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("TOOL"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -32,9 +45,18 @@ fn test_upgrade_help_shows_description() {
     common::clean_git_env(&mut cmd);
     cmd.arg("upgrade").arg("--help");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("Update all tools"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("Update all tools"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -43,9 +65,14 @@ fn test_upgrade_unknown_tool_is_fast() {
     cmd.arg("upgrade").arg("nonexistent-tool");
     cmd.timeout(CMD_TIMEOUT);
     // Unknown tool names are validated before any network/subprocess calls
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .failure()
         .stderr(predicate::str::contains("not found").or(predicate::str::contains("error")));
+    assert!(
+        cmd_asserted.get_output().status.code() != Some(0),
+        "command should fail"
+    );
 }
 
 #[test]
@@ -54,7 +81,11 @@ fn test_upgrade_unknown_flag_errors() {
     common::clean_git_env(&mut cmd);
     cmd.arg("upgrade").arg("--unknown-flag");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert().failure();
+    let cmd_asserted = cmd.assert().failure();
+    assert!(
+        cmd_asserted.get_output().status.code() != Some(0),
+        "command should fail"
+    );
 }
 
 /// Helper: create a temp directory and return the cmd.
@@ -483,8 +514,10 @@ fn download_budget_rejects_oversize_streamed_bytes() {
 
 #[test]
 fn download_budget_accepts_within_cap() {
-    enforce_download_budget(Some(1024), 1024).unwrap();
-    enforce_download_budget(None, 0).unwrap();
+    let a = enforce_download_budget(Some(1024), 1024);
+    let b = enforce_download_budget(None, 0);
+    assert!(a.is_ok(), "within-cap download must be accepted: {a:?}");
+    assert!(b.is_ok(), "zero-byte download must be accepted: {b:?}");
 }
 
 #[cfg(unix)]

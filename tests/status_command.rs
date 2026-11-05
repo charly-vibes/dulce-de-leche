@@ -40,9 +40,18 @@ fn test_status_help_shows_description() {
     common::clean_git_env(&mut cmd);
     cmd.arg("status").arg("--help");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("ddl status"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("ddl status"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -54,9 +63,18 @@ fn test_status_without_ddl_dir_shows_ecosystem_header() {
     cmd.current_dir(temp.path());
     cmd.arg("status").arg("--human");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("ecosystem status"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("ecosystem status"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -64,9 +82,18 @@ fn test_status_with_ddl_dir_shows_ecosystem_header() {
     let (mut cmd, _temp) = ddl_cmd();
     cmd.arg("status").arg("--human");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("ecosystem status"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("ecosystem status"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -74,10 +101,23 @@ fn test_status_json_output() {
     let (mut cmd, _temp) = ddl_cmd();
     cmd.arg("status").arg("--json");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("envelope_kind"))
         .stdout(predicate::str::contains("sections"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("envelope_kind"),
+        "output should contain expected text"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("sections"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -87,11 +127,28 @@ fn test_status_renders_category_per_tool() {
     let (mut cmd, _temp) = ddl_cmd();
     cmd.arg("status");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("[core/"))
         .stdout(predicate::str::contains("[recommended/"))
         .stdout(predicate::str::contains("[extension/"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("[core/"),
+        "output should contain expected text"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("[recommended/"),
+        "output should contain expected text"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("[extension/"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -100,5 +157,9 @@ fn test_status_unknown_flag_errors() {
     common::clean_git_env(&mut cmd);
     cmd.arg("status").arg("--unknown-flag");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert().failure();
+    let cmd_asserted = cmd.assert().failure();
+    assert!(
+        cmd_asserted.get_output().status.code() != Some(0),
+        "command should fail"
+    );
 }

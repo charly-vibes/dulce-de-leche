@@ -20,10 +20,23 @@ fn test_install_help_has_tool_arg() {
     common::clean_git_env(&mut cmd);
     cmd.arg("install").arg("--help");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("ddl install"))
         .stdout(predicate::str::contains("TOOL"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("ddl install"),
+        "output should contain expected text"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("TOOL"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -32,9 +45,19 @@ fn test_install_help_shows_description() {
     common::clean_git_env(&mut cmd);
     cmd.arg("install").arg("--help");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("Install a single tool"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout)
+            .contains("Install a single tool"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -43,11 +66,28 @@ fn test_install_help_lists_known_tools() {
     common::clean_git_env(&mut cmd);
     cmd.arg("install").arg("--help");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("wai"))
         .stdout(predicate::str::contains("dont"))
         .stdout(predicate::str::contains("ah"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("wai"),
+        "output should contain expected text"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("dont"),
+        "output should contain expected text"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("ah"),
+        "output should contain expected text"
+    );
 }
 
 // ===================== Error handling tests =====================
@@ -58,9 +98,14 @@ fn test_install_unknown_tool_fails() {
     common::clean_git_env(&mut cmd);
     cmd.arg("install").arg("nonexistent-tool");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .failure()
         .stderr(predicate::str::contains("not found").or(predicate::str::contains("Unknown")));
+    assert!(
+        cmd_asserted.get_output().status.code() != Some(0),
+        "command should fail"
+    );
 }
 
 /// DDL-6zn.8: help examples are GENERATED from MANAGED_TOOLS — every
@@ -92,9 +137,19 @@ fn test_install_self_name_gives_teachable_error() {
         common::clean_git_env(&mut cmd);
         cmd.arg("install").arg(name);
         cmd.timeout(CMD_TIMEOUT);
-        cmd.assert()
+        let cmd_asserted = cmd
+            .assert()
             .failure()
             .stderr(predicate::str::contains("charly-vibes/dulce-de-leche"));
+        assert!(
+            cmd_asserted.get_output().status.code() != Some(0),
+            "command should fail"
+        );
+        assert!(
+            String::from_utf8_lossy(&cmd_asserted.get_output().stderr)
+                .contains("charly-vibes/dulce-de-leche"),
+            "output should contain expected text"
+        );
     }
 }
 
@@ -105,9 +160,18 @@ fn test_install_unknown_tool_suggests_closest() {
     // "wai" is a known tool — "waii" should suggest "wai"
     cmd.arg("install").arg("waii");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .failure()
         .stderr(predicate::str::contains("Did you mean"));
+    assert!(
+        cmd_asserted.get_output().status.code() != Some(0),
+        "command should fail"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stderr).contains("Did you mean"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -116,9 +180,14 @@ fn test_install_no_args_fails() {
     common::clean_git_env(&mut cmd);
     cmd.arg("install");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .failure()
         .stderr(predicate::str::contains("required").or(predicate::str::contains("error")));
+    assert!(
+        cmd_asserted.get_output().status.code() != Some(0),
+        "command should fail"
+    );
 }
 
 #[test]
@@ -127,7 +196,11 @@ fn test_install_unknown_flag_errors() {
     common::clean_git_env(&mut cmd);
     cmd.arg("install").arg("wai").arg("--unknown-flag");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert().failure();
+    let cmd_asserted = cmd.assert().failure();
+    assert!(
+        cmd_asserted.get_output().status.code() != Some(0),
+        "command should fail"
+    );
 }
 
 // ===================== Fast-path detection tests =====================
@@ -162,9 +235,18 @@ fn test_install_on_path_returns_success() {
     let (mut cmd, _temp) = ddl_cmd();
     cmd.arg("install").arg("git");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .failure()
         .stderr(predicate::str::contains("Unknown tool"));
+    assert!(
+        cmd_asserted.get_output().status.code() != Some(0),
+        "command should fail"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stderr).contains("Unknown tool"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -456,8 +538,13 @@ fn test_install_json_parses() {
     // yet --json must still emit a valid envelope.
     // (A known-but-missing tool like `wai` would attempt a real install.)
     cmd.arg("install").arg("nonexistent-tool").arg("--json");
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .stderr(predicate::str::contains("envelope_kind"));
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stderr).contains("envelope_kind"),
+        "output should contain expected text"
+    );
 }
 
 // ===================== Argument interaction tests =====================
@@ -469,7 +556,16 @@ fn test_install_global_verbose_flag_works() {
     common::clean_git_env(&mut cmd);
     cmd.arg("--verbose").arg("install").arg("--help");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("ddl install"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("ddl install"),
+        "output should contain expected text"
+    );
 }

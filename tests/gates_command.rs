@@ -49,9 +49,18 @@ fn help_advertises_gates_flag() {
     let (mut cmd, _temp) = ddl_cmd();
     cmd.arg("init").arg("--help");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicates::str::contains("--gates"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("--gates"),
+        "output should contain expected text"
+    );
 }
 
 #[test]

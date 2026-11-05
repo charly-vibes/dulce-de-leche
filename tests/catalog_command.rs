@@ -18,9 +18,18 @@ fn test_catalog_help_shows_description() {
     common::clean_git_env(&mut cmd);
     cmd.arg("catalog").arg("--help");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("ddl catalog"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("ddl catalog"),
+        "output should contain expected text"
+    );
 }
 
 #[test]

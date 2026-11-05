@@ -17,9 +17,18 @@ fn test_version_help_shows_description() {
     common::clean_git_env(&mut cmd);
     cmd.arg("version").arg("--help");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("ddl version"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("ddl version"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -28,9 +37,18 @@ fn test_version_prints_ddl_version() {
     common::clean_git_env(&mut cmd);
     cmd.arg("version").arg("--human");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("ddl:"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("ddl:"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -54,10 +72,23 @@ fn test_version_json_output() {
     common::clean_git_env(&mut cmd);
     cmd.arg("version").arg("--json");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("envelope_kind"))
         .stdout(predicate::str::contains("version"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("envelope_kind"),
+        "output should contain expected text"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("version"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -66,7 +97,11 @@ fn test_version_unknown_flag_errors() {
     common::clean_git_env(&mut cmd);
     cmd.arg("version").arg("--unknown-flag");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert().failure();
+    let cmd_asserted = cmd.assert().failure();
+    assert!(
+        cmd_asserted.get_output().status.code() != Some(0),
+        "command should fail"
+    );
 }
 
 #[test]
@@ -90,7 +125,16 @@ fn test_version_global_verbose_flag_works() {
     common::clean_git_env(&mut cmd);
     cmd.arg("--verbose").arg("version").arg("--help");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("ddl version"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("ddl version"),
+        "output should contain expected text"
+    );
 }

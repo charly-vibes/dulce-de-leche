@@ -38,9 +38,18 @@ fn test_scope_help_shows_description() {
     common::clean_git_env(&mut cmd);
     cmd.arg("scope").arg("--help");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("ddl scope"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("ddl scope"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -48,9 +57,13 @@ fn test_scope_with_ddl_dir_shows_path() {
     let (mut cmd, temp) = ddl_cmd();
     cmd.arg("scope").arg("--human");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert().success().stdout(predicate::str::contains(
+    let cmd_asserted = cmd.assert().success().stdout(predicate::str::contains(
         temp.path().to_string_lossy().as_ref(),
     ));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
 }
 
 #[test]
@@ -61,9 +74,19 @@ fn test_scope_without_ddl_dir_shows_message() {
     cmd.current_dir(temp.path());
     cmd.arg("scope").arg("--human");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("No .ddl/ directory found"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout)
+            .contains("No .ddl/ directory found"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -71,10 +94,23 @@ fn test_scope_json_with_ddl_dir() {
     let (mut cmd, _temp) = ddl_cmd();
     cmd.arg("scope").arg("--json");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("envelope_kind"))
         .stdout(predicate::str::contains("ddl_dir"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("envelope_kind"),
+        "output should contain expected text"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("ddl_dir"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -85,10 +121,23 @@ fn test_scope_json_without_ddl_dir() {
     cmd.current_dir(temp.path());
     cmd.arg("scope").arg("--json");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("envelope_kind"))
         .stdout(predicate::str::contains("ddl_dir"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("envelope_kind"),
+        "output should contain expected text"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("ddl_dir"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -97,5 +146,9 @@ fn test_scope_unknown_flag_errors() {
     common::clean_git_env(&mut cmd);
     cmd.arg("scope").arg("--unknown-flag");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert().failure();
+    let cmd_asserted = cmd.assert().failure();
+    assert!(
+        cmd_asserted.get_output().status.code() != Some(0),
+        "command should fail"
+    );
 }

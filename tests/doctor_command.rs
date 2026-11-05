@@ -128,11 +128,16 @@ fn test_doctor_fix_reports_fix_messages() {
     cmd.current_dir(temp.path());
     cmd.arg("doctor").arg("--fix");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
-        .success()
-        .stdout(predicates::prelude::predicate::str::contains(
-            "manifest.json created",
-        ));
+    let cmd_asserted =
+        cmd.assert()
+            .success()
+            .stdout(predicates::prelude::predicate::str::contains(
+                "manifest.json created",
+            ));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
 }
 
 // ===================== DDL-1n7: diagnostics listing =====================
@@ -141,28 +146,59 @@ fn test_doctor_fix_reports_fix_messages() {
 fn test_doctor_lists_diagnostics_header() {
     let (mut cmd, _temp) = ddl_cmd();
     cmd.arg("doctor").arg("--human");
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("Diagnostics"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("Diagnostics"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
 fn test_doctor_shows_summary_line() {
     let (mut cmd, _temp) = ddl_cmd();
     cmd.arg("doctor").arg("--human");
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("pass:"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("pass:"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
 fn test_doctor_json_output() {
     let (mut cmd, _temp) = ddl_cmd();
     cmd.arg("doctor").arg("--json");
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("envelope_kind"))
         .stdout(predicate::str::contains("doctor"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("envelope_kind"),
+        "output should contain expected text"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("doctor"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -174,7 +210,11 @@ fn test_doctor_works_without_ddl_dir() {
     cmd.current_dir(temp.path());
     cmd.arg("doctor").arg("--human");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert().success();
+    let cmd_asserted = cmd.assert().success();
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
 }
 
 // ===================== DDL-6zn.5: repo-aware doctor =====================

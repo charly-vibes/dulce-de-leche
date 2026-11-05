@@ -81,10 +81,23 @@ fn test_init_help_has_yes_flag() {
     let mut cmd = Command::cargo_bin("ddl").unwrap();
     common::clean_git_env(&mut cmd);
     cmd.arg("init").arg("--help");
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("--yes"))
         .stdout(predicate::str::contains("--tools"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("--yes"),
+        "output should contain expected text"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("--tools"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -92,9 +105,18 @@ fn test_init_help_has_no_install_flag() {
     let mut cmd = Command::cargo_bin("ddl").unwrap();
     common::clean_git_env(&mut cmd);
     cmd.arg("init").arg("--help");
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("--no-install"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("--no-install"),
+        "output should contain expected text"
+    );
 }
 
 // ===================== Non-interactive mode tests =====================
@@ -107,10 +129,23 @@ fn test_init_yes_prints_banner() {
         .arg("--human")
         .arg("--no-install");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("dulce-de-leche"))
         .stdout(predicate::str::contains("bundle orchestrator"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("dulce-de-leche"),
+        "output should contain expected text"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("bundle orchestrator"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -121,9 +156,18 @@ fn test_init_yes_detects_platform() {
         .arg("--human")
         .arg("--no-install");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("Detected platform:"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("Detected platform:"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -167,9 +211,19 @@ fn test_init_yes_with_no_install_skips_install() {
         .arg("--yes")
         .arg("--human")
         .arg("--no-install");
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("Skipping installation"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout)
+            .contains("Skipping installation"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -200,9 +254,19 @@ fn test_init_tools_parses_flag() {
         .arg("--no-install");
     cmd.timeout(CMD_TIMEOUT);
     // Should parse correctly and succeed with --no-install
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("Skipping installation"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout)
+            .contains("Skipping installation"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -230,7 +294,11 @@ fn test_init_yes_in_initialized_dir_skips_installed_tools() {
         .arg("--human")
         .arg("--no-install");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert().success();
+    let cmd_asserted = cmd.assert().success();
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
 
     // Second run — should detect already-initialized.
     // The stub must be applied here too (not just the first cmd): without
@@ -245,9 +313,18 @@ fn test_init_yes_in_initialized_dir_skips_installed_tools() {
         .arg("--human")
         .arg("--no-install");
     cmd2.timeout(CMD_TIMEOUT);
-    cmd2.assert()
+    let cmd2_asserted = cmd2
+        .assert()
         .success()
         .stdout(predicate::str::contains(".ddl/"));
+    assert!(
+        cmd2_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd2_asserted.get_output().stdout).contains(".ddl/"),
+        "output should contain expected text"
+    );
 }
 
 #[test]
@@ -280,10 +357,23 @@ fn test_init_yes_retries_failed_tools() {
 fn test_init_json_output() {
     let (mut cmd, _temp) = ddl_cmd();
     cmd.arg("init").arg("--json").arg("--no-install");
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("dulce-de-leche"))
         .stdout(predicate::str::contains("envelope_kind"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("dulce-de-leche"),
+        "output should contain expected text"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("envelope_kind"),
+        "output should contain expected text"
+    );
 }
 
 // ===================== Error handling tests =====================
@@ -292,7 +382,11 @@ fn test_init_json_output() {
 fn test_init_unknown_tool_flag_errors() {
     let (mut cmd, _temp) = ddl_cmd();
     cmd.arg("init").arg("--unknown-flag");
-    cmd.assert().failure();
+    let cmd_asserted = cmd.assert().failure();
+    assert!(
+        cmd_asserted.get_output().status.code() != Some(0),
+        "command should fail"
+    );
 }
 
 #[test]
@@ -304,7 +398,16 @@ fn test_init_global_yes_flag_works() {
         .arg("--human")
         .arg("--no-install");
     cmd.timeout(CMD_TIMEOUT);
-    cmd.assert()
+    let cmd_asserted = cmd
+        .assert()
         .success()
         .stdout(predicate::str::contains("dulce-de-leche"));
+    assert!(
+        cmd_asserted.get_output().status.success(),
+        "command should exit successfully"
+    );
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stdout).contains("dulce-de-leche"),
+        "output should contain expected text"
+    );
 }

@@ -189,6 +189,7 @@ fn test_migrate_undo_directory_restores_as_directory() {
 #[serial]
 fn test_migrated_tools_detects_relative_symlinks() {
     let (tmp, ddl_dir) = setup_ddl_dir();
+    let mut detected = false;
 
     // Change to the temp dir so that CWD-relative LEGACY_CONFIGS paths resolve
     with_cwd(tmp.path(), || {
@@ -207,17 +208,19 @@ fn test_migrated_tools_detects_relative_symlinks() {
         // migrated_tools should detect the symlink regardless of relative/absolute
         let migrated = dulce_de_leche::dot_ddl::migrated_tools(&ddl_dir2);
         let wai = migrated.iter().find(|(name, _)| name == "wai");
-        assert!(
-            wai.is_some(),
-            "migrated_tools should detect wai even with relative symlink target"
-        );
+        detected = wai.is_some();
     });
+    assert!(
+        detected,
+        "migrated_tools should detect wai even with relative symlink target"
+    );
 }
 
 #[test]
 #[serial]
 fn test_migrated_tools_detects_single_file_symlinks() {
     let (tmp, ddl_dir) = setup_ddl_dir();
+    let mut detected = false;
 
     with_cwd(tmp.path(), || {
         // Create a single-file legacy config (relative: ".pretender.toml")
@@ -235,11 +238,12 @@ fn test_migrated_tools_detects_single_file_symlinks() {
         // migrated_tools should detect the single-file symlink
         let migrated = dulce_de_leche::dot_ddl::migrated_tools(&ddl_dir2);
         let pretender = migrated.iter().find(|(name, _)| name == "pretender");
-        assert!(
-            pretender.is_some(),
-            "migrated_tools should detect single-file config symlink"
-        );
+        detected = pretender.is_some();
     });
+    assert!(
+        detected,
+        "migrated_tools should detect single-file config symlink"
+    );
 }
 
 #[test]
@@ -386,6 +390,7 @@ fn test_migrate_idempotent_single_file() {
 #[serial]
 fn test_unmigrate_all_preserves_state_json_verbatim() {
     let (tmp, ddl_dir) = setup_ddl_dir();
+    let mut restored_len = 0usize;
 
     // migrated_tools() resolves LEGACY_CONFIGS relative to CWD
     with_cwd(tmp.path(), || {
@@ -408,8 +413,7 @@ fn test_unmigrate_all_preserves_state_json_verbatim() {
 
         // Run the bulk undo
         let restored = ddl_dir.unmigrate_all().expect("unmigrate_all");
-
-        assert_eq!(restored.len(), 2, "both tools should be restored");
+        restored_len = restored.len();
         assert!(restored.contains(&("wai".to_string(), wai_path.clone())));
         assert!(restored.contains(&("pretender".to_string(), pretender_path.clone())));
 
@@ -428,12 +432,14 @@ fn test_unmigrate_all_preserves_state_json_verbatim() {
         assert!(wai_path.is_dir(), "wai legacy dir restored");
         assert!(pretender_path.is_file(), "pretender legacy file restored");
     });
+    assert_eq!(restored_len, 2, "both tools should be restored");
 }
 
 #[test]
 #[serial]
 fn test_unmigrate_all_skips_state_json_when_restoring() {
     let (tmp, ddl_dir) = setup_ddl_dir();
+    let mut restored_len = 0usize;
 
     with_cwd(tmp.path(), || {
         // Even when the legacy dir contains state.json originally (it was symlinked
@@ -454,7 +460,7 @@ fn test_unmigrate_all_skips_state_json_when_restoring() {
         std::fs::write(&state_path, updated).expect("update state.json in .ddl side");
 
         let restored = ddl_dir.unmigrate_all().expect("unmigrate_all");
-        assert_eq!(restored.len(), 1);
+        restored_len = restored.len();
 
         // The .ddl side must still hold its copy — unmigrate_all only restores
         // the symlink, it does not touch the backing store.
@@ -474,4 +480,5 @@ fn test_unmigrate_all_skips_state_json_when_restoring() {
             "legacy path sees updated state.json"
         );
     });
+    assert_eq!(restored_len, 1);
 }
