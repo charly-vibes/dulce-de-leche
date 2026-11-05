@@ -186,31 +186,24 @@ pub(crate) fn execute_upgrade(
 
 /// Install a tool via binary download from GitHub releases.
 /// Returns the download's verification status (DDL-yts) on success.
-pub(crate) fn install_binary(
+/// Map the (os, arch) pair to the release asset target slug.
+fn binary_asset_target(platform: &Platform) -> Result<&'static str> {
+    match (platform.os.as_str(), platform.arch.as_str()) {
+        ("darwin", "arm64") => Ok("darwin_arm64"),
+        ("darwin", "amd64") => Ok("darwin_amd64"),
+        ("linux", "arm64") => Ok("linux_arm64"),
+        ("linux", "amd64") => Ok("linux_amd64"),
+        ("windows", "amd64") => Ok("windows_amd64"),
+        _ => Err(DdlError::UnsupportedPlatform(platform.as_str())),
+    }
+}
+
+/// Fetch the latest release metadata from GitHub, mapping 404 to the
+/// NoReleaseBinary fallback signal and 403 to a rate-limit remedy message.
+fn fetch_latest_release(
+    client: &reqwest::blocking::Client,
     tool: &Tool,
-    platform: &Platform,
-    verbose: bool,
-) -> Result<VerificationStatus> {
-    let binary_name = if platform.os == Os::Windows {
-        std::path::PathBuf::from(tool.name)
-            .with_extension("exe")
-            .to_string_lossy()
-            .to_string()
-    } else {
-        tool.name.to_string()
-    };
-
-    let target = match (platform.os.as_str(), platform.arch.as_str()) {
-        ("darwin", "arm64") => "darwin_arm64",
-        ("darwin", "amd64") => "darwin_amd64",
-        ("linux", "arm64") => "linux_arm64",
-        ("linux", "amd64") => "linux_amd64",
-        ("windows", "amd64") => "windows_amd64",
-        _ => return Err(DdlError::UnsupportedPlatform(platform.as_str())),
-    };
-
-    let client = github_client()?;
-
+) -> Result<serde_json::Value> {
     let releases_url = format!("https://api.github.com/repos/{}/releases/latest", tool.repo);
     let resp = client
         .get(&releases_url)
@@ -237,13 +230,17 @@ pub(crate) fn install_binary(
         )));
     }
 
-    let release: serde_json::Value = resp.json().map_err(DdlError::Network)?;
+    resp.json().map_err(DdlError::Network)
+}
 
-    let tag = release["tag_name"]
-        .as_str()
-        .ok_or_else(|| DdlError::InstallFailed("No tag_name in release".to_string()))?;
-    let version = tag.trim_start_matches('v');
-
+/// Build the archive download URL for the platform target.
+fn binary_download_url(
+    tool: &Tool,
+    tag: &str,
+    version: &str,
+    target: &str,
+    platform: &Platform,
+) -> String {
     let ext = if platform.os == Os::Windows {
         "zip"
     } else {
@@ -253,50 +250,37 @@ pub(crate) fn install_binary(
     // `beads_<ver>_<target>` archives containing the `bd` binary).
     let asset_prefix = tool.binary_asset_prefix();
     let archive_name = format!("{asset_prefix}_{version}_{target}");
-    let download_url = format!(
+    format!(
         "https://github.com/{}/releases/download/{}/{}.{}",
         tool.repo, tag, archive_name, ext
-    );
+    )
+}
 
-    verbose_print(
-        verbose,
-        &format!("downloading {}/releases/latest for {}", tool.repo, target),
-    );
-
-    // Determine install destination
-    let dest_dir = if platform.os == Os::Windows {
+/// Resolve the install destination directory for binary installs.
+fn binary_install_dest(platform: &Platform) -> Result<PathBuf> {
+    if platform.os == Os::Windows {
         let local_app_data = std::env::var("LOCALAPPDATA").map_err(|_| {
             DdlError::PrerequisiteMissing(
                 "%LOCALAPPDATA% not set. On Windows, this should point to AppData\\Local."
                     .to_string(),
             )
         })?;
-        binary_dest_dir(
+        Ok(binary_dest_dir(
             &platform.os,
             None,
             Some(PathBuf::from(local_app_data).as_path()),
-        )
+        ))
     } else {
-        binary_dest_dir(&platform.os, dirs::home_dir().as_deref(), None)
-    };
+        Ok(binary_dest_dir(
+            &platform.os,
+            dirs::home_dir().as_deref(),
+            None,
+        ))
+    }
+}
 
-    std::fs::create_dir_all(&dest_dir).map_err(DdlError::Io)?;
-
-    let dest_path = dest_dir.join(&binary_name);
-
-    // Verification runs BEFORE any destination mutation: the archive bytes are
-    // only extracted once the checksum policy has accepted them (DDL-yts).
-    // DDL-1z1: budgets are exposed in diagnostics so the limits a download,
-    // extraction or child call is held to are visible, not implicit.
-    verbose_print(
-        verbose,
-        &format!(
-            "budgets: download ≤ {MAX_RELEASE_ASSET_BYTES} bytes; extracted binary ≤ {MAX_BINARY_BYTES} bytes; child runtime ≤ {} s; captured output ≤ {MAX_CHILD_OUTPUT_BYTES} bytes",
-            child_deadline().as_secs()
-        ),
-    );
-    let archive_bytes = fetch_release_asset(&download_url, tool.name)?;
-    let status = verify_download(&download_url, &archive_bytes, tool, verbose)?;
+/// Print the verification outcome banner and record it for JSON events.
+fn report_verification_status(status: VerificationStatus, tool: &Tool, url: &str) {
     match status {
         VerificationStatus::Verified => {
             eprintln!("  ✓ {} sha256 verified against release checksum", tool.name)
@@ -307,11 +291,65 @@ pub(crate) fn install_binary(
         ),
         VerificationStatus::UnverifiedAuthorized => eprintln!(
             "  ⚠ {} installed WITHOUT checksum verification ({}): explicitly authorized via DDL_ALLOW_UNVERIFIED_RELEASE",
-            tool.name, download_url
+            tool.name, url
         ),
         VerificationStatus::Unverified => {}
     }
     crate::output::record_install_verification(tool.name, status.label());
+}
+
+/// Print the resource budgets so the limits a download, extraction or child
+/// call is held to are visible, not implicit (DDL-1z1).
+fn print_budgets(verbose: bool) {
+    verbose_print(
+        verbose,
+        &format!(
+            "budgets: download ≤ {MAX_RELEASE_ASSET_BYTES} bytes; extracted binary ≤ {MAX_BINARY_BYTES} bytes; child runtime ≤ {} s; captured output ≤ {MAX_CHILD_OUTPUT_BYTES} bytes",
+            child_deadline().as_secs()
+        ),
+    );
+}
+
+pub(crate) fn install_binary(
+    tool: &Tool,
+    platform: &Platform,
+    verbose: bool,
+) -> Result<VerificationStatus> {
+    let binary_name = if platform.os == Os::Windows {
+        std::path::PathBuf::from(tool.name)
+            .with_extension("exe")
+            .to_string_lossy()
+            .to_string()
+    } else {
+        tool.name.to_string()
+    };
+
+    let target = binary_asset_target(platform)?;
+    let client = github_client()?;
+    let release = fetch_latest_release(&client, tool)?;
+
+    let tag = release["tag_name"]
+        .as_str()
+        .ok_or_else(|| DdlError::InstallFailed("No tag_name in release".to_string()))?;
+    let version = tag.trim_start_matches('v');
+    let download_url = binary_download_url(tool, tag, version, target, platform);
+
+    verbose_print(
+        verbose,
+        &format!("downloading {}/releases/latest for {}", tool.repo, target),
+    );
+
+    // Determine install destination
+    let dest_dir = binary_install_dest(platform)?;
+    std::fs::create_dir_all(&dest_dir).map_err(DdlError::Io)?;
+    let dest_path = dest_dir.join(&binary_name);
+
+    // Verification runs BEFORE any destination mutation: the archive bytes are
+    // only extracted once the checksum policy has accepted them (DDL-yts).
+    print_budgets(verbose);
+    let archive_bytes = fetch_release_asset(&download_url, tool.name)?;
+    let status = verify_download(&download_url, &archive_bytes, tool, verbose)?;
+    report_verification_status(status, tool, &download_url);
 
     stage_and_replace_binary(&archive_bytes, &dest_path, tool.name, &download_url)?;
 

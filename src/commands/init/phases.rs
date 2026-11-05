@@ -72,6 +72,44 @@ pub(crate) fn abort_json(json_guard: &mut Option<output::JsonCollectorGuard>) {
 /// excluded — it is force-initialized later). Fails when the install run is
 /// a total or partial failure.
 #[allow(clippy::too_many_arguments)]
+/// Run the installer for the selected tools and record results; returns
+/// (success_count, fail_count, init-cascade candidates).
+fn run_installs(
+    ddl_dir: &mut DdlDir,
+    platform: &crate::platform::Platform,
+    selected: &[String],
+    explicit_tools: bool,
+    args: &crate::cli::Args,
+) -> Result<(u32, u32, Vec<String>)> {
+    if !args.is_json() {
+        let failed = ddl_dir.failed_tools();
+        if !failed.is_empty() {
+            println!();
+            println!("Retrying {} previously failed tool(s)...", failed.len());
+        }
+        println!("Installing {} tools...", selected.len());
+        println!();
+    }
+
+    let verbose = args.verbose_quiet.raw_count() >= 1;
+    let results = if explicit_tools {
+        crate::installer::install_selected_tools(selected, platform, &mut ddl_dir.manifest, verbose)
+    } else {
+        crate::installer::install_all_tools(platform, &mut ddl_dir.manifest, verbose)
+    };
+
+    let (success_count, fail_count) = record_install_results(ddl_dir, &results, args.is_json())?;
+
+    // Tools whose init cascade should run: successfully installed tools
+    // (wai is skipped — it is force-initialized later).
+    let candidates: Vec<String> = results
+        .iter()
+        .filter(|r| r.success && r.tool != "wai")
+        .map(|r| r.tool.to_string())
+        .collect();
+    Ok((success_count, fail_count, candidates))
+}
+
 pub fn install_phase(
     ddl_dir: &mut DdlDir,
     platform: &crate::platform::Platform,
@@ -94,31 +132,8 @@ pub fn install_phase(
         return Ok(Vec::new());
     }
 
-    if !args.is_json() {
-        let failed = ddl_dir.failed_tools();
-        if !failed.is_empty() {
-            println!();
-            println!("Retrying {} previously failed tool(s)...", failed.len());
-        }
-        println!("Installing {} tools...", selected.len());
-        println!();
-    }
-
-    let verbose = args.verbose_quiet.raw_count() >= 1;
-    let results = if explicit_tools {
-        crate::installer::install_selected_tools(selected, platform, &mut ddl_dir.manifest, verbose)
-    } else {
-        crate::installer::install_all_tools(platform, &mut ddl_dir.manifest, verbose)
-    };
-
-    let (success_count, fail_count) = record_install_results(ddl_dir, &results, args.is_json())?;
-
-    // Tools whose init cascade should run: successfully installed tools.
-    let candidates: Vec<String> = results
-        .iter()
-        .filter(|r| r.success && r.tool != "wai")
-        .map(|r| r.tool.to_string())
-        .collect();
+    let (success_count, fail_count, candidates) =
+        run_installs(ddl_dir, platform, selected, explicit_tools, args)?;
 
     if !args.is_json() && !no_install {
         print_install_summary(success_count, fail_count);

@@ -31,10 +31,9 @@ fn retryable_tools(ddl_dir: &DdlDir) -> Vec<&'static str> {
 
 /// Interactive multiselect over missing/failed tools (or all on first run).
 /// Returns `Cancelled` when the user declines the confirmation.
-fn interactive_select(ddl_dir: &DdlDir, _args: &crate::cli::Args) -> Result<Selection> {
-    let already_initialized = !ddl_dir.manifest.tools.is_empty();
-
-    let items: Vec<(&str, &str, &str)> = if already_initialized {
+/// Multiselect items: missing/failed tools on re-runs, all on first run.
+fn selection_items(ddl_dir: &DdlDir) -> Vec<(&'static str, &'static str, &'static str)> {
+    if !ddl_dir.manifest.tools.is_empty() {
         retryable_tools(ddl_dir)
             .into_iter()
             .map(|name| {
@@ -47,7 +46,11 @@ fn interactive_select(ddl_dir: &DdlDir, _args: &crate::cli::Args) -> Result<Sele
             .iter()
             .map(|t| (t.name, t.name, t.description))
             .collect()
-    };
+    }
+}
+
+fn interactive_select(ddl_dir: &DdlDir, _args: &crate::cli::Args) -> Result<Selection> {
+    let items = selection_items(ddl_dir);
 
     if items.is_empty() {
         // Everything is installed — fall through with an empty selection

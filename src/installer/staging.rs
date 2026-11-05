@@ -180,6 +180,57 @@ fn extract_tar_gz_staged(
 /// Extract only the expected regular-file binary entry from a zip into
 /// `staging`. Returns the staged file path. Symlinks, directories, oversized
 /// and traversal entries are rejected before any destination mutation.
+/// Reject non-regular zip entries (symlinks, directories) — only the
+/// expected regular binary is ever extracted.
+fn validate_zip_entry(
+    entry: &zip::read::ZipFile<'_, std::io::Cursor<std::vec::Vec<u8>>>,
+    name: &str,
+    tool_name: &str,
+    url: &str,
+) -> Result<u64> {
+    if entry.is_symlink() || entry.is_dir() {
+        return Err(DdlError::InstallFailed(format!(
+            "archive entry '{name}' for binary '{tool_name}' is not a regular file — rejected from {url}"
+        )));
+    }
+    let declared = entry.size();
+    if declared > MAX_BINARY_BYTES {
+        return Err(DdlError::InstallFailed(format!(
+            "archive entry '{name}' declares {declared} bytes, exceeding the {MAX_BINARY_BYTES}-byte binary limit — rejected from {url}"
+        )));
+    }
+    Ok(declared)
+}
+
+/// Copy one validated zip entry into staging (traversal-safe via
+/// enclosed_name), size-bounded, synced before the swap.
+fn stage_zip_entry(
+    entry: &mut zip::read::ZipFile<'_, std::io::Cursor<std::vec::Vec<u8>>>,
+    name: &str,
+    declared: u64,
+    staging: &Path,
+    url: &str,
+) -> Result<PathBuf> {
+    // enclosed_name() rejects traversal ("../", absolute paths).
+    let staged_path = staging.join(entry.enclosed_name().ok_or_else(|| {
+        DdlError::InstallFailed(format!(
+            "archive entry '{name}' attempts path traversal — rejected from {url}"
+        ))
+    })?);
+    if let Some(p) = staged_path.parent() {
+        std::fs::create_dir_all(p).map_err(DdlError::Io)?;
+    }
+    let mut out = std::fs::File::create(&staged_path).map_err(DdlError::Io)?;
+    let copied = std::io::copy(entry, &mut out).map_err(DdlError::Io)?;
+    if copied != declared {
+        return Err(DdlError::InstallFailed(format!(
+            "interrupted copy: archive entry '{name}' declared {declared} bytes but only {copied} could be read — {url}"
+        )));
+    }
+    out.sync_all().map_err(DdlError::Io)?;
+    Ok(staged_path)
+}
+
 pub(crate) fn extract_zip_staged(
     bytes: &[u8],
     staging: &Path,
@@ -205,38 +256,8 @@ pub(crate) fn extract_zip_staged(
         if base != tool_name {
             continue;
         }
-        // Only the expected regular binary is ever extracted.
-        if entry.is_symlink() || entry.is_dir() {
-            return Err(DdlError::InstallFailed(format!(
-                "archive entry '{name}' for binary '{tool_name}' is not a regular file — rejected from {url}"
-            )));
-        }
-        let declared = entry.size();
-        if declared > MAX_BINARY_BYTES {
-            return Err(DdlError::InstallFailed(format!(
-                "archive entry '{name}' declares {declared} bytes, exceeding the {MAX_BINARY_BYTES}-byte binary limit — rejected from {url}"
-            )));
-        }
-        // enclosed_name() rejects traversal ("../", absolute paths).
-        let staged_path = staging.join(entry.enclosed_name().ok_or_else(|| {
-            DdlError::InstallFailed(format!(
-                "archive entry '{name}' attempts path traversal — rejected from {url}"
-            ))
-        })?);
-        if let Some(p) = staged_path.parent() {
-            std::fs::create_dir_all(p).map_err(DdlError::Io)?;
-        }
-        {
-            let mut out = std::fs::File::create(&staged_path).map_err(DdlError::Io)?;
-            let copied = std::io::copy(&mut entry, &mut out).map_err(DdlError::Io)?;
-            if copied != declared {
-                return Err(DdlError::InstallFailed(format!(
-                    "interrupted copy: archive entry '{name}' declared {declared} bytes but only {copied} could be read — {url}"
-                )));
-            }
-            out.sync_all().map_err(DdlError::Io)?;
-        }
-        return Ok(staged_path);
+        let declared = validate_zip_entry(&entry, &name, tool_name, url)?;
+        return stage_zip_entry(&mut entry, &name, declared, staging, url);
     }
 
     Err(DdlError::InstallFailed(format!(

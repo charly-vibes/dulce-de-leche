@@ -168,6 +168,19 @@ fn prepare_captured_command(
 /// wins the race against a fast-exiting child (no silent truncation), the
 /// runtime deadline kills hung children, and pipe EOF polls for the status
 /// reap (process exit and reap are not atomic).
+/// Reap the child status after both pipe readers hit EOF. Poll briefly:
+/// process exit and status reap are not atomic, and a missed reap here
+/// would spuriously report "exited without a status".
+fn reap_after_eof(child: &mut std::process::Child) -> Option<std::process::ExitStatus> {
+    for _ in 0..100 {
+        if let Ok(Some(s)) = child.try_wait() {
+            return Some(s);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    None
+}
+
 fn wait_captured_child(
     child: &mut std::process::Child,
     stdout_reader: &std::thread::JoinHandle<Vec<u8>>,
@@ -194,16 +207,8 @@ fn wait_captured_child(
         }
         if stdout_reader.is_finished() && stderr_reader.is_finished() {
             // Pipes hit EOF, so the child (and any pipe-holding descendant)
-            // is gone; reap its status if it is ready. Poll briefly: process
-            // exit and status reap are not atomic, and a missed reap here
-            // would spuriously report "exited without a status".
-            for _ in 0..100 {
-                if let Ok(Some(s)) = child.try_wait() {
-                    status = Some(s);
-                    break;
-                }
-                std::thread::sleep(std::time::Duration::from_millis(10));
-            }
+            // is gone; reap its status if it is ready.
+            status = reap_after_eof(child);
             break;
         }
         if start.elapsed() >= deadline {

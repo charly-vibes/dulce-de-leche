@@ -66,6 +66,57 @@ fn upgrade_binary_with_fallback(
 
 /// Record a successful upgrade in the manifest; build the result, folding a
 /// no-op version change into the Skipped method.
+/// Record a successful upgrade in the manifest.
+fn record_upgrade_success(tool: &Tool, method: &InstallMethod, ver: &str, manifest: &mut Manifest) {
+    manifest.set_tool(
+        tool.name,
+        ToolEntry {
+            installed: ver.to_string(),
+            source: method.to_string(),
+            status: "installed".to_string(),
+            compatible: ">=0.0.0".to_string(),
+        },
+    );
+}
+
+/// Build the result for an upgrade that changed the version.
+fn upgraded_result(
+    tool: &Tool,
+    method: &InstallMethod,
+    ver: &str,
+    status: VerificationStatus,
+) -> InstallResult {
+    InstallResult {
+        tool: tool.name,
+        success: true,
+        method: method.clone(),
+        version: ver.to_string(),
+        message: format!(
+            "{} upgraded to v{} via {}{}",
+            tool.name,
+            ver,
+            method,
+            status.suffix()
+        ),
+    }
+}
+
+/// Build the result for an upgrade that was a no-op (already current).
+fn up_to_date_result(tool: &Tool, ver: &str, status: VerificationStatus) -> InstallResult {
+    InstallResult {
+        tool: tool.name,
+        success: true,
+        method: InstallMethod::Skipped,
+        version: ver.to_string(),
+        message: format!(
+            "{} v{} is already up to date{}",
+            tool.name,
+            ver,
+            status.suffix()
+        ),
+    }
+}
+
 fn upgrade_success_result(
     tool: &Tool,
     method: &InstallMethod,
@@ -80,43 +131,12 @@ fn upgrade_success_result(
         _ => true,
     };
 
-    manifest.set_tool(
-        tool.name,
-        ToolEntry {
-            installed: ver.clone(),
-            source: method.to_string(),
-            status: "installed".to_string(),
-            compatible: ">=0.0.0".to_string(),
-        },
-    );
+    record_upgrade_success(tool, method, &ver, manifest);
 
     if was_upgraded {
-        InstallResult {
-            tool: tool.name,
-            success: true,
-            method: method.clone(),
-            version: ver.clone(),
-            message: format!(
-                "{} upgraded to v{} via {}{}",
-                tool.name,
-                ver,
-                method,
-                status.suffix()
-            ),
-        }
+        upgraded_result(tool, method, &ver, status)
     } else {
-        InstallResult {
-            tool: tool.name,
-            success: true,
-            method: InstallMethod::Skipped,
-            version: ver.clone(),
-            message: format!(
-                "{} v{} is already up to date{}",
-                tool.name,
-                ver,
-                status.suffix()
-            ),
-        }
+        up_to_date_result(tool, &ver, status)
     }
 }
 
