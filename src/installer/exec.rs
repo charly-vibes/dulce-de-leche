@@ -188,9 +188,15 @@ pub fn run_child_captured(
         }
         if stdout_reader.is_finished() && stderr_reader.is_finished() {
             // Pipes hit EOF, so the child (and any pipe-holding descendant)
-            // is gone; reap its status if it is ready.
-            if let Ok(Some(s)) = child.try_wait() {
-                status = Some(s);
+            // is gone; reap its status if it is ready. Poll briefly: process
+            // exit and status reap are not atomic, and a missed reap here
+            // would spuriously report "exited without a status".
+            for _ in 0..100 {
+                if let Ok(Some(s)) = child.try_wait() {
+                    status = Some(s);
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
             }
             break;
         }
