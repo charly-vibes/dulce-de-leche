@@ -72,6 +72,7 @@ fn migrate_one(
 }
 
 /// Forward migration: move legacy configs under .ddl/ and stamp phase1.
+/// Forward migration: move legacy configs under .ddl/ and stamp phase1.
 fn migrate_forward(ddl_dir: DdlDir, args: &crate::cli::Args) -> Result<()> {
     let legacy_configs = ddl_dir.detect_legacy_configs();
     if legacy_configs.is_empty() {
@@ -86,15 +87,9 @@ fn migrate_forward(ddl_dir: DdlDir, args: &crate::cli::Args) -> Result<()> {
         println!("Phase 1 migration — moving configs under .ddl/...");
     }
 
-    let mut skipped_tracked = Vec::new();
     let mut ddl_dir = ddl_dir;
-    for (tool_name, legacy_path) in &legacy_configs {
-        if migrate_one(&mut ddl_dir, tool_name, legacy_path, args)? {
-            skipped_tracked.push((*tool_name, legacy_path.clone()));
-        }
-    }
-
-    if skipped_tracked.len() == legacy_configs.len() {
+    let all_tracked = migrate_all_configs(&mut ddl_dir, &legacy_configs, args)?;
+    if all_tracked {
         output::print_success(
             "All legacy configs are git-tracked — nothing migrated. Untrack them first if you want them under .ddl/.",
             args.is_json(),
@@ -112,6 +107,22 @@ fn migrate_forward(ddl_dir: DdlDir, args: &crate::cli::Args) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Migrate each legacy config, skipping git-tracked paths (gh#30 guard).
+/// Returns true when every config was skipped as tracked.
+fn migrate_all_configs(
+    ddl_dir: &mut DdlDir,
+    legacy_configs: &[(&'static str, std::path::PathBuf)],
+    args: &crate::cli::Args,
+) -> Result<bool> {
+    let mut skipped_tracked = 0usize;
+    for (tool_name, legacy_path) in legacy_configs {
+        if migrate_one(ddl_dir, tool_name, legacy_path, args)? {
+            skipped_tracked += 1;
+        }
+    }
+    Ok(skipped_tracked == legacy_configs.len())
 }
 
 pub fn cmd_migrate(undo: bool, args: &crate::cli::Args) -> Result<()> {

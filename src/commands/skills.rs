@@ -8,47 +8,17 @@ use std::io::IsTerminal;
 /// interactive sessions prompt for global, local, or skip; `--yes` installs
 /// globally; JSON mode is check-only. When not eligible, only a hint is
 /// printed so users who deselected the tool aren't re-prompted.
-pub fn ensure_incitaciones_skills(args: &crate::cli::Args, prompt_eligible: bool) -> Result<()> {
-    let status = crate::skills::skill_status();
-    if status.has_global() {
-        if !args.is_json() {
-            let ver = status.global_version.unwrap_or_else(|| "?".to_string());
-            println!("  ✓ incitaciones skills installed globally (npm:{ver})");
-        }
-        return Ok(());
-    }
+/// Deterministic non-interactive hint when prompting isn't possible
+/// (non-TTY session, CI, piped output — DDL-fw7).
+fn print_skills_hint() {
+    println!(
+        "  ℹ  incitaciones skills not installed globally — install with: npx incitaciones install --global"
+    );
+}
 
-    if args.is_json() {
-        // Check-only in JSON mode — no prompts, no state changes.
-        return Ok(());
-    }
-
-    if args.yes {
-        // Non-interactive: default to the global scope.
-        install_skills_scope(true, args)?;
-        return Ok(());
-    }
-
-    if !prompt_eligible {
-        println!(
-            "  ℹ  incitaciones skills not installed globally — install with: npx incitaciones install --global"
-        );
-        return Ok(());
-    }
-
-    // Only prompt when the session is actually interactive: a non-TTY
-    // session (CI, piped output) that reaches this point because the tool is
-    // eligible-but-uninstalled must get the deterministic hint below instead
-    // of a cliclack "not connected" failure (DDL-fw7's manifest reconcile can
-    // make previously untracked tools eligible without any interactive ask).
-    if !std::io::stdin().is_terminal() {
-        println!(
-            "  ℹ  incitaciones skills not installed globally — install with: npx incitaciones install --global"
-        );
-        return Ok(());
-    }
-
-    let local_note = if status.local_version.is_some() {
+/// Interactive scope prompt: global, local, or skip.
+fn prompt_skills_scope(args: &crate::cli::Args, local_version: Option<&String>) -> Result<()> {
+    let local_note = if local_version.is_some() {
         " A local install exists in this project."
     } else {
         ""
@@ -75,6 +45,44 @@ pub fn ensure_incitaciones_skills(args: &crate::cli::Args, prompt_eligible: bool
             Ok(())
         }
     }
+}
+
+pub fn ensure_incitaciones_skills(args: &crate::cli::Args, prompt_eligible: bool) -> Result<()> {
+    let status = crate::skills::skill_status();
+    if status.has_global() {
+        if !args.is_json() {
+            let ver = status.global_version.unwrap_or_else(|| "?".to_string());
+            println!("  ✓ incitaciones skills installed globally (npm:{ver})");
+        }
+        return Ok(());
+    }
+
+    // Check-only in JSON mode — no prompts, no state changes.
+    if args.is_json() {
+        return Ok(());
+    }
+
+    // Non-interactive: default to the global scope.
+    if args.yes {
+        return install_skills_scope(true, args);
+    }
+
+    if !prompt_eligible {
+        print_skills_hint();
+        return Ok(());
+    }
+
+    // Only prompt when the session is actually interactive: a non-TTY
+    // session (CI, piped output) that reaches this point because the tool is
+    // eligible-but-uninstalled must get the deterministic hint below instead
+    // of a cliclack "not connected" failure (DDL-fw7's manifest reconcile can
+    // make previously untracked tools eligible without any interactive ask).
+    if !std::io::stdin().is_terminal() {
+        print_skills_hint();
+        return Ok(());
+    }
+
+    prompt_skills_scope(args, status.local_version.as_ref())
 }
 
 /// Install incitaciones skills in the given scope, reporting the outcome.

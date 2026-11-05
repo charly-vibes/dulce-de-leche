@@ -136,19 +136,11 @@ fn check_tool_status(
 }
 
 /// Human `--check` pass: query latest versions and print per-tool status.
-fn check_updates_human() -> Result<()> {
-    println!();
-    println!("Checking for updates... (requires network)");
-    println!();
-
-    let latest_versions = crate::installer::check_all_latest_versions();
-    let network_ok = !latest_versions.is_empty();
-
-    if !network_ok {
-        println!("  ⚠ Network unavailable — showing cached/embedded versions");
-        println!();
-    }
-
+/// Print the per-tool version/constraint table for the human `--check` pass.
+fn print_check_table(
+    latest_versions: &std::collections::HashMap<&'static str, String>,
+    network_ok: bool,
+) -> bool {
     let mut any_outdated = false;
     let matrix = if let Some(ddl_dir) = DdlDir::find() {
         let (matrix, _warnings) = crate::compat::load_compatibility(&ddl_dir.path);
@@ -159,7 +151,7 @@ fn check_updates_human() -> Result<()> {
 
     for tool in crate::platform::MANAGED_TOOLS {
         let (installed, version, status) =
-            check_tool_status(tool, &latest_versions, network_ok, &mut any_outdated);
+            check_tool_status(tool, latest_versions, network_ok, &mut any_outdated);
         let constraint = matrix.constraint(tool.name).unwrap_or("*");
 
         if installed {
@@ -174,8 +166,23 @@ fn check_updates_human() -> Result<()> {
             );
         }
     }
+    any_outdated
+}
 
-    if any_outdated {
+fn check_updates_human() -> Result<()> {
+    println!();
+    println!("Checking for updates... (requires network)");
+    println!();
+
+    let latest_versions = crate::installer::check_all_latest_versions();
+    let network_ok = !latest_versions.is_empty();
+
+    if !network_ok {
+        println!("  ⚠ Network unavailable — showing cached/embedded versions");
+        println!();
+    }
+
+    if print_check_table(&latest_versions, network_ok) {
         println!();
         println!("Some tools have updates available. Run `ddl upgrade` to update.");
         return Err(DdlError::PartialFailure);

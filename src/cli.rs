@@ -215,6 +215,79 @@ impl Args {
     /// code paths `ddl init` uses, never a fork. The JSON envelope carries
     /// the per-step outcomes plus the machine verdict and resume summary,
     /// still identifying itself via `data.command == "setup"` with the
+    /// JSON envelope for the setup wizard: one document with per-step outcomes.
+    /// Envelope-level ok stays true: the command ran and reported. The machine
+    /// verdict lives in data.ok; the exit code carries failure (below) and main
+    /// routes the error envelope to stderr, so stdout keeps exactly one JSON
+    /// document.
+    fn setup_json_report(
+        report: &crate::setup_wizard::WizardReport,
+        parsed_tools: Vec<String>,
+        no_install: bool,
+        yes: bool,
+    ) -> crate::error::Result<()> {
+        let steps: Vec<serde_json::Value> = report
+            .steps
+            .iter()
+            .map(|s| {
+                serde_json::json!({
+                    "step": s.step.label(),
+                    "status": s.status,
+                    "failures": s.failures,
+                    "detail": s.detail,
+                })
+            })
+            .collect();
+        let data = serde_json::json!({
+            "command": "setup",
+            "tools": parsed_tools,
+            "no_install": no_install,
+            "yes": yes,
+            "steps": steps,
+            "ok": report.ok,
+            "resume_summary": report.resume_summary,
+        });
+        let json_str = crate::output::json_output(
+            crate::VERSION,
+            true,
+            genesis::envelope::EnvelopeKind::Info,
+            data,
+            vec![],
+            vec![],
+        )?;
+        println!("{json_str}");
+        Ok(())
+    }
+
+    /// Human report for the setup wizard: per-step ✓/✗ plus the resume summary.
+    fn setup_human_report(report: &crate::setup_wizard::WizardReport) {
+        println!("ddl setup — guided setup wizard");
+        for step in &report.steps {
+            if step.status == "ok" {
+                println!("  ✓ {}", step.step.label());
+            } else {
+                println!("  ✗ {}", step.step.label());
+                for f in &step.failures {
+                    println!("      {} — {}", f.subject, f.message);
+                }
+            }
+        }
+        if !report.resume_summary.is_empty() {
+            println!();
+            println!("Setup did not finish — resume manually or re-run:");
+            for line in &report.resume_summary {
+                println!("{line}");
+            }
+        }
+    }
+
+    /// Run the guided setup wizard.
+    ///
+    /// Orchestrates the five wizard steps via
+    /// the production [`crate::setup_wizard::InitPathsDelegate`] — the same
+    /// code paths `ddl init` uses, never a fork. The JSON envelope carries
+    /// the per-step outcomes plus the machine verdict and resume summary,
+    /// still identifying itself via `data.command == "setup"` with the
     /// flag passthrough (pinned by tests/setup_command.rs). Step failures
     /// keep init's exit-non-zero contract.
     pub fn cmd_setup(
@@ -245,59 +318,9 @@ impl Args {
         let report = SetupWizard::new(config, &mut delegate).run();
 
         if args.is_json() {
-            let steps: Vec<serde_json::Value> = report
-                .steps
-                .iter()
-                .map(|s| {
-                    serde_json::json!({
-                        "step": s.step.label(),
-                        "status": s.status,
-                        "failures": s.failures,
-                        "detail": s.detail,
-                    })
-                })
-                .collect();
-            let data = serde_json::json!({
-                "command": "setup",
-                "tools": parsed_tools,
-                "no_install": no_install,
-                "yes": yes,
-                "steps": steps,
-                "ok": report.ok,
-                "resume_summary": report.resume_summary,
-            });
-            // Envelope-level ok stays true: the command ran and reported.
-            // The machine verdict lives in data.ok; the exit code carries
-            // failure (below) and main routes the error envelope to stderr,
-            // so stdout keeps exactly one JSON document.
-            let json_str = crate::output::json_output(
-                crate::VERSION,
-                true,
-                genesis::envelope::EnvelopeKind::Info,
-                data,
-                vec![],
-                vec![],
-            )?;
-            println!("{json_str}");
+            Self::setup_json_report(&report, parsed_tools, no_install, yes)?;
         } else {
-            println!("ddl setup — guided setup wizard");
-            for step in &report.steps {
-                if step.status == "ok" {
-                    println!("  ✓ {}", step.step.label());
-                } else {
-                    println!("  ✗ {}", step.step.label());
-                    for f in &step.failures {
-                        println!("      {} — {}", f.subject, f.message);
-                    }
-                }
-            }
-            if !report.resume_summary.is_empty() {
-                println!();
-                println!("Setup did not finish — resume manually or re-run:");
-                for line in &report.resume_summary {
-                    println!("{line}");
-                }
-            }
+            Self::setup_human_report(&report);
         }
 
         if !report.ok {

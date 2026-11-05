@@ -23,12 +23,30 @@ use crate::error::{DdlError, Result};
 use crate::output;
 use genesis::envelope::EnvelopeKind;
 
+/// Map a feedback outcome to the (message, url) user-facing pair.
+fn feedback_message(result: &genesis::feedback::gh::GhResult) -> (String, Option<String>) {
+    match result {
+        genesis::feedback::gh::GhResult::Created { url, number } => {
+            (format!("Created issue #{number}: {url}"), Some(url.clone()))
+        }
+        genesis::feedback::gh::GhResult::FallbackUrl(url) => (
+            format!("Could not create the issue directly — open {url} to file it manually"),
+            Some(url.clone()),
+        ),
+        genesis::feedback::gh::GhResult::LocalFile(path) => (
+            format!(
+                "Network unavailable — issue body saved to {}",
+                path.display()
+            ),
+            None,
+        ),
+    }
+}
+
 pub fn cmd_feedback(
     args: genesis::feedback::FeedbackArgs,
     args_cli: &crate::cli::Args,
 ) -> Result<()> {
-    use genesis::feedback::gh::GhResult;
-
     match genesis::feedback::handle_feedback(
         &args,
         "ddl",
@@ -37,22 +55,7 @@ pub fn cmd_feedback(
         &std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
     ) {
         Ok(result) => {
-            let (message, url) = match &result {
-                genesis::feedback::gh::GhResult::Created { url, number } => {
-                    (format!("Created issue #{number}: {url}"), Some(url.clone()))
-                }
-                GhResult::FallbackUrl(url) => (
-                    format!("Could not create the issue directly — open {url} to file it manually"),
-                    Some(url.clone()),
-                ),
-                GhResult::LocalFile(path) => (
-                    format!(
-                        "Network unavailable — issue body saved to {}",
-                        path.display()
-                    ),
-                    None,
-                ),
-            };
+            let (message, url) = feedback_message(&result);
             if args_cli.is_json() {
                 let data = serde_json::json!({
                     "message": message,
