@@ -7,17 +7,12 @@ use crate::platform::{MANAGED_TOOLS, PackageManager, Platform, Tool};
 use std::process::Command;
 
 /// Upgrade a tool using the method recorded in the manifest.
-pub fn upgrade_tool(
-    tool: &Tool,
-    platform: &Platform,
-    manifest: &mut Manifest,
-    verbose: bool,
-) -> InstallResult {
-    // Determine the upgrade method based on the manifest's recorded source.
-    // Keeping the recorded channel avoids PATH shadowing (e.g. re-routing a
-    // cargo-installed tool to a binary download would leave two copies on
-    // PATH). Legacy brew/scoop records upgrade via the binary-first chain.
-    let method = match manifest.get_tool(tool.name) {
+/// Resolve the upgrade method from the manifest's recorded source.
+/// Keeping the recorded channel avoids PATH shadowing (e.g. re-routing a
+/// cargo-installed tool to a binary download would leave two copies on
+/// PATH). Legacy brew/scoop records upgrade via the binary-first chain.
+fn upgrade_method_for(tool: &Tool, platform: &Platform, manifest: &Manifest) -> InstallMethod {
+    match manifest.get_tool(tool.name) {
         Some(entry) => match entry.source.as_str() {
             "cargo install" => InstallMethod::Cargo,
             "npm install" => InstallMethod::Npm,
@@ -25,43 +20,144 @@ pub fn upgrade_tool(
         },
         // Not in manifest — use the standard policy
         None => best_install_method(tool, platform),
+    }
+}
+
+/// Binary upgrade with the cargo fallback when the platform has no release
+/// binary yet. Returns the (effective) method and verification result.
+fn upgrade_binary_with_fallback(
+    tool: &Tool,
+    platform: &Platform,
+    verbose: bool,
+) -> (InstallMethod, Result<VerificationStatus>) {
+    match upgrade_binary(tool, platform, verbose) {
+        Ok(status) => (InstallMethod::Binary, Ok(status)),
+        Err(DdlError::NoReleaseBinary { .. }) => {
+            match fallback_after_binary_failure(
+                tool.cargo_installable() && PackageManager::Cargo.is_available(),
+            ) {
+                Some(InstallMethod::Cargo) => {
+                    verbose_print(
+                        verbose,
+                        &format!(
+                            "⚠ {} binary not yet available for this platform — using cargo install instead",
+                            tool.name
+                        ),
+                    );
+                    (
+                        InstallMethod::Cargo,
+                        upgrade_cargo(tool, verbose).map(|()| VerificationStatus::Unverified),
+                    )
+                }
+                _ => (
+                    InstallMethod::Binary,
+                    Err(DdlError::InstallFailed(format!(
+                        "⚠ {} binary not yet available for this platform, and no cargo fallback is available. \
+                         Download the binary manually from \
+                        https://github.com/{}/releases",
+                        tool.name, tool.repo
+                    ))),
+                ),
+            }
+        }
+        Err(e) => (InstallMethod::Binary, Err(e)),
+    }
+}
+
+/// Record a successful upgrade in the manifest; build the result, folding a
+/// no-op version change into the Skipped method.
+fn upgrade_success_result(
+    tool: &Tool,
+    method: &InstallMethod,
+    old_version: Option<String>,
+    new_version: Option<String>,
+    status: VerificationStatus,
+    manifest: &mut Manifest,
+) -> InstallResult {
+    let ver = new_version.clone().unwrap_or_else(|| "unknown".to_string());
+    let was_upgraded = match (&old_version, &new_version) {
+        (Some(old), Some(new)) => old != new,
+        _ => true,
     };
 
+    manifest.set_tool(
+        tool.name,
+        ToolEntry {
+            installed: ver.clone(),
+            source: method.to_string(),
+            status: "installed".to_string(),
+            compatible: ">=0.0.0".to_string(),
+        },
+    );
+
+    if was_upgraded {
+        InstallResult {
+            tool: tool.name,
+            success: true,
+            method: method.clone(),
+            version: ver.clone(),
+            message: format!(
+                "{} upgraded to v{} via {}{}",
+                tool.name,
+                ver,
+                method,
+                status.suffix()
+            ),
+        }
+    } else {
+        InstallResult {
+            tool: tool.name,
+            success: true,
+            method: InstallMethod::Skipped,
+            version: ver.clone(),
+            message: format!(
+                "{} v{} is already up to date{}",
+                tool.name,
+                ver,
+                status.suffix()
+            ),
+        }
+    }
+}
+
+/// Record a failed upgrade in the manifest (restoring the prior version)
+/// and build the failure result.
+fn upgrade_failure_result(
+    tool: &Tool,
+    method: &InstallMethod,
+    old_version: Option<String>,
+    error: &DdlError,
+    manifest: &mut Manifest,
+) -> InstallResult {
+    manifest.set_tool(
+        tool.name,
+        ToolEntry {
+            installed: old_version.unwrap_or_else(|| "unknown".to_string()),
+            source: method.to_string(),
+            status: "failed".to_string(),
+            compatible: ">=0.0.0".to_string(),
+        },
+    );
+    InstallResult {
+        tool: tool.name,
+        success: false,
+        method: method.clone(),
+        version: String::new(),
+        message: format!("{} upgrade failed: {}", tool.name, error),
+    }
+}
+
+pub fn upgrade_tool(
+    tool: &Tool,
+    platform: &Platform,
+    manifest: &mut Manifest,
+    verbose: bool,
+) -> InstallResult {
+    let method = upgrade_method_for(tool, platform, manifest);
     let old_version = get_installed_version(tool.name);
 
     let (method, result) = match method {
-        InstallMethod::Binary => match upgrade_binary(tool, platform, verbose) {
-            Ok(status) => (InstallMethod::Binary, Ok(status)),
-            Err(DdlError::NoReleaseBinary { .. }) => {
-                match fallback_after_binary_failure(
-                    tool.cargo_installable() && PackageManager::Cargo.is_available(),
-                ) {
-                    Some(InstallMethod::Cargo) => {
-                        verbose_print(
-                            verbose,
-                            &format!(
-                                "⚠ {} binary not yet available for this platform — using cargo install instead",
-                                tool.name
-                            ),
-                        );
-                        (
-                            InstallMethod::Cargo,
-                            upgrade_cargo(tool, verbose).map(|()| VerificationStatus::Unverified),
-                        )
-                    }
-                    _ => (
-                        InstallMethod::Binary,
-                        Err(DdlError::InstallFailed(format!(
-                            "⚠ {} binary not yet available for this platform, and no cargo fallback is available. \
-                             Download the binary manually from \
-                             https://github.com/{}/releases",
-                            tool.name, tool.repo
-                        ))),
-                    ),
-                }
-            }
-            Err(e) => (InstallMethod::Binary, Err(e)),
-        },
+        InstallMethod::Binary => upgrade_binary_with_fallback(tool, platform, verbose),
         other => {
             let result = execute_upgrade(&other, tool, platform, verbose)
                 .map(|()| VerificationStatus::Unverified);
@@ -73,69 +169,9 @@ pub fn upgrade_tool(
 
     match result {
         Ok(status) => {
-            let ver = new_version.clone().unwrap_or_else(|| "unknown".to_string());
-            let was_upgraded = match (&old_version, &new_version) {
-                (Some(old), Some(new)) => old != new,
-                _ => true,
-            };
-
-            manifest.set_tool(
-                tool.name,
-                ToolEntry {
-                    installed: ver.clone(),
-                    source: method.to_string(),
-                    status: "installed".to_string(),
-                    compatible: ">=0.0.0".to_string(),
-                },
-            );
-
-            if was_upgraded {
-                InstallResult {
-                    tool: tool.name,
-                    success: true,
-                    method: method.clone(),
-                    version: ver.clone(),
-                    message: format!(
-                        "{} upgraded to v{} via {}{}",
-                        tool.name,
-                        ver,
-                        method,
-                        status.suffix()
-                    ),
-                }
-            } else {
-                InstallResult {
-                    tool: tool.name,
-                    success: true,
-                    method: InstallMethod::Skipped,
-                    version: ver.clone(),
-                    message: format!(
-                        "{} v{} is already up to date{}",
-                        tool.name,
-                        ver,
-                        status.suffix()
-                    ),
-                }
-            }
+            upgrade_success_result(tool, &method, old_version, new_version, status, manifest)
         }
-        Err(e) => {
-            manifest.set_tool(
-                tool.name,
-                ToolEntry {
-                    installed: old_version.unwrap_or_else(|| "unknown".to_string()),
-                    source: method.to_string(),
-                    status: "failed".to_string(),
-                    compatible: ">=0.0.0".to_string(),
-                },
-            );
-            InstallResult {
-                tool: tool.name,
-                success: false,
-                method,
-                version: String::new(),
-                message: format!("{} upgrade failed: {}", tool.name, e),
-            }
-        }
+        Err(e) => upgrade_failure_result(tool, &method, old_version, &e, manifest),
     }
 }
 

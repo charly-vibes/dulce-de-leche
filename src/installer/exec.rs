@@ -148,13 +148,11 @@ pub fn run_child_bounded(
 /// ([`MAX_CHILD_OUTPUT_BYTES`]). Output past the cap is discarded, the child
 /// tree is killed, and the budget is named in the error — no silent
 /// truncation.
-pub fn run_child_captured(
+/// Configure stdio (null stdin, piped out/err) and run the child in its own
+/// process group so a deadline kill sweeps descendants too.
+fn prepare_captured_command(
     cmd: &mut std::process::Command,
-    deadline: std::time::Duration,
-) -> Result<std::process::Output> {
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicBool, Ordering};
-
+) -> std::io::Result<std::process::Child> {
     cmd.stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
@@ -163,13 +161,21 @@ pub fn run_child_captured(
         use std::os::unix::process::CommandExt;
         cmd.process_group(0);
     }
-    let mut child = cmd.spawn().map_err(DdlError::Io)?;
+    cmd.spawn()
+}
 
-    let overflow = Arc::new(AtomicBool::new(false));
-    let stdout_pipe = child.stdout.take();
-    let stderr_pipe = child.stderr.take();
-    let stdout_reader = drain_budgeted(stdout_pipe, Arc::clone(&overflow));
-    let stderr_reader = drain_budgeted(stderr_pipe, Arc::clone(&overflow));
+/// Wait for a captured child, enforcing budgets: captured-output overflow
+/// wins the race against a fast-exiting child (no silent truncation), the
+/// runtime deadline kills hung children, and pipe EOF polls for the status
+/// reap (process exit and reap are not atomic).
+fn wait_captured_child(
+    child: &mut std::process::Child,
+    stdout_reader: &std::thread::JoinHandle<Vec<u8>>,
+    stderr_reader: &std::thread::JoinHandle<Vec<u8>>,
+    overflow: &std::sync::atomic::AtomicBool,
+    deadline: std::time::Duration,
+) -> Result<(Option<std::process::ExitStatus>, Option<&'static str>)> {
+    use std::sync::atomic::Ordering;
 
     let start = std::time::Instant::now();
     let mut exhausted: Option<&'static str> = None;
@@ -211,20 +217,63 @@ pub fn run_child_captured(
     if exhausted.is_none() && overflow.load(Ordering::Relaxed) {
         exhausted = Some("captured-output");
     }
+    Ok((status, exhausted))
+}
+
+/// Kill a budget-violating child and drain both readers (the group kill
+/// closes every pipe end, so both readers reach EOF promptly — termination
+/// stays within deadline + 1s).
+fn kill_and_drain(
+    child: &mut std::process::Child,
+    stdout_reader: std::thread::JoinHandle<Vec<u8>>,
+    stderr_reader: std::thread::JoinHandle<Vec<u8>>,
+    budget: &'static str,
+    cmd: &std::process::Command,
+    deadline: std::time::Duration,
+) -> DdlError {
+    kill_child_tree(child);
+    let _ = stdout_reader.join();
+    let _ = stderr_reader.join();
+    budget_exceeded(
+        budget,
+        format!(
+            "child '{}' was killed (with its process group) for exceeding the {deadline:?} runtime budget",
+            cmd.get_program().display()
+        ),
+    )
+}
+
+pub fn run_child_captured(
+    cmd: &mut std::process::Command,
+    deadline: std::time::Duration,
+) -> Result<std::process::Output> {
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
+
+    let mut child = prepare_captured_command(cmd).map_err(DdlError::Io)?;
+
+    let overflow = Arc::new(AtomicBool::new(false));
+    let stdout_pipe = child.stdout.take();
+    let stderr_pipe = child.stderr.take();
+    let stdout_reader = drain_budgeted(stdout_pipe, Arc::clone(&overflow));
+    let stderr_reader = drain_budgeted(stderr_pipe, Arc::clone(&overflow));
+
+    let (status, exhausted) = wait_captured_child(
+        &mut child,
+        &stdout_reader,
+        &stderr_reader,
+        &overflow,
+        deadline,
+    )?;
 
     if let Some(budget) = exhausted {
-        kill_child_tree(&mut child);
-        // The group kill closes every pipe end (descendants included), so
-        // both readers reach EOF promptly — termination stays within
-        // deadline + 1s.
-        let _ = stdout_reader.join();
-        let _ = stderr_reader.join();
-        return Err(budget_exceeded(
+        return Err(kill_and_drain(
+            &mut child,
+            stdout_reader,
+            stderr_reader,
             budget,
-            format!(
-                "child '{}' was killed (with its process group) for exceeding the {deadline:?} runtime budget",
-                cmd.get_program().display()
-            ),
+            cmd,
+            deadline,
         ));
     }
 

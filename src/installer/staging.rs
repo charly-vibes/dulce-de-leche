@@ -80,7 +80,70 @@ pub(crate) fn new_staging_dir(parent: &Path, tool_name: &str) -> Result<PathBuf>
 /// Extract only the expected regular-file binary entry from a tar.gz into
 /// `staging`. Returns the staged file path. Links, special files, oversized
 /// and traversal entries are rejected before any destination mutation.
-pub(crate) fn extract_tar_gz_staged(
+/// Safety checks for one archive entry: regular-file-only, traversal guard,
+/// and the size budget (DDL-4oi). Returns Err naming the violation.
+fn validate_tar_entry(
+    entry_path: &Path,
+    entry_type: tar::EntryType,
+    declared: u64,
+    tool_name: &str,
+    url: &str,
+) -> Result<()> {
+    let path_display = entry_path.display().to_string();
+    // Only the expected regular binary is ever extracted.
+    if !matches!(entry_type, tar::EntryType::Regular) {
+        return Err(DdlError::InstallFailed(format!(
+            "archive entry '{path_display}' for binary '{tool_name}' is not a regular file — rejected from {url}"
+        )));
+    }
+    // Traversal guard: the staged copy is built manually, so the entry
+    // path must stay inside the staging directory.
+    if entry_path.components().any(|c| {
+        matches!(
+            c,
+            std::path::Component::ParentDir
+                | std::path::Component::RootDir
+                | std::path::Component::Prefix(_)
+        )
+    }) {
+        return Err(DdlError::InstallFailed(format!(
+            "archive entry '{path_display}' attempts path traversal — rejected from {url}"
+        )));
+    }
+    if declared > MAX_BINARY_BYTES {
+        return Err(DdlError::InstallFailed(format!(
+            "archive entry '{path_display}' declares {declared} bytes, exceeding the {MAX_BINARY_BYTES}-byte binary limit — rejected from {url}"
+        )));
+    }
+    Ok(())
+}
+
+/// Copy one validated archive entry into staging, size-bounded; the staged
+/// file is synced before the swap.
+fn stage_tar_entry<R: std::io::Read>(
+    entry: &mut tar::Entry<'_, R>,
+    entry_path: &Path,
+    declared: u64,
+    staging: &Path,
+    url: &str,
+) -> Result<PathBuf> {
+    let staged_path = staging.join(entry_path);
+    if let Some(p) = staged_path.parent() {
+        std::fs::create_dir_all(p).map_err(DdlError::Io)?;
+    }
+    let mut out = std::fs::File::create(&staged_path).map_err(DdlError::Io)?;
+    let copied = std::io::copy(entry, &mut out).map_err(DdlError::Io)?;
+    if copied != declared {
+        let path_display = entry_path.display().to_string();
+        return Err(DdlError::InstallFailed(format!(
+            "interrupted copy: archive entry '{path_display}' declared {declared} bytes but only {copied} could be read — {url}"
+        )));
+    }
+    out.sync_all().map_err(DdlError::Io)?;
+    Ok(staged_path)
+}
+
+fn extract_tar_gz_staged(
     bytes: &[u8],
     staging: &Path,
     tool_name: &str,
@@ -98,54 +161,15 @@ pub(crate) fn extract_tar_gz_staged(
             .path()
             .map_err(|e| DdlError::Other(e.to_string()))?
             .to_path_buf();
-        let path_display = path.display().to_string();
         if path.file_name().is_none_or(|f| f != tool_name) {
             continue;
-        }
-        // Only the expected regular binary is ever extracted.
-        if !matches!(entry.header().entry_type(), tar::EntryType::Regular) {
-            return Err(DdlError::InstallFailed(format!(
-                "archive entry '{path_display}' for binary '{tool_name}' is not a regular file — rejected from {url}"
-            )));
-        }
-        // Traversal guard: the staged copy is built manually, so the entry
-        // path must stay inside the staging directory.
-        if path.components().any(|c| {
-            matches!(
-                c,
-                std::path::Component::ParentDir
-                    | std::path::Component::RootDir
-                    | std::path::Component::Prefix(_)
-            )
-        }) {
-            return Err(DdlError::InstallFailed(format!(
-                "archive entry '{path_display}' attempts path traversal — rejected from {url}"
-            )));
         }
         let declared = entry
             .header()
             .size()
             .map_err(|e| DdlError::Other(e.to_string()))?;
-        if declared > MAX_BINARY_BYTES {
-            return Err(DdlError::InstallFailed(format!(
-                "archive entry '{path_display}' declares {declared} bytes, exceeding the {MAX_BINARY_BYTES}-byte binary limit — rejected from {url}"
-            )));
-        }
-        let staged_path = staging.join(&path);
-        if let Some(p) = staged_path.parent() {
-            std::fs::create_dir_all(p).map_err(DdlError::Io)?;
-        }
-        {
-            let mut out = std::fs::File::create(&staged_path).map_err(DdlError::Io)?;
-            let copied = std::io::copy(&mut entry, &mut out).map_err(DdlError::Io)?;
-            if copied != declared {
-                return Err(DdlError::InstallFailed(format!(
-                    "interrupted copy: archive entry '{path_display}' declared {declared} bytes but only {copied} could be read — {url}"
-                )));
-            }
-            out.sync_all().map_err(DdlError::Io)?;
-        }
-        return Ok(staged_path);
+        validate_tar_entry(&path, entry.header().entry_type(), declared, tool_name, url)?;
+        return stage_tar_entry(&mut entry, &path, declared, staging, url);
     }
 
     Err(DdlError::InstallFailed(format!(

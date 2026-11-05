@@ -81,42 +81,44 @@ pub(crate) fn verify_checksum(bytes: &[u8], expected: &str, tool: &str, url: &st
 /// malformed, the asset is absent from the manifest, or the metadata fetch
 /// itself fails. Missing/malformed/transport-failed are all rejections under
 /// the DDL-yts policy (see `enforce_checksum_policy`), not skip-and-install.
-pub(crate) fn fetch_expected_checksum(archive_url: &str, _verbose: bool) -> ChecksumLookup {
-    let Some((base, archive_name)) = archive_url.rsplit_once('/') else {
-        return ChecksumLookup::Unavailable("asset URL has no parent path");
-    };
-
+/// Fetch the release's checksums.txt and extract this asset's digest.
+/// Transport failure, malformed metadata, and a missing listing are all
+/// distinct `Unavailable` reasons (an attacker or outage must not be
+/// indistinguishable from "no checksum published").
+fn fetch_checksums_txt(base: &str, archive_name: &str) -> Option<ChecksumLookup> {
     let checksums_url = format!("{base}/checksums.txt");
     match reqwest::blocking::get(&checksums_url) {
-        Ok(resp) if resp.status().is_success() => {
-            if let Ok(body) = resp.text() {
-                match parse_checksums(&body) {
-                    Some(map) => {
-                        if let Some(expected) = map.get(archive_name).cloned() {
-                            return ChecksumLookup::Published(expected);
-                        }
-                        return ChecksumLookup::Unavailable(
-                            "asset is not listed in this release's checksums.txt",
-                        );
-                    }
-                    None => {
-                        return ChecksumLookup::Unavailable("checksums.txt is malformed");
-                    }
-                }
-            }
-            return ChecksumLookup::Unavailable("checksums.txt body could not be read");
-        }
+        Ok(resp) if resp.status().is_success() => match resp.text() {
+            Ok(body) => match parse_checksums(&body) {
+                Some(map) => match map.get(archive_name).cloned() {
+                    Some(expected) => Some(ChecksumLookup::Published(expected)),
+                    None => Some(ChecksumLookup::Unavailable(
+                        "asset is not listed in this release's checksums.txt",
+                    )),
+                },
+                None => Some(ChecksumLookup::Unavailable("checksums.txt is malformed")),
+            },
+            Err(_) => Some(ChecksumLookup::Unavailable(
+                "checksums.txt body could not be read",
+            )),
+        },
         Ok(_) => {
             // checksums.txt answered but not with success — fall through to
             // the per-asset convention.
+            None
         }
         Err(_) => {
             // Metadata transport failed — an attacker or outage must not be
             // indistinguishable from "no checksum published". Rejected.
-            return ChecksumLookup::Unavailable("checksums.txt could not be fetched");
+            Some(ChecksumLookup::Unavailable(
+                "checksums.txt could not be fetched",
+            ))
         }
     }
+}
 
+/// Fetch the per-asset `<url>.sha256` convention as a fallback.
+fn fetch_per_asset_sha256(archive_url: &str) -> Option<ChecksumLookup> {
     let per_asset_url = format!("{archive_url}.sha256");
     if let Ok(resp) = reqwest::blocking::get(&per_asset_url)
         && resp.status().is_success()
@@ -124,9 +126,25 @@ pub(crate) fn fetch_expected_checksum(archive_url: &str, _verbose: bool) -> Chec
     {
         let digest = body.split_whitespace().next().unwrap_or("").to_lowercase();
         if digest.len() == 64 && digest.chars().all(|c| c.is_ascii_hexdigit()) {
-            return ChecksumLookup::Published(digest);
+            return Some(ChecksumLookup::Published(digest));
         }
-        return ChecksumLookup::Unavailable("per-asset .sha256 file is malformed");
+        return Some(ChecksumLookup::Unavailable(
+            "per-asset .sha256 file is malformed",
+        ));
+    }
+    None
+}
+
+pub(crate) fn fetch_expected_checksum(archive_url: &str, _verbose: bool) -> ChecksumLookup {
+    let Some((base, archive_name)) = archive_url.rsplit_once('/') else {
+        return ChecksumLookup::Unavailable("asset URL has no parent path");
+    };
+
+    if let Some(lookup) = fetch_checksums_txt(base, archive_name) {
+        return lookup;
+    }
+    if let Some(lookup) = fetch_per_asset_sha256(archive_url) {
+        return lookup;
     }
 
     ChecksumLookup::Unavailable("release publishes no checksum for the asset")

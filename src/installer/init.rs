@@ -200,6 +200,66 @@ pub fn reconcile_existing_installs(ddl_dir: &mut DdlDir) -> Result<Vec<String>> 
 }
 
 /// Run a tool's init command after installation.
+/// Prepare the init child command: resolve PATH vs .ddl/bin destination,
+/// apply args, and enforce the restricted child environment with the ddl
+/// bin dir prepended (DDL-uu8: downloaded tools see their siblings;
+/// override wins over the allowlist).
+fn build_tool_init_command<S: AsRef<std::ffi::OsStr>>(
+    tool: &Tool,
+    cmd: &str,
+    args: &[S],
+    on_path: bool,
+    at_dest: Option<std::path::PathBuf>,
+) -> Result<Command> {
+    let mut command = if on_path {
+        Command::new(cmd)
+    } else {
+        Command::new(at_dest.expect("checked at_dest_exists above"))
+    };
+    command.args(args);
+    let mut overrides: Vec<(&str, std::ffi::OsString)> = Vec::new();
+    if let Some(bin_dir) = ddl_bin_dir() {
+        overrides.push((
+            "PATH",
+            prepend_path(&bin_dir, std::env::var_os("PATH").as_deref()),
+        ));
+    }
+    apply_child_policy(&mut command, ExecutionScope::ToolInit, &overrides).map_err(|e| {
+        DdlError::InstallFailed(format!("{} init rejected by child policy: {e}", tool.name))
+    })?;
+    Ok(command)
+}
+
+/// Print the success line for a finished init child.
+fn report_init_success(tool_name: &str, output: &std::process::Output) {
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let first_line = stdout.lines().next().unwrap_or("");
+    if !first_line.is_empty() {
+        eprintln!("  ✓ {} initialized: {}", tool_name, first_line);
+    } else {
+        eprintln!("  ✓ {} initialized", tool_name);
+    }
+}
+
+/// DDL-6zn.3: init failures are no longer advisory warnings — the cascade
+/// collects them and the run exits with a resume summary, instead of
+/// silently leaving the repo half-configured.
+fn init_exit_code_error(tool_name: &str, output: &std::process::Output) -> DdlError {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    eprintln!(
+        "  ✗ {} init exited with code {}: {}",
+        tool_name,
+        output.status.code().unwrap_or(-1),
+        stderr.lines().next().unwrap_or("unknown error")
+    );
+    DdlError::InstallFailed(format!(
+        "{} init exited with code {}: {}",
+        tool_name,
+        output.status.code().unwrap_or(-1),
+        stderr.lines().next().unwrap_or("unknown error")
+    ))
+}
+
 pub fn run_tool_init(tool: &Tool, verbose: bool, non_interactive: bool) -> Result<()> {
     let Some((cmd, args)) = init_command(tool.name, non_interactive) else {
         return Ok(()); // tool has no init command — skip silently
@@ -218,24 +278,7 @@ pub fn run_tool_init(tool: &Tool, verbose: bool, non_interactive: bool) -> Resul
 
     verbose_print(verbose, &format!("running: {} init", cmd));
 
-    let mut command = if on_path {
-        Command::new(cmd)
-    } else {
-        Command::new(at_dest.expect("checked at_dest_exists above"))
-    };
-    command.args(&args);
-    // DDL-uu8: restricted child environment; prepend the ddl bin dir so
-    // downloaded tools see their siblings (override wins over the allowlist).
-    let mut overrides: Vec<(&str, std::ffi::OsString)> = Vec::new();
-    if let Some(bin_dir) = ddl_bin_dir() {
-        overrides.push((
-            "PATH",
-            prepend_path(&bin_dir, std::env::var_os("PATH").as_deref()),
-        ));
-    }
-    apply_child_policy(&mut command, ExecutionScope::ToolInit, &overrides).map_err(|e| {
-        DdlError::InstallFailed(format!("{} init rejected by child policy: {e}", tool.name))
-    })?;
+    let mut command = build_tool_init_command(tool, cmd, &args, on_path, at_dest)?;
 
     // DDL-1z1: the init child runs under the runtime and captured-output
     // budgets — a hung or flooding init child is killed (with its process
@@ -244,31 +287,10 @@ pub fn run_tool_init(tool: &Tool, verbose: bool, non_interactive: bool) -> Resul
     let output = run_child_captured(&mut command, init_deadline_for(tool.name))?;
 
     if output.status.success() {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let first_line = stdout.lines().next().unwrap_or("");
-        if !first_line.is_empty() {
-            eprintln!("  ✓ {} initialized: {}", tool.name, first_line);
-        } else {
-            eprintln!("  ✓ {} initialized", tool.name);
-        }
+        report_init_success(tool.name, &output);
         Ok(())
     } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        eprintln!(
-            "  ✗ {} init exited with code {}: {}",
-            tool.name,
-            output.status.code().unwrap_or(-1),
-            stderr.lines().next().unwrap_or("unknown error")
-        );
-        // DDL-6zn.3: init failures are no longer advisory warnings — the
-        // cascade collects them and the run exits with a resume summary,
-        // instead of silently leaving the repo half-configured.
-        Err(DdlError::InstallFailed(format!(
-            "{} init exited with code {}: {}",
-            tool.name,
-            output.status.code().unwrap_or(-1),
-            stderr.lines().next().unwrap_or("unknown error")
-        )))
+        Err(init_exit_code_error(tool.name, &output))
     }
 }
 

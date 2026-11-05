@@ -114,39 +114,66 @@ pub enum ProvenanceLookup {
 ///   `ChecksumMismatch` for digest divergence (bytes altered) and
 ///   `ChecksumUnavailable` for identity/availability violations — reusing the
 ///   SEC-03 rejection plumbing so no destination mutation can happen.
-pub fn enforce_provenance_policy(
-    tool: &str,
-    url: &str,
-    expected_tag: Option<&str>,
-    lookup: ProvenanceLookup,
-    bytes: &[u8],
-    allow_unverified: bool,
-) -> Result<VerificationStatus> {
-    let reject = |reason: String| DdlError::ChecksumUnavailable {
+///
+/// Build the standard rejection error for the provenance policy.
+fn provenance_reject(tool: &str, url: &str, reason: String) -> DdlError {
+    DdlError::ChecksumUnavailable {
         tool: tool.to_string(),
         url: url.to_string(),
         reason,
-    };
+    }
+}
 
+/// Resolve the release tag authorization: without a tag the provenance
+/// identity (repository/workflow/tag) cannot be checked, so the download is
+/// only allowed under the explicit legacy-unverified transition.
+fn authorize_tag(
+    expected_tag: Option<&str>,
+    allow_unverified: bool,
+    tool: &str,
+    url: &str,
+) -> Result<Option<String>> {
     let Some(tag) = expected_tag else {
         if allow_unverified {
-            return Ok(VerificationStatus::UnverifiedAuthorized);
+            return Ok(None);
         }
-        return Err(reject(
-            "archive URL does not carry a release tag, so the provenance identity (repository/workflow/tag) cannot be checked".to_string(),
-        ));
+        return Err(provenance_reject(tool, url, "archive URL does not carry a release tag, so the provenance identity (repository/workflow/tag) cannot be checked".to_string()));
     };
+    Ok(Some(tag.to_string()))
+}
 
-    let manifest = match lookup {
+/// Resolve the provenance manifest: a missing manifest is only authorized
+/// under the explicit legacy-unverified transition; a contradicting one
+/// never is (DDL-yts: verification must be available, not merely attempted).
+fn resolve_manifest(
+    lookup: ProvenanceLookup,
+    allow_unverified: bool,
+    tool: &str,
+    url: &str,
+) -> Result<Option<ProvenanceManifest>> {
+    match lookup {
         ProvenanceLookup::Unavailable(reason) => {
             if allow_unverified {
-                return Ok(VerificationStatus::UnverifiedAuthorized);
+                return Ok(None);
             }
-            return Err(reject(format!("no usable provenance manifest: {reason}")));
+            Err(provenance_reject(
+                tool,
+                url,
+                format!("no usable provenance manifest: {reason}"),
+            ))
         }
-        ProvenanceLookup::Published(manifest) => manifest,
-    };
+        ProvenanceLookup::Published(manifest) => Ok(Some(manifest)),
+    }
+}
 
+/// Bind the manifest identity (repository/workflow/tag) to the fetch URL.
+fn verify_provenance_identity(
+    manifest: &ProvenanceManifest,
+    url: &str,
+    tag: &str,
+    tool: &str,
+) -> Result<()> {
+    let reject = |reason: String| provenance_reject(tool, url, reason);
     let expected_repository = expected_repository_from_url(url).ok_or_else(|| {
         reject(
             "archive URL does not carry a github.com/<owner>/<repo>/releases/download path, so the provenance repository cannot be derived"
@@ -171,17 +198,46 @@ pub fn enforce_provenance_policy(
             manifest.tag
         )));
     }
+    Ok(())
+}
 
+/// Bind the manifest's per-asset digest to the downloaded bytes.
+fn verify_asset_digest(
+    manifest: &ProvenanceManifest,
+    url: &str,
+    bytes: &[u8],
+    tool: &str,
+) -> Result<VerificationStatus> {
     let asset = url.rsplit_once('/').map(|(_, a)| a).unwrap_or(url);
     match manifest.artifacts.get(asset) {
-        None => Err(reject(format!(
-            "provenance manifest does not list asset `{asset}`"
-        ))),
+        None => Err(provenance_reject(
+            tool,
+            url,
+            format!("provenance manifest does not list asset `{asset}`"),
+        )),
         Some(expected) => {
             verify_checksum(bytes, expected, tool, url)?;
             Ok(VerificationStatus::Verified)
         }
     }
+}
+
+pub fn enforce_provenance_policy(
+    tool: &str,
+    url: &str,
+    expected_tag: Option<&str>,
+    lookup: ProvenanceLookup,
+    bytes: &[u8],
+    allow_unverified: bool,
+) -> Result<VerificationStatus> {
+    let Some(tag) = authorize_tag(expected_tag, allow_unverified, tool, url)? else {
+        return Ok(VerificationStatus::UnverifiedAuthorized);
+    };
+    let Some(manifest) = resolve_manifest(lookup, allow_unverified, tool, url)? else {
+        return Ok(VerificationStatus::UnverifiedAuthorized);
+    };
+    verify_provenance_identity(&manifest, url, &tag, tool)?;
+    verify_asset_digest(&manifest, url, bytes, tool)
 }
 
 /// DDL-9x4.11.1: origin-scoped verification of release archive bytes, as a

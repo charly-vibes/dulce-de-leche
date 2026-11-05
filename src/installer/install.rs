@@ -8,6 +8,119 @@ use std::path::PathBuf;
 use std::process::Command;
 
 /// Install a tool using the best available method.
+/// Already-on-PATH fast path: report a Skipped install result.
+fn install_skip_result(tool: &Tool) -> InstallResult {
+    let ver = get_installed_version(tool.name).unwrap_or_else(|| "?".to_string());
+    InstallResult {
+        tool: tool.name,
+        success: true,
+        method: InstallMethod::Skipped,
+        version: ver.clone(),
+        message: format!("{} v{} is already installed", tool.name, ver),
+    }
+}
+
+/// Binary install with the cargo fallback when the platform has no release
+/// binary. Definitive miss (no release asset for this platform) falls back
+/// to cargo when available — but only for tools with a real crates.io
+/// package (Go/npm tools have none, and installing the wrong crate would be
+/// actively harmful).
+fn install_binary_with_fallback(
+    tool: &Tool,
+    platform: &Platform,
+    verbose: bool,
+) -> (InstallMethod, Result<VerificationStatus>) {
+    match install_binary(tool, platform, verbose) {
+        Ok(status) => (InstallMethod::Binary, Ok(status)),
+        Err(DdlError::NoReleaseBinary { .. }) => {
+            match fallback_after_binary_failure(
+                tool.cargo_installable() && PackageManager::Cargo.is_available(),
+            ) {
+                Some(InstallMethod::Cargo) => {
+                    verbose_print(
+                        verbose,
+                        &format!(
+                            "⚠ {} binary not yet available for this platform — using cargo install instead",
+                            tool.name
+                        ),
+                    );
+                    (
+                        InstallMethod::Cargo,
+                        install_cargo(tool, verbose).map(|()| VerificationStatus::Unverified),
+                    )
+                }
+                _ => (
+                    InstallMethod::Binary,
+                    Err(DdlError::InstallFailed(format!(
+                        "⚠ {} binary not yet available for this platform, and no cargo fallback is available. \
+                         Download the binary manually from \
+                        https://github.com/{}/releases",
+                        tool.name, tool.repo
+                    ))),
+                ),
+            }
+        }
+        Err(e) => (InstallMethod::Binary, Err(e)),
+    }
+}
+
+/// Record a successful install in the manifest and build the result.
+fn install_success_result(
+    tool: &Tool,
+    method: &InstallMethod,
+    detected: &str,
+    status: VerificationStatus,
+    manifest: &mut Manifest,
+) -> InstallResult {
+    manifest.set_tool(
+        tool.name,
+        ToolEntry {
+            installed: detected.to_string(),
+            source: method.to_string(),
+            status: "installed".to_string(),
+            compatible: ">=0.0.0".to_string(),
+        },
+    );
+    InstallResult {
+        tool: tool.name,
+        success: true,
+        method: method.clone(),
+        version: detected.to_string(),
+        message: format!(
+            "{} v{} installed via {}{}",
+            tool.name,
+            detected,
+            method,
+            status.suffix()
+        ),
+    }
+}
+
+/// Record a failed install in the manifest and build the failure result.
+fn install_failure_result(
+    tool: &Tool,
+    method: &InstallMethod,
+    error: &DdlError,
+    manifest: &mut Manifest,
+) -> InstallResult {
+    manifest.set_tool(
+        tool.name,
+        ToolEntry {
+            installed: "unknown".to_string(),
+            source: method.to_string(),
+            status: "failed".to_string(),
+            compatible: ">=0.0.0".to_string(),
+        },
+    );
+    InstallResult {
+        tool: tool.name,
+        success: false,
+        method: method.clone(),
+        version: String::new(),
+        message: format!("{} failed: {}", tool.name, error),
+    }
+}
+
 pub fn install_tool(
     tool: &Tool,
     platform: &Platform,
@@ -17,53 +130,11 @@ pub fn install_tool(
     let method = best_install_method(tool, platform);
 
     if is_tool_installed(tool.name) {
-        let ver = get_installed_version(tool.name).unwrap_or_else(|| "?".to_string());
-        return InstallResult {
-            tool: tool.name,
-            success: true,
-            method: InstallMethod::Skipped,
-            version: ver.clone(),
-            message: format!("{} v{} is already installed", tool.name, ver),
-        };
+        return install_skip_result(tool);
     }
 
     let (method, result) = match method {
-        InstallMethod::Binary => match install_binary(tool, platform, verbose) {
-            Ok(status) => (InstallMethod::Binary, Ok(status)),
-            // Definitive miss (no release asset for this platform): fall back
-            // to cargo when available — but only for tools with a real
-            // crates.io package (Go/npm tools have none, and installing the
-            // wrong crate would be actively harmful).
-            Err(DdlError::NoReleaseBinary { .. }) => {
-                match fallback_after_binary_failure(
-                    tool.cargo_installable() && PackageManager::Cargo.is_available(),
-                ) {
-                    Some(InstallMethod::Cargo) => {
-                        verbose_print(
-                            verbose,
-                            &format!(
-                                "⚠ {} binary not yet available for this platform — using cargo install instead",
-                                tool.name
-                            ),
-                        );
-                        (
-                            InstallMethod::Cargo,
-                            install_cargo(tool, verbose).map(|()| VerificationStatus::Unverified),
-                        )
-                    }
-                    _ => (
-                        InstallMethod::Binary,
-                        Err(DdlError::InstallFailed(format!(
-                            "⚠ {} binary not yet available for this platform, and no cargo fallback is available. \
-                             Download the binary manually from \
-                             https://github.com/{}/releases",
-                            tool.name, tool.repo
-                        ))),
-                    ),
-                }
-            }
-            Err(e) => (InstallMethod::Binary, Err(e)),
-        },
+        InstallMethod::Binary => install_binary_with_fallback(tool, platform, verbose),
         other => {
             let result = execute_install(&other, tool, platform, verbose)
                 .map(|()| VerificationStatus::Unverified);
@@ -75,48 +146,8 @@ pub fn install_tool(
         .unwrap_or_else(|| "unknown".to_string());
 
     match result {
-        Ok(status) => {
-            manifest.set_tool(
-                tool.name,
-                ToolEntry {
-                    installed: detected.clone(),
-                    source: method.to_string(),
-                    status: "installed".to_string(),
-                    compatible: ">=0.0.0".to_string(),
-                },
-            );
-            InstallResult {
-                tool: tool.name,
-                success: true,
-                method: method.clone(),
-                version: detected.clone(),
-                message: format!(
-                    "{} v{} installed via {}{}",
-                    tool.name,
-                    detected,
-                    method,
-                    status.suffix()
-                ),
-            }
-        }
-        Err(e) => {
-            manifest.set_tool(
-                tool.name,
-                ToolEntry {
-                    installed: "unknown".to_string(),
-                    source: method.to_string(),
-                    status: "failed".to_string(),
-                    compatible: ">=0.0.0".to_string(),
-                },
-            );
-            InstallResult {
-                tool: tool.name,
-                success: false,
-                method,
-                version: String::new(),
-                message: format!("{} failed: {}", tool.name, e),
-            }
-        }
+        Ok(status) => install_success_result(tool, &method, &detected, status, manifest),
+        Err(e) => install_failure_result(tool, &method, &e, manifest),
     }
 }
 
