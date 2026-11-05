@@ -55,17 +55,22 @@ def verify_release_inputs(version, tag, checksums_path, required=REQUIRED_PLATFO
     return shas
 
 
+def _platform_sha(parts, shas):
+    """Record the sha if the checksum line names a required platform."""
+    if len(parts) != 2:
+        return
+    sha, name = parts
+    for platform in REQUIRED_PLATFORMS:
+        if platform in name:
+            shas[platform] = sha
+
+
 def parse_checksums(checksums_path):
     """Return {platform: sha256} for every required platform found."""
     shas = {}
     with open(checksums_path) as f:
         for line in f:
-            parts = line.split()
-            if len(parts) == 2:
-                sha, name = parts
-                for platform in REQUIRED_PLATFORMS:
-                    if platform in name:
-                        shas[platform] = sha
+            _platform_sha(line.split(), shas)
     return shas
 
 

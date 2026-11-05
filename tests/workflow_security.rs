@@ -18,6 +18,74 @@ fn read(rel: &str) -> String {
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {rel}: {e}"))
 }
 
+/// A line at two-space indent (but not deeper) that names a job key.
+fn at_job_indent(line: &str) -> bool {
+    line.starts_with("  ") && !line.starts_with("   ")
+}
+
+fn is_job_key(line: &str) -> bool {
+    at_job_indent(line) && line.contains(':') && !line.trim_start().starts_with('-')
+}
+
+fn left_jobs_block(line: &str) -> bool {
+    !line.starts_with("  ") && !line.is_empty()
+}
+
+fn flush_job<'a>(
+    current: &mut Option<(String, Vec<&'a str>)>,
+    jobs: &mut Vec<(String, Vec<&'a str>)>,
+) {
+    if let Some(j) = current.take() {
+        jobs.push(j);
+    }
+}
+
+fn enter_jobs(line: &str) -> bool {
+    line == "jobs:"
+}
+
+fn job_name(line: &str) -> String {
+    line.trim_end().trim_end_matches(':').trim().to_string()
+}
+
+fn absorb_line<'a>(
+    line: &'a str,
+    current: &mut Option<(String, Vec<&'a str>)>,
+    jobs: &mut Vec<(String, Vec<&'a str>)>,
+) {
+    if is_job_key(line) {
+        flush_job(current, jobs);
+        *current = Some((job_name(line), Vec::new()));
+    } else if let Some((_, body)) = current.as_mut() {
+        body.push(line);
+    }
+}
+
+fn leave_or_absorb<'a>(
+    line: &'a str,
+    current: &mut Option<(String, Vec<&'a str>)>,
+    jobs: &mut Vec<(String, Vec<&'a str>)>,
+) {
+    if left_jobs_block(line) {
+        flush_job(current, jobs);
+        return;
+    }
+    absorb_line(line, current, jobs);
+}
+
+fn jobs_line<'a>(
+    line: &'a str,
+    current: &mut Option<(String, Vec<&'a str>)>,
+    jobs: &mut Vec<(String, Vec<&'a str>)>,
+    in_jobs: bool,
+) -> bool {
+    if !in_jobs {
+        return enter_jobs(line);
+    }
+    leave_or_absorb(line, current, jobs);
+    in_jobs
+}
+
 /// Split a workflow document into (job_name, body) sections keyed on the
 /// two-space-indented job keys under `jobs:`. Returns them in file order.
 fn job_sections(doc: &str) -> Vec<(String, Vec<&str>)> {
@@ -25,71 +93,58 @@ fn job_sections(doc: &str) -> Vec<(String, Vec<&str>)> {
     let mut current: Option<(String, Vec<&str>)> = None;
     let mut in_jobs = false;
     for line in doc.lines() {
-        if line == "jobs:" {
-            in_jobs = true;
-            continue;
-        }
-        if !in_jobs {
-            continue;
-        }
-        if !line.starts_with("  ") && !line.is_empty() {
-            // left the jobs: block (next top-level key or end)
-            if let Some(j) = current.take() {
-                jobs.push(j);
-            }
-            in_jobs = false;
-            continue;
-        }
-        let is_job_key = line.starts_with("  ")
-            && !line.starts_with("   ")
-            && line.contains(':')
-            && !line.trim_start().starts_with('-');
-        if is_job_key {
-            if let Some(j) = current.take() {
-                jobs.push(j);
-            }
-            let name = line.trim_end().trim_end_matches(':').trim().to_string();
-            current = Some((name, Vec::new()));
-        } else if let Some((_, body)) = current.as_mut() {
-            body.push(line);
-        }
+        in_jobs = jobs_line(line, &mut current, &mut jobs, in_jobs);
     }
-    if let Some(j) = current.take() {
-        jobs.push(j);
-    }
+    flush_job(&mut current, &mut jobs);
     jobs
 }
 
 /// Assert every `uses:` spec in `doc` is pinned to a full 40-hex SHA.
 /// Returns the number of actions checked, or an error describing the first
 /// violation — shared by the positive and negative fixtures.
-fn assert_all_actions_pinned(doc: &str) -> Result<usize, String> {
-    let mut pinned = 0;
-    for line in doc.lines() {
-        let Some(idx) = line.find("uses:") else {
-            continue;
-        };
-        let spec = line[idx + 5..]
-            .trim()
-            .trim_matches('"')
-            .split('#')
-            .next()
-            .unwrap()
-            .trim();
-        if spec.starts_with("./") {
-            continue; // local action, no pin needed
-        }
-        let Some((_, version)) = spec.split_once('@') else {
-            return Err(format!("action without pin: {spec}"));
-        };
-        if !(version.len() == 40 && version.chars().all(|c| c.is_ascii_hexdigit())) {
-            return Err(format!(
-                "action `{spec}` must use a full 40-hex commit SHA, got `{version}`"
-            ));
-        }
-        pinned += 1;
+fn is_full_sha(version: &str) -> bool {
+    version.len() == 40 && version.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+fn pin_violation(spec: &str) -> Option<String> {
+    let Some((_, version)) = spec.split_once('@') else {
+        return Some(format!("action without pin: {spec}"));
+    };
+    if !is_full_sha(version) {
+        return Some(format!(
+            "action `{spec}` must use a full 40-hex commit SHA, got `{version}`"
+        ));
     }
-    Ok(pinned)
+    None
+}
+
+/// Extract the action spec from a `uses:` line; `None` for local actions.
+fn uses_spec(line: &str) -> Option<&str> {
+    let idx = line.find("uses:")?;
+    let spec = line[idx + 5..]
+        .trim()
+        .trim_matches('"')
+        .split('#')
+        .next()
+        .unwrap()
+        .trim();
+    if spec.starts_with("./") {
+        return None; // local action, no pin needed
+    }
+    Some(spec)
+}
+
+/// Assert every `uses:` spec in `doc` is pinned to a full 40-hex SHA.
+/// Returns the number of actions checked, or an error describing the first
+/// violation — shared by the positive and negative fixtures.
+fn assert_all_actions_pinned(doc: &str) -> Result<usize, String> {
+    let specs: Vec<&str> = doc.lines().filter_map(uses_spec).collect();
+    for spec in &specs {
+        if let Some(err) = pin_violation(spec) {
+            return Err(err);
+        }
+    }
+    Ok(specs.len())
 }
 
 #[test]
@@ -120,6 +175,30 @@ fn negative_pinning_checker_rejects_mutable_refs() {
     .expect("full SHA must pass");
 }
 
+fn check_job_credentials(name: &str, body: &str) {
+    if name != "publish" {
+        assert!(
+            !body.contains("contents: write"),
+            "{name}: non-publish job must not hold contents:write"
+        );
+        for cred in ["CARGO_REGISTRY_TOKEN", "TAP_GITHUB_TOKEN"] {
+            assert!(
+                !body.contains(cred),
+                "{name}: publication credential {cred} must be scoped to the publish job only"
+            );
+        }
+    } else {
+        assert!(
+            body.contains("contents: write"),
+            "publish job must explicitly hold contents:write"
+        );
+        assert!(
+            body.contains("CARGO_REGISTRY_TOKEN"),
+            "publish job must hold CARGO_REGISTRY_TOKEN"
+        );
+    }
+}
+
 #[test]
 fn only_publish_job_has_contents_write_or_publication_credentials() {
     let doc = read(".github/workflows/release.yml");
@@ -130,27 +209,7 @@ fn only_publish_job_has_contents_write_or_publication_credentials() {
     );
     for (name, body) in &jobs {
         let text = body.join("\n");
-        if name != "publish" {
-            assert!(
-                !text.contains("contents: write"),
-                "{name}: non-publish job must not hold contents:write"
-            );
-            for cred in ["CARGO_REGISTRY_TOKEN", "TAP_GITHUB_TOKEN"] {
-                assert!(
-                    !text.contains(cred),
-                    "{name}: publication credential {cred} must be scoped to the publish job only"
-                );
-            }
-        } else {
-            assert!(
-                text.contains("contents: write"),
-                "publish job must explicitly hold contents:write"
-            );
-            assert!(
-                text.contains("CARGO_REGISTRY_TOKEN"),
-                "publish job must hold CARGO_REGISTRY_TOKEN"
-            );
-        }
+        check_job_credentials(name, &text);
     }
     // Workflow-level default must be read-only so build jobs inherit least
     // privilege even if they gain new steps.
