@@ -1,6 +1,7 @@
 # Ecosystem Standardization Proposal
 
-> **Status:** RATIFIED v0.3 (2026-09-30, bd `DDL-u8x`). Rollout is tracked in bd under this epic:
+> **Status:** RATIFIED v0.4 (2026-11-15, adds §5.1 README front-door contract;
+> v0.3 ratified 2026-09-30, bd `DDL-u8x`). Rollout is tracked in bd under this epic:
 > Applies to every in-org tool repo managed by `ddl`: wai, testaruda, dont, pretender,
 > vampiro, specodelic, incitaciones, espectacular (the `ah` binary), whisper (the `turu`
 > binary), and dulce-de-leche itself — plus any future charly-vibes CLI tool. External
@@ -213,6 +214,108 @@ status × notes), plus sections: *Implemented*, *In progress*, *Mapped to
 specs* (dont's format), and a *Dogfooding* section listing which ecosystem
 tools consume this one and how.
 
+### 5.1 README front-door contract
+
+> Added in v0.4 (2026-11-15) after the fleet README audit
+> (`reports/readme-eval-2026-11-15` in the umbrella checkout). **Mandatory for
+> every ddl-managed tool; recommended for every other charly-vibes repo.**
+
+The README is the front door: a cold reader must be able to decide whether to
+use the tool, run it once, and find answers to recurring questions without
+opening another file.
+
+Required order for the front-door section, before deep reference material:
+
+1. Title + one-line *what it is and who it is for*.
+2. The §5 `Why:` / `Status:` block.
+3. `## When to use` — 2–4 use bullets, 2–3 "use `<sibling>` instead" bullets,
+   and one sentence naming the assumption the tool makes. Tools with overlapping
+   scope (verification, testing, specs) MUST name their nearest alternative.
+4. `## Install` — one primary install path (package manager or binary);
+   "from source" optional.
+5. `## Quick start` — install → first meaningful command → **expected result**.
+6. `## Common workflows` — the 2–3 jobs the tool exists for, each as
+   command → result.
+7. `## Commands` — table, or a link to `docs/src/cli.md`.
+8. `## FAQ` — 5–7 inline questions or a link to `docs/src/faq.md` /
+   `docs/src/troubleshooting.md`, reachable from the first screen.
+9. Docs / status / license links.
+
+Canonical skeleton:
+
+````markdown
+# <tool>
+
+> One sentence: what it is, for whom.
+> **Why:** <problem, who has it, why existing tools fail>
+> **Status:** [beta](docs/src/status.md) · <one-line> · [Motivation & design](docs/src/index.md)
+
+## When to use
+
+- Use `<tool>` when …
+- Use `<tool>` when …
+
+**Don't use it when** … (use `<sibling>` instead) — <assumption this tool makes>.
+
+## Install
+
+```sh
+<one install command>
+```
+
+## Quick start
+
+```sh
+<first command>
+# → <expected output / exit code / file>
+```
+
+## Common workflows
+
+1. **<task>** — `<command>` → `<result>`
+2. **<task in CI>** — `<command>` → `<result>`
+
+## Commands
+
+| Command | What it does | When |
+|---|---|---|
+
+## FAQ
+
+### Do I need this if I already use `<sibling>`?
+### What does it write or modify?
+### How do I run it in CI?
+### Why is it failing on a clean checkout?
+### How do I disable it?
+
+## Docs / status / license
+````
+
+Rules:
+
+- Every command shown MUST exist in `<tool> --help` (or the relevant subcommand
+  `--help`). A command that only exists in the source tree is not a quick start.
+- The first code block MUST run after the documented install and MUST state the
+  expected result — exit code, output snippet, or created file — so success is
+  distinguishable from failure.
+- `## Quick start` MUST NOT contain repository-development recipes (`just ci`,
+  `just setup`, `mdbook build`). Those belong in `## Development`.
+- `docs/src/faq.md` or `docs/src/troubleshooting.md` is required for every
+  ddl-managed tool, and the README links it from the first screen.
+- No relative README link may be broken. Link-checking runs in CI.
+- Reference examples: `tambor` for *When NOT to use*, `gently` for a quickstart
+  with expected output, `specodelic/docs/src/specs/USAGE.md` for positioning.
+
+Acceptance checklist:
+
+- [ ] A reader can answer *should I use this?* without opening another file.
+- [ ] The first code block runs after the documented install and states the
+      expected result.
+- [ ] Every documented command exists in `--help`.
+- [ ] FAQ or troubleshooting is one click from the README.
+- [ ] Repository-development recipes are under `## Development`.
+- [ ] No relative links are broken.
+
 ## 6. Rollout order (each step = separate bd issues, red→green where testable)
 
 0. **ddl dogfoods first**: move `docs/book.toml` → root `book.toml`, vendor
@@ -222,7 +325,8 @@ tools consume this one and how.
    ddl-side/local check; each repo's own CI only validates itself — the test
    skips absent siblings rather than failing). It checks the §1–§5 invariants
    that are mechanically checkable (workflow files exist, book.toml fields,
-   README block present, badge↔workflow match, `versions.ddl.toml` present).
+   README §5 block and §5.1 front-door sections present, FAQ/troubleshooting
+   page present, badge↔workflow match, `versions.ddl.toml` present).
    TDD: write the test first against current repos — it will fail; each fix
    turns one assertion green.
 2. **Theme**: write `theme/charly.css`, dogfood it in ddl's own book first.
@@ -233,12 +337,19 @@ tools consume this one and how.
 5. **Dogfooding matrix**: add missing ✅ entries repo by repo.
 6. **Statuses**: owner assigns stable/beta/experimental per tool in ddl's
    capability matrix; README blocks updated in the same commit.
+7. **Front-door READMEs (§5.1)**: one ticket per ddl-managed repo applies the
+   contract; the fleet audit and per-repo gaps live in
+   `reports/readme-eval-2026-11-15` (umbrella epic `charly-o1j`). Once the first
+   pass lands, add a `ddl.repo.readme-frontdoor` doctor check for the
+   mechanically checkable parts (section presence, FAQ link, broken relative
+   links).
 
 ## 7. New-tool onboarding checklist
 
 A new charly-vibes CLI tool is conformant when it has: the three
 workflow files (§1) with `just ci`; root `book.toml` + `theme/charly.css` + the
-five §2 book pages; `llms.txt` + `llm.txt`; the §5 README block; a
+five §2 book pages; `llms.txt` + `llm.txt`; the §5 README block; the §5.1
+front-door contract (when-to-use, quickstart with expected output, FAQ link); a
 `versions.ddl.toml` pin file; a row in ddl's registry + capability matrix
 (enforced by `tests/tool_registry_drift.rs`); an entry in the §4 dogfood
 matrix; and an ecosystem landing link in the book SUMMARY and README status
