@@ -28,7 +28,7 @@ miette = { version = "7", features = ["fancy"] }
 thiserror = "2"
 
 # Interactive prompts
-cliclack = "0.3"
+cliclack = "0.5"
 
 # Colors (respects NO_COLOR)
 owo-colors = "4"
