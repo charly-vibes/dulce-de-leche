@@ -48,8 +48,11 @@ Naming: `{tool}_{VERSION}_{os}_{arch}` (e.g., `ddl_0.4.0_linux_arm64.tar.gz`),
 plus a single `checksums.txt` (`sha256sum`) covering all archives — this is the
 canonical scheme seven repos already follow. After publishing, release.yml must
 auto-update the `homebrew-charly` tap and `scoop-charly` bucket (ddl's release
-workflow is the reference implementation). Current conformance: 7/8 conform;
-`specodelic` has no `release.yml` (crates.io only) — tracked for rollout.
+workflow is the reference implementation). Current conformance (2026-11-15):
+every in-scope Rust binary repo has a `release.yml`; verify the asset list per
+release with the checks below. `fabbro` (Go) and `gently` (Rust) have release
+workflows but no published GitHub Release yet; `wild` has no release workflow
+— all three are tracked for rollout.
 
 **Prebuilt binaries on GitHub Releases are the primary install path.** Every
 tag that ships a binary MUST publish the five archives plus `checksums.txt` to
