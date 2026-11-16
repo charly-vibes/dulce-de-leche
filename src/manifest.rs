@@ -296,11 +296,42 @@ mod tests {
     #[test]
     fn fleet_pins_parse_names_and_versions() {
         let pins = parse_fleet_pins(crate::manifest::FLEET_VERSIONS_PIN);
-        assert!(pins.contains(&("wai".to_string(), "2026.10.10".to_string())));
-        assert!(pins.contains(&("openspec".to_string(), "0.19.0".to_string())));
-        assert!(pins.contains(&("bd".to_string(), "1.3.0".to_string())));
-        // self-pin: hyphenated key, matching the crate version
-        assert!(pins.contains(&("dulce-de-leche".to_string(), "0.9.0".to_string())));
+        // Every shipped §4 tool appears exactly once with a version. The
+        // third-party versions themselves are not pinned here: the pin file is
+        // the source of truth, so re-asserting today's numbers only meant every
+        // deliberate bump had to edit this test (and a stale copy proved
+        // nothing about parsing).
+        for tool in [
+            "wai",
+            "pretender",
+            "dont",
+            "testaruda",
+            "openspec",
+            "bd",
+            "dulce-de-leche",
+        ] {
+            let found: Vec<&(String, String)> =
+                pins.iter().filter(|(name, _)| name == tool).collect();
+            assert_eq!(
+                found.len(),
+                1,
+                "{tool} must appear exactly once in the [tools] pins"
+            );
+            let version = &found[0].1;
+            assert!(
+                version.chars().next().is_some_and(|c| c.is_ascii_digit()),
+                "{tool} pin must carry a version, got {version:?}"
+            );
+        }
+        // Self-pin: hyphenated key, and a release bump must move it with the
+        // crate version (this is the invariant a hardcoded pair did not test).
+        assert!(
+            pins.contains(&(
+                "dulce-de-leche".to_string(),
+                env!("CARGO_PKG_VERSION").to_string()
+            )),
+            "self pin must equal the crate version"
+        );
     }
 
     #[test]

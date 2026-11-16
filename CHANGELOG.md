@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-16
+
+Provenance verification that accepts the fleet's own releases, the `ddl setup`
+wizard, and the installer/module decomposition.
+
+### Added
+
+- **`ddl setup` — setup wizard step machine** — pre-flight → migrate → scope →
+  delegate → verify, wired to the `setup` subcommand, with JSON failure events
+  matching `init`'s emission contract and a TTFIF measurement harness
+  (`DDL-g6w.1`–`DDL-g6w.8`)
+- **URL-derived provenance identity** — the expected repository is read from
+  the archive URL instead of a hardcoded ddl-own constant, so tools published
+  from their own repositories verify (`DDL-9x4.1`)
+- **Checksums-only channel for external origins** — third-party releases that
+  cannot publish `provenance.json` (bd from gastownhall/beads) verify through
+  their published `checksums.txt` / per-asset digest as a distinct, weaker
+  status; charly-vibes origins still require checksum *and* provenance
+  (`DDL-9x4.11.1`)
+- **bajan in the managed registry** (`bajan-23s`)
+- **Test-runner standard** — `just test` is the testaruda exec loop across the
+  DDL repos (`DDL-85p`)
+- **Contract bundle refusal law + base-contract cache core** (`wild-xgd`)
+
+### Changed
+
+- **Installer, diagnostics, gates, platform, `dot_ddl`, and commands split into
+  modules**, with functions decomposed to the complexity budgets — behavior and
+  public entry points preserved
+- **Seed pins refreshed** in `versions.ddl.toml` and this repo's CI:
+  pretender 0.11.1, wai-cli 2026.11.11, testaruda 0.5.9, openspec 2.0.0,
+  bd 1.3.4 (checksum-verified)
+- **zip 2 → 9** — every zip 2.x release is yanked on crates.io (#92)
+- **CI installs testaruda and pytest 9.0.3** — the `just test` recipe cannot
+  run without them
+
+### Fixed
+
+- **Reap child status after pipe EOF** in `run_child_captured`
+- **`init` doctor-clean e2e skips with a named drift reason** when PATH tools
+  differ from the fleet pins (`DDL-gef`)
+- **Troubleshooting tool list matches the registry**, covered by the drift
+  test (`DDL-2rn`)
+- **`ddl setup` runs the wizard step machine** instead of the placeholder
+  (`DDL-g6w.8`)
+
+### Documentation
+
+- Ecosystem standard gains the README front-door contract and the requirement
+  that releases ship prebuilt binaries; ddl's README conformance status
+  corrected; `llms.txt`/`llm.txt` book sync for the wizard.
+
 ## [0.9.0] - 2026-10-16
 
 Security-hardening release (SEC-01 through SEC-07 remediation) plus

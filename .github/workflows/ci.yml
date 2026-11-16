@@ -47,18 +47,18 @@ jobs:
 
       - name: Install ecosystem tools (§4 dogfood matrix, pinned)
         run: |
-          cargo install --locked pretender@0.10.0 wai-cli@2026.10.10 dont-cli@0.2.2 testaruda@0.5.7
+          cargo install --locked pretender@0.11.1 wai-cli@2026.11.11 dont-cli@0.2.2 testaruda@0.5.9
           npm install -g @fission-ai/openspec@0.19.0
       - name: Install pytest (pinned — python adapter of the DDL-85p test runner)
         run: pip install pytest==9.0.3
       - name: Install bd (beads, pinned §4, checksum-verified)
         run: |
           tmp=$(mktemp -d)
-          curl -fsSL https://github.com/gastownhall/beads/releases/download/v1.3.0/beads_1.3.0_linux_amd64.tar.gz -o "$tmp/bd.tgz"
+          curl -fsSL https://github.com/gastownhall/beads/releases/download/v1.3.4/beads_1.3.4_linux_amd64.tar.gz -o "$tmp/bd.tgz"
           # SEC-06: verify the archive against a pinned SHA-256 digest BEFORE
           # extracting or executing anything from it. A tampered or truncated
           # download must fail here, not run.
-          echo "2f92b904ecf35b607e44dc5c39229173af69c54f1183e8d709f1773540cdcf3b  $tmp/bd.tgz" | sha256sum -c -
+          echo "175c26904bde3ff9168d2282ff6b56f17b17f60c22fa5acb3dacc9fb3465303a  $tmp/bd.tgz" | sha256sum -c -
           # extract only the binary — the tarball also ships README/LICENSE/CHANGELOG
           # which must not clobber the repo checkout
           tar -xzf "$tmp/bd.tgz" -C "$tmp" bd
