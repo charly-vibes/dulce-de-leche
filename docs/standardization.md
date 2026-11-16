@@ -44,12 +44,28 @@ publishes to npm instead) must publish **all five targets**:
 | darwin  | arm64 | `aarch64-apple-darwin`       | `.tar.gz` |
 | windows | amd64 | `x86_64-pc-windows-msvc`     | `.zip`    |
 
-Naming: `{tool}_{VERSION}_{os}_{arch}` (e.g. `ddl_0.4.0_linux_arm64.tar.gz`),
+Naming: `{tool}_{VERSION}_{os}_{arch}` (e.g., `ddl_0.4.0_linux_arm64.tar.gz`),
 plus a single `checksums.txt` (`sha256sum`) covering all archives — this is the
 canonical scheme seven repos already follow. After publishing, release.yml must
 auto-update the `homebrew-charly` tap and `scoop-charly` bucket (ddl's release
 workflow is the reference implementation). Current conformance: 7/8 conform;
 `specodelic` has no `release.yml` (crates.io only) — tracked for rollout.
+
+**Prebuilt binaries on GitHub Releases are the primary install path.** Every
+tag that ships a binary MUST publish the five archives plus `checksums.txt` to
+the repository's GitHub Releases. `cargo install` is a fallback, never the only
+path: a user without a Rust toolchain must be able to install and run the tool.
+The README install section must point at the release asset or at a
+package-manager tap/bucket that serves it. A repo that genuinely cannot meet
+this (library crate, npm-only package) MUST record the deviation and its
+substitute install path in `docs/src/status.md`.
+
+Verification per release:
+
+- `gh release view <tag> --json assets` lists all five archives and
+  `checksums.txt`.
+- `https://github.com/charly-vibes/<repo>/releases/latest` resolves.
+- The README install block works on a machine with no Rust toolchain.
 
 Rules:
 
@@ -350,7 +366,9 @@ A new charly-vibes CLI tool is conformant when it has: the three
 workflow files (§1) with `just ci`; root `book.toml` + `theme/charly.css` + the
 five §2 book pages; `llms.txt` + `llm.txt`; the §5 README block; the §5.1
 front-door contract (when-to-use, quickstart with expected output, FAQ link); a
-`versions.ddl.toml` pin file; a row in ddl's registry + capability matrix
+`versions.ddl.toml` pin file; prebuilt GitHub Release binaries for the five §1
+targets plus `checksums.txt` on every tag (or a deviation recorded in
+`docs/src/status.md`); a row in ddl's registry + capability matrix
 (enforced by `tests/tool_registry_drift.rs`); an entry in the §4 dogfood
 matrix; and an ecosystem landing link in the book SUMMARY and README status
 block (§7 — the fleet's front door, enforced by the `s7_ecosystem_landing_*`
