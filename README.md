@@ -162,6 +162,7 @@ Full documentation is available at [charly-vibes.github.io/dulce-de-leche](https
 - [Commands](https://charly-vibes.github.io/dulce-de-leche/commands.html)
 - [Architecture](https://charly-vibes.github.io/dulce-de-leche/architecture.html)
 - [Development](https://charly-vibes.github.io/dulce-de-leche/development.html)
+- [Ecosystem standard](docs/standardization.md) — README front-door and release contract
 
 ## Documentation provenance
 
