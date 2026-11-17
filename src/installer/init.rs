@@ -40,17 +40,77 @@ pub fn init_command(
         // (auto-skips Claude hooks when stdout is not a TTY).
         "bd" => ("bd", &["init", "--non-interactive"]),
         // openspec init scaffolds openspec/ and prompts for AI-tool config;
-        // --tools none skips that prompt. openspec 1.0.0 (PR #578) retired the
-        // `OPENSPEC:START` managed block, so ddl does not expect it and never
-        // re-creates it. Do NOT run `openspec update` from this cascade: it
-        // rewrites the repo's committed `.agents/skills/openspec-*` files and
-        // prints tool-detection output, so migration stays an explicit,
-        // per-repo step (DDL-ehu).
+        // --tools none is the prompt-free artifact-only fallback. The
+        // version-aware variant (`openspec_init_args`, DDL-qfv) is selected in
+        // `run_tool_init`, which alone knows the installed version. openspec
+        // 1.0.0 (PR #578) retired the `OPENSPEC:START` managed block, so ddl
+        // does not expect it and never re-creates it. Do NOT run `openspec
+        // update` from this cascade: it rewrites the repo's committed
+        // `.agents/skills/openspec-*` files and prints tool-detection output,
+        // so migration stays an explicit, per-repo step (DDL-ehu).
         "openspec" => ("openspec", &["init", "--tools", "none"]),
         "specodelic" => ("specodelic", &["doctor"]),
         _ => return None,
     };
     Some((cmd, args.to_vec()))
+}
+
+/// Arguments for `openspec init`, chosen from the *installed* openspec
+/// version (DDL-qfv).
+///
+/// openspec 2.1 added `--scope project`, the only mode that installs project
+/// skills inside the repo. An unscoped `--tools agents` init on 2.1 writes
+/// machine-global skills under `~/.config/agents/skills`, so ddl refuses to
+/// ever emit one: `--tools agents` and `--scope project` travel together
+/// here by construction. Older (2.0 has no `--scope`) or unparseable
+/// versions keep the prompt-free artifact-only `--tools none` init.
+pub fn openspec_init_args(version: Option<&str>) -> Vec<&'static str> {
+    openspec_init_args_for(version.and_then(parse_major_minor))
+}
+
+/// Core of [`openspec_init_args`] over an already-parsed `major.minor`, so
+/// the single `--version` probe is parsed once per init.
+fn openspec_init_args_for(parsed: Option<(u64, u64)>) -> Vec<&'static str> {
+    if parsed.is_some_and(openspec_supports_project_scope) {
+        vec!["init", "--tools", "agents", "--scope", "project"]
+    } else {
+        vec!["init", "--tools", "none"]
+    }
+}
+
+/// Whether `major.minor` is 2.1 or newer — the first openspec releases
+/// whose `init` accepts `--scope project`.
+fn openspec_supports_project_scope((major, minor): (u64, u64)) -> bool {
+    major > 2 || (major == 2 && minor >= 1)
+}
+
+/// Whether a parsed openspec version predates project-scoped skill installs.
+/// Unparseable output is not a version gap: it takes the same safe
+/// `--tools none` fallback without claiming the tool is old.
+fn openspec_predates_project_scope((major, minor): (u64, u64)) -> bool {
+    major < 2 || (major == 2 && minor < 1)
+}
+
+/// Minimal `major.minor` parse for `<tool> --version` output: the first run
+/// of ASCII digits starts the version, so prefixes (`openspec `, `v`) and
+/// suffixes (`-beta`, trailing words) are tolerated. Deliberately not a
+/// semver dependency — only the 2.1 threshold is needed.
+fn parse_major_minor(version: &str) -> Option<(u64, u64)> {
+    let rest = &version[version.find(|c: char| c.is_ascii_digit())?..];
+    let mut fields = rest.split('.');
+    let major = leading_digits(fields.next()?)?;
+    let minor = leading_digits(fields.next().unwrap_or(""))?;
+    Some((major, minor))
+}
+
+/// Parse the leading ASCII-digit run of a version field without allocating.
+fn leading_digits(field: &str) -> Option<u64> {
+    let len = field.bytes().take_while(|b| b.is_ascii_digit()).count();
+    if len == 0 {
+        None
+    } else {
+        field[..len].parse().ok()
+    }
 }
 
 /// `dir` prepended to an inherited PATH (so freshly downloaded binaries in
@@ -265,8 +325,26 @@ fn init_exit_code_error(tool_name: &str, output: &std::process::Output) -> DdlEr
     ))
 }
 
+/// Read the resolved init binary's `--version` first line. Runs under the
+/// same restricted child policy and output/time budgets as the init itself;
+/// a missing or unparseable probe degrades to the safe `--tools none` args.
+fn probe_tool_init_version(
+    tool: &Tool,
+    cmd: &str,
+    on_path: bool,
+    at_dest: Option<PathBuf>,
+) -> Option<String> {
+    let mut probe = build_tool_init_command(tool, cmd, &["--version"], on_path, at_dest).ok()?;
+    let output = run_child_captured(&mut probe, child_deadline()).ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout.lines().next().map(|line| line.trim().to_string())
+}
+
 pub fn run_tool_init(tool: &Tool, verbose: bool, non_interactive: bool) -> Result<()> {
-    let Some((cmd, args)) = init_command(tool.name, non_interactive) else {
+    let Some((cmd, default_args)) = init_command(tool.name, non_interactive) else {
         return Ok(()); // tool has no init command — skip silently
     };
 
@@ -279,6 +357,28 @@ pub fn run_tool_init(tool: &Tool, verbose: bool, non_interactive: bool) -> Resul
     if !on_path && !at_dest_exists {
         eprintln!("  ⚠ {} not found on PATH — skipping init", cmd);
         return Ok(());
+    }
+
+    // openspec is version-aware (DDL-qfv): only 2.1+ gets project skills,
+    // and only ever explicitly scoped to the project — an unscoped init on
+    // 2.1 writes machine-global `~/.config/agents/skills`.
+    let mut args = default_args;
+    if tool.name == "openspec" {
+        let version = probe_tool_init_version(tool, cmd, on_path, at_dest.clone());
+        let parsed = version.as_deref().and_then(parse_major_minor);
+        if let (Some(v), Some(parsed)) = (version.as_deref(), parsed)
+            && openspec_predates_project_scope(parsed)
+        {
+            let shown = v.strip_prefix("openspec").map_or(v, str::trim);
+            eprintln!(
+                "  ⚠ openspec {shown} has no project-scoped skill install: project \
+                 skills need openspec 2.1+ (2.0 has no --scope); running \
+                 `openspec init --tools none`. ddl never runs the command \
+                 unscoped because an unscoped 2.1 init writes machine-global \
+                 ~/.config/agents/skills."
+            );
+        }
+        args = openspec_init_args_for(parsed);
     }
 
     verbose_print(verbose, &format!("running: {} init", cmd));
@@ -329,4 +429,32 @@ pub(crate) fn ensure_on_path(dir: &Path, platform: &Platform) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod openspec_init_args_tests {
+    use super::*;
+
+    #[test]
+    fn openspec_2_1_and_newer_install_project_scoped_skills() {
+        for version in ["openspec 2.1.0", "2.1.0", "openspec 2.10.3", "v2.1.0-beta"] {
+            assert_eq!(
+                openspec_init_args(Some(version)),
+                vec!["init", "--tools", "agents", "--scope", "project"],
+                "openspec `{version}` must install project-scoped skills"
+            );
+        }
+    }
+
+    #[test]
+    fn old_or_unparseable_openspec_keeps_artifact_only_init() {
+        for version in ["openspec 2.0.0", "openspec 0.19.0", "openspec unknown"] {
+            assert_eq!(
+                openspec_init_args(Some(version)),
+                vec!["init", "--tools", "none"],
+                "openspec `{version}` must keep the artifact-only init"
+            );
+        }
+        assert_eq!(openspec_init_args(None), vec!["init", "--tools", "none"]);
+    }
 }

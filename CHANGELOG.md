@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`ddl init` installs openspec project skills** — on openspec 2.1+ it runs
+  `openspec init --tools agents --scope project`; older (2.0 has no `--scope`)
+  or unparseable versions keep the artifact-only `init --tools none` with a
+  warning, so an older or unscoped install never touches machine-global
+  `~/.config/agents/skills`. Fleet pin bumped to 2.1.0 (`DDL-qfv`)
 - **`ddl doctor`'s `ddl.repo.blocks` verifies what each tool publishes** —
   managed blocks for ddl/wai/beads, `openspec/config.yaml` for openspec —
   instead of requiring the `OPENSPEC:START` block openspec retired in 1.0.0;

@@ -97,6 +97,31 @@ fn version_stub(version: &str) -> String {
     format!("#!/bin/sh\ncase \"$1\" in --version) echo \"{version}\" ;; *) exit 0 ;; esac\n")
 }
 
+/// An openspec stub that reports `version_line` for `--version`, records the
+/// argv of every other invocation into `record`, and — like real openspec —
+/// writes machine-global skills when asked to install agents without
+/// `--scope project` (so an unscoped init is observable as a file, not just
+/// an argv diff).
+fn recording_openspec_stub(version_line: &str, record: &Path) -> String {
+    let record = record.display();
+    format!(
+        "#!/bin/sh\n\
+         case \"$1\" in\n\
+         --version) echo \"{version_line}\" ;;\n\
+         *)\n\
+           echo \"$@\" >> '{record}'\n\
+           if [ \"$1\" = init ] && [ \"$2\" = --tools ] && [ \"$3\" = agents ]; then\n\
+             case \" $* \" in\n\
+               *\" --scope project \"*) ;;\n\
+               *) mkdir -p \"$HOME/.config/agents/skills\"\n\
+                  : > \"$HOME/.config/agents/skills/openspec\" ;;\n\
+             esac\n\
+           fi ;;\n\
+         esac\n\
+         exit 0\n"
+    )
+}
+
 fn ddl_init(temp: &tempfile::TempDir) -> assert_cmd::assert::Assert {
     ddl_init_args(temp, &["init", "--yes", "--human", "--no-install"])
 }
@@ -113,13 +138,60 @@ fn ddl_init_args(temp: &tempfile::TempDir, args: &[&str]) -> assert_cmd::assert:
             ("wai", &version_stub("wai 2026.9.28")),
             // openspec >= 1.0 publishes nothing into AGENTS.md; the fixture
             // already models the current `openspec/config.yaml` layout, and
-            // the stub keeps a real 0.19 cascade from re-creating the legacy
-            // `project.md` layout ddl must not migrate (DDL-ehu).
+            // this silent stub keeps the cascade from running whatever
+            // openspec release the host happens to have (DDL-ehu).
             ("openspec", "#!/bin/sh\nexit 0\n"),
         ],
     );
     cmd.args(args);
     cmd.assert()
+}
+
+/// `ddl init -y --no-install --tools openspec` with an openspec stub
+/// reporting `version_line`. The cascade is scoped to openspec so no other
+/// host tool init can run (a real `bd init`, for example, writes a
+/// repo-local `.agents/skills/beads`). HOME/XDG are sandboxed in a `home/`
+/// sibling of the repo root — never the repo root itself, so a repo-local
+/// `.agents/skills` can never be mistaken for the machine-global one.
+/// Returns the assert handle and the recorded openspec argv lines.
+fn ddl_init_with_openspec(
+    temp: &tempfile::TempDir,
+    version_line: &str,
+) -> (assert_cmd::assert::Assert, Vec<String>) {
+    let record = temp.path().join("openspec-argv.txt");
+    let home = temp.path().join("home");
+    std::fs::create_dir_all(&home).unwrap();
+    let stub = recording_openspec_stub(version_line, &record);
+    let mut cmd = Command::cargo_bin("ddl").unwrap();
+    cmd.current_dir(temp.path());
+    cmd.timeout(CMD_TIMEOUT);
+    cmd.env("HOME", &home);
+    cmd.env("XDG_CONFIG_HOME", home.join(".config"));
+    cmd.env("XDG_DATA_HOME", home.join(".local").join("share"));
+    stub_tools_on_path(
+        &mut cmd,
+        temp,
+        &[
+            ("incitaciones", "#!/bin/sh\nexit 0\n"),
+            ("wai", &version_stub("wai 2026.9.28")),
+            ("openspec", &stub),
+        ],
+    );
+    cmd.args([
+        "init",
+        "--yes",
+        "--human",
+        "--no-install",
+        "--tools",
+        "openspec",
+    ]);
+    let assert = cmd.assert();
+    let argv = std::fs::read_to_string(&record)
+        .unwrap_or_default()
+        .lines()
+        .map(str::to_string)
+        .collect();
+    (assert, argv)
 }
 
 // ===================== DDL managed block in AGENTS.md =====================
@@ -225,10 +297,8 @@ fn test_init_gates_leaves_doctor_repo_checks_clean() {
     //
     // openspec is NOT here: since 1.0.0 ("The OPSX Release", PR #578) it
     // writes no managed block at all, so its installed version cannot be
-    // meaningfully "in contract" with a block; 0.19.0 was the last writer of
-    // `OPENSPEC:START` and the pin still holds that release. Its surface is
-    // checked as an artifact (`openspec/config.yaml`), not as a block
-    // (DDL-ehu).
+    // meaningfully "in contract" with a block. Its surface is checked as an
+    // artifact (`openspec/config.yaml`), not as a block (DDL-ehu).
     const BLOCK_WRITERS: &[(&str, &str)] = &[
         // (tool, pin key in versions.ddl.toml)
         ("wai", "wai"),
@@ -306,4 +376,53 @@ fn test_init_gates_leaves_doctor_repo_checks_clean() {
         repo_findings.is_empty(),
         "ddl init -y --gates must leave ddl doctor clean for ddl.repo.* checks:\n{repo_findings:?}"
     );
+}
+
+// ===================== openspec project skills (DDL-qfv) =====================
+
+/// openspec 2.1+ installs project skills, but only when ddl passes an
+/// explicit `--scope project`: an unscoped `--tools agents` init writes
+/// machine-global skills instead. Covers the version spellings ddl must
+/// parse (prefixed, bare, multi-digit minor).
+#[test]
+fn test_init_openspec_2_1_installs_project_scoped_skills() {
+    for version_line in ["openspec 2.1.0", "2.1.0", "openspec 2.10.3"] {
+        let temp = stock_repo();
+        let (_assert, argv) = ddl_init_with_openspec(&temp, version_line);
+        assert_eq!(
+            argv,
+            ["init --tools agents --scope project"],
+            "openspec `{version_line}` must init with project-scoped skills"
+        );
+        assert!(
+            !temp.path().join("home/.config/agents/skills").exists(),
+            "an unscoped openspec init would have written machine-global skills"
+        );
+        assert!(!temp.path().join("home/.agents/skills").exists());
+    }
+}
+
+/// Before 2.1 there is no `--scope`, so ddl must fall back to the
+/// artifact-only `--tools none` init and name the version gap.
+#[test]
+fn test_init_openspec_below_2_1_warns_and_never_installs_skills() {
+    let temp = stock_repo();
+    let (assert, argv) = ddl_init_with_openspec(&temp, "openspec 2.0.0");
+    assert_eq!(
+        argv,
+        ["init --tools none"],
+        "openspec 2.0 has no --scope: ddl must not install skills"
+    );
+    let output = assert.get_output();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("2.0.0") && stderr.contains("2.1"),
+        "init must warn about the openspec version gap:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("--scope") && stderr.contains("~/.config/agents/skills"),
+        "warning must explain why ddl never runs openspec unscoped:\n{stderr}"
+    );
+    assert!(!temp.path().join("home/.config/agents/skills").exists());
+    assert!(!temp.path().join("home/.agents/skills").exists());
 }
