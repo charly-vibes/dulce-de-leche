@@ -40,7 +40,12 @@ pub fn init_command(
         // (auto-skips Claude hooks when stdout is not a TTY).
         "bd" => ("bd", &["init", "--non-interactive"]),
         // openspec init scaffolds openspec/ and prompts for AI-tool config;
-        // --tools none skips that prompt.
+        // --tools none skips that prompt. openspec 1.0.0 (PR #578) retired the
+        // `OPENSPEC:START` managed block, so ddl does not expect it and never
+        // re-creates it. Do NOT run `openspec update` from this cascade: it
+        // rewrites the repo's committed `.agents/skills/openspec-*` files and
+        // prints tool-detection output, so migration stays an explicit,
+        // per-repo step (DDL-ehu).
         "openspec" => ("openspec", &["init", "--tools", "none"]),
         "specodelic" => ("specodelic", &["doctor"]),
         _ => return None,

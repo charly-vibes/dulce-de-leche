@@ -42,14 +42,24 @@ fn git_init(path: &Path) {
     assert!(out.status.success(), "git init failed: {:?}", out.stderr);
 }
 
-/// A stock charly repo: git, AGENTS.md with the other ecosystem blocks but
-/// no DDL block, Rust pins-relevant (Cargo.toml), no versions.ddl.toml.
+/// A stock charly repo: git, AGENTS.md with the block-publishing tools'
+/// blocks but no DDL block, the openspec artifact layout, Rust pins-relevant
+/// (Cargo.toml), no versions.ddl.toml.
+///
+/// openspec is not a block writer: 1.0.0 retired `OPENSPEC:START` and the
+/// current layout is `openspec/config.yaml` (DDL-ehu).
 fn stock_repo() -> tempfile::TempDir {
     let temp = tempfile::tempdir().unwrap();
     git_init(temp.path());
     std::fs::write(
         temp.path().join("AGENTS.md"),
-        "<!-- WAI:START -->\n<!-- WAI:END -->\n<!-- OPENSPEC:START -->\n<!-- OPENSPEC:END -->\n<!-- BEGIN BEADS INTEGRATION -->\n<!-- END BEADS INTEGRATION -->\n",
+        "<!-- WAI:START -->\n<!-- WAI:END -->\n<!-- BEGIN BEADS INTEGRATION -->\n<!-- END BEADS INTEGRATION -->\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(temp.path().join("openspec")).unwrap();
+    std::fs::write(
+        temp.path().join("openspec/config.yaml"),
+        "schema: spec-driven\n",
     )
     .unwrap();
     std::fs::write(
@@ -101,6 +111,11 @@ fn ddl_init_args(temp: &tempfile::TempDir, args: &[&str]) -> assert_cmd::assert:
         &[
             ("incitaciones", "#!/bin/sh\nexit 0\n"),
             ("wai", &version_stub("wai 2026.9.28")),
+            // openspec >= 1.0 publishes nothing into AGENTS.md; the fixture
+            // already models the current `openspec/config.yaml` layout, and
+            // the stub keeps a real 0.19 cascade from re-creating the legacy
+            // `project.md` layout ddl must not migrate (DDL-ehu).
+            ("openspec", "#!/bin/sh\nexit 0\n"),
         ],
     );
     cmd.args(args);
@@ -204,15 +219,19 @@ fn test_init_reconciles_preexisting_install_into_manifest() {
 fn test_init_gates_leaves_doctor_repo_checks_clean() {
     // DDL-gef: the doctor-clean contract below holds only when the tools
     // the init cascade runs on PATH behave like the fleet-pinned versions
-    // (versions.ddl.toml). Found the hard way: openspec 1.14.2 dropped the
-    // OPENSPEC:START managed block that 0.19.0 (the pin) writes in init, so
-    // dev machines with an unpinned openspec failed this test while pinned
-    // CI passed. Dev machines install unpinned BY DESIGN — skip with the
-    // drift named; CI installs the pins (ci.yml) and exercises the contract.
+    // (versions.ddl.toml). Dev machines install unpinned BY DESIGN — skip
+    // with the drift named; CI installs the pins (ci.yml) and exercises the
+    // contract.
+    //
+    // openspec is NOT here: since 1.0.0 ("The OPSX Release", PR #578) it
+    // writes no managed block at all, so its installed version cannot be
+    // meaningfully "in contract" with a block; 0.19.0 was the last writer of
+    // `OPENSPEC:START` and the pin still holds that release. Its surface is
+    // checked as an artifact (`openspec/config.yaml`), not as a block
+    // (DDL-ehu).
     const BLOCK_WRITERS: &[(&str, &str)] = &[
         // (tool, pin key in versions.ddl.toml)
         ("wai", "wai"),
-        ("openspec", "openspec"),
         ("bd", "bd"),
     ];
     let pins: std::collections::HashMap<String, String> =

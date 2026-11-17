@@ -193,7 +193,7 @@ per repo: `ddl doctor --json` reports zero `ddl.repo.*` warnings.
 | espectacular (`ah`) | ✅ | `ddl.repo.bd-hooks` (lefthook not chaining `bd hooks run`) | charly-vibes/espectacular#45 |
 | testaruda | ✅ | `ddl.repo.license` (LICENSE text vs declared Apache-2.0) | charly-vibes/testaruda#72 |
 | specodelic | ✅ | `ddl.repo.bd-hooks`, `ddl.repo.changelog` | charly-vibes/specodelic#14 |
-| genesis | ✅ | `ddl.repo.blocks` (openspec block missing) | charly-vibes/genesis#14 |
+| genesis | ✅ | `ddl.repo.blocks` (openspec legacy layout: `openspec/project.md`, migrate with `openspec update`) | charly-vibes/genesis#14 |
 | dont | ✅ | `ddl.repo.bd-hooks` (lefthook not chaining `bd hooks run`); main's `ah check` has 4 pre-existing slug-collisions | charly-vibes/dont#27 |
 | pretender | ✅ | `ddl.repo.license` (Cargo.toml declares no license field), `ddl.repo.bd-hooks` | charly-vibes/pretender#49 |
 | vampiro | ✅ | none | charly-vibes/vampiro#46 |
@@ -205,6 +205,50 @@ was fixed — tool-config failures are now advisory and gates wiring always
 completes — so all five previously-skipped repos were swept with
 `ddl init --gates -y --no-install` against each repo's `main` (throwaway
 worktrees).
+
+### 4.2 Instrumentation is published by the tool, checked by presence
+
+Agent instrumentation belongs to the tool that writes it. `ddl.repo.blocks`
+verifies that a tool's **published** surface is present in a repo that uses
+the tool; it never re-creates, and never demands, an artifact the writer
+retired.
+
+| Tool | Surface | Presence signal | Scope ("this repo uses the tool") |
+|---|---|---|---|
+| ddl | block | `<!-- DDL:START -->` … `<!-- DDL:END -->` in `AGENTS.md` | always — ddl owns the repo it checks |
+| wai | block | `<!-- WAI:START -->` … `<!-- WAI:END -->` in `AGENTS.md` | `.wai/` exists **or** `wai` pinned |
+| beads | block | `BEGIN BEADS INTEGRATION` … `END BEADS INTEGRATION` in `AGENTS.md` | `.beads/` exists **or** `bd` pinned |
+| openspec | artifact | `openspec/config.yaml` | `openspec/` exists **or** `openspec` pinned |
+
+"Pinned" means an entry in the repo's own `versions.ddl.toml` `[tools]` table.
+Scope is per repo: fleet membership is not a scope signal (genesis uses
+openspec without pinning it, and many repos host no beads dir). Every finding
+is `warning` — `ddl doctor`'s exit code is unchanged.
+
+**Ownership.** The writer owns the artifact. ddl names the writer's command as
+the fix (`ddl init`, `wai init`, `bd init --non-interactive`, `openspec
+update`); it never writes another tool's block.
+
+**Retirement.** When a tool retires a surface, its writer removes it and ddl
+stops expecting it. openspec 1.0.0 ("The OPSX Release", PR #578) retired the
+`OPENSPEC:START` block: later releases write no `AGENTS.md`, and `openspec
+update` removes authentic legacy copies (fingerprint-gated; hand-edited text
+survives). openspec findings are therefore:
+
+- `openspec/config.yaml` present → pass; no managed block is required;
+- `openspec/project.md` only → warning naming the legacy layout and the
+  `project.md` → `config.yaml` migration (`openspec update`);
+- both present → warning that `config.yaml` is authoritative and the stale
+  `project.md` should be deleted after migrating;
+- `openspec/` scoped but neither file → warning, fix `openspec update`;
+- a legacy `OPENSPEC:START` block, wherever it remains → one warning that it is
+  retired and `openspec update` removes it.
+
+A retired block is **never** re-created by ddl, and no `ddl.repo.blocks`
+finding demands one. `ddl init` keeps invoking `openspec init --tools none`
+for tools not yet recorded in `.ddl/manifest.json`; it never runs `openspec
+update` — that rewrites the repo's committed `.agents/skills/openspec-*`
+files and is an explicit, pin-driven per-repo migration.
 
 ## 5. Motivation & status block (the "why / how mature")
 

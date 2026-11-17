@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`ddl doctor`'s `ddl.repo.blocks` verifies what each tool publishes** —
+  managed blocks for ddl/wai/beads, `openspec/config.yaml` for openspec —
+  instead of requiring the `OPENSPEC:START` block openspec retired in 1.0.0;
+  legacy and hybrid openspec layouts now report a migration warning pointing
+  at `openspec update` (`DDL-ehu`)
+
 ## [0.10.0] - 2026-11-16
 
 Provenance verification that accepts the fleet's own releases, the `ddl setup`

@@ -1,19 +1,146 @@
-//! Repository doctor checks: gates wiring, managed blocks, gitignore, pins, license, fmt, bd hook chain, changelog, beads export, skills.
+//! Repository doctor checks: gates wiring, agent instrumentation, gitignore,
+//! pins, license, fmt, bd hook chain, changelog, beads export, skills.
+//!
+//! Purpose: answer "is THIS repository ddl-initialized and conformant?" —
+//! one check per repo-level property, each keyed off the repo's git root.
+//!
+//! Responsibilities:
+//! - register the repo-scope checks the doctor runner runs on a repo
+//!   (`report.rs` owns registration; this file owns the checks themselves)
+//! - decide each check's scope from repo evidence (dirs, pins), never from a
+//!   universal "every repo hosts every tool" assumption
+//! - report problems as `Severity::Warning` with an actionable fix hint;
+//!   `ddl doctor` never fails on a repo-scope finding
+//!
+//! Rationale: (DDL-ehu) agent instrumentation is verified against what each
+//! tool itself publishes — a managed `AGENTS.md` block or a published
+//! artifact — and only for tools the repo uses. ddl checks presence; it never
+//! re-creates an artifact its writer retired (openspec's block since 1.0.0).
 
 use super::*;
 use genesis::doctor::DoctorCheck;
 use genesis::suite_linter::{LintResult, Severity};
 use std::path::Path;
 
-/// Managed blocks expected in the repo's AGENTS.md (the "this repo is
-/// agent-instrumented" definition): ddl's own block (DDL-fw7 — `ddl init`
-/// writes it), wai, openspec, beads.
-const AGENT_BLOCKS: &[(&str, &str)] = &[
-    (crate::DDL_AGENTS_MARKER, "ddl"),
-    ("<!-- WAI:START -->", "wai"),
-    ("OPENSPEC:START", "openspec"),
-    ("BEGIN BEADS INTEGRATION", "beads"),
+/// What a tool publishes as its agent-instrumentation surface.
+///
+/// The shape encodes the ownership rule (docs/standardization.md §4.2): the
+/// check verifies the tool's published surface, never that the tool
+/// reproduces something it has retired.
+enum Instrumentation {
+    /// The tool owns a delimited region of `AGENTS.md` and rewrites it.
+    Block {
+        start: &'static str,
+        end: &'static str,
+        /// Command that writes the block; doubles as the fix hint.
+        writer: &'static str,
+    },
+    /// The tool publishes a file; that file's presence is the signal.
+    Artifact {
+        path: &'static str,
+        /// `(path, migration hint)` of the layout this artifact replaced.
+        legacy: Option<(&'static str, &'static str)>,
+        /// Command that produces or migrates the artifact.
+        writer: &'static str,
+    },
+}
+
+/// One instrumentation row: the owning tool, the repo evidence that scopes
+/// the check to repos using that tool, and what the tool publishes.
+struct InstrumentationEntry {
+    /// Tool name as it appears in diagnostics.
+    tool: &'static str,
+    /// Repo-relative dir whose existence means "this repo uses the tool";
+    /// `None` only for ddl, which always owns the repo it checks.
+    dir: Option<&'static str>,
+    /// `versions.ddl.toml` `[tools]` key that also scopes the check.
+    pin: Option<&'static str>,
+    published: Instrumentation,
+}
+
+/// The fleet's instrumentation table. Add a row when a managed tool starts
+/// or stops publishing an agent surface.
+const INSTRUMENTATION: &[InstrumentationEntry] = &[
+    InstrumentationEntry {
+        tool: "ddl",
+        dir: None,
+        pin: None,
+        published: Instrumentation::Block {
+            start: crate::DDL_AGENTS_MARKER,
+            end: "<!-- DDL:END -->",
+            writer: "ddl init",
+        },
+    },
+    InstrumentationEntry {
+        tool: "wai",
+        dir: Some(".wai"),
+        pin: Some("wai"),
+        published: Instrumentation::Block {
+            start: "<!-- WAI:START -->",
+            end: "<!-- WAI:END -->",
+            writer: "wai init",
+        },
+    },
+    InstrumentationEntry {
+        tool: "beads",
+        dir: Some(".beads"),
+        pin: Some("bd"),
+        published: Instrumentation::Block {
+            start: "BEGIN BEADS INTEGRATION",
+            end: "END BEADS INTEGRATION",
+            writer: "bd init --non-interactive",
+        },
+    },
+    // openspec 1.0.0 ("The OPSX Release", PR #578) stopped writing `AGENTS.md`
+    // and moved project-wide facts into `openspec/config.yaml`; `project.md`
+    // is the pre-1.0 layout the artifact replaced.
+    InstrumentationEntry {
+        tool: "openspec",
+        dir: Some("openspec"),
+        pin: Some("openspec"),
+        published: Instrumentation::Artifact {
+            path: "openspec/config.yaml",
+            legacy: Some((
+                "openspec/project.md",
+                "openspec update (migrates project.md into config.yaml)",
+            )),
+            writer: "openspec update",
+        },
+    },
 ];
+
+impl InstrumentationEntry {
+    /// This repo uses the tool when its own directory is present or the repo
+    /// pins it. Neither signal is sufficient alone: genesis uses openspec
+    /// without pinning it, and a repo can pin a tool it has not initialized
+    /// yet (the artifact check then reports the missing artifact).
+    fn is_scoped(&self, root: &Path, pins: &[String]) -> bool {
+        match (self.dir, self.pin) {
+            (None, None) => true,
+            (dir, pin) => {
+                dir.is_some_and(|d| root.join(d).exists())
+                    || pin.is_some_and(|key| pins.iter().any(|p| p == key))
+            }
+        }
+    }
+
+    fn is_block(&self) -> bool {
+        matches!(self.published, Instrumentation::Block { .. })
+    }
+}
+
+/// `[tools]` keys from the repo's own `versions.ddl.toml`, if committed.
+/// Unreadable or missing pins scope nothing — the dir check still applies.
+fn repo_pins(root: &Path) -> Vec<String> {
+    std::fs::read_to_string(root.join("versions.ddl.toml"))
+        .map(|text| {
+            crate::manifest::parse_fleet_pins(&text)
+                .into_iter()
+                .map(|(name, _)| name)
+                .collect()
+        })
+        .unwrap_or_default()
+}
 
 /// Check the repo's lefthook gates wiring (DDL-6zn.5).
 pub struct RepoGatesCheck;
@@ -47,7 +174,11 @@ impl DoctorCheck for RepoGatesCheck {
     }
 }
 
-/// Check the repo's AGENTS.md managed blocks (DDL-6zn.5).
+/// Check the repo's agent instrumentation (DDL-6zn.5, DDL-ehu).
+///
+/// Each scoped tool must publish what it owns: a managed `AGENTS.md` block for
+/// block writers, a file for artifact writers. A layout the writer replaced is
+/// reported as migration, not as a missing requirement.
 pub struct RepoAgentBlocksCheck;
 
 impl DoctorCheck for RepoAgentBlocksCheck {
@@ -55,7 +186,7 @@ impl DoctorCheck for RepoAgentBlocksCheck {
         "ddl.repo.blocks"
     }
     fn description(&self) -> &'static str {
-        "Check that AGENTS.md carries the ecosystem managed blocks"
+        "Check that each used tool's published agent instrumentation is present"
     }
     fn run(
         &self,
@@ -64,28 +195,153 @@ impl DoctorCheck for RepoAgentBlocksCheck {
         let Some(root) = find_git_root(repo_root) else {
             return Ok(vec![]);
         };
-        let path = root.join("AGENTS.md");
-        if !path.exists() {
-            return Ok(vec![LintResult::with_fix(
-                "AGENTS.md missing — tool managed blocks absent",
-                Severity::Warning,
-                "ddl init",
-            )]);
-        }
-        let text = std::fs::read_to_string(&path)
-            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
-        Ok(AGENT_BLOCKS
+        let pins = repo_pins(&root);
+        let scoped: Vec<&InstrumentationEntry> = INSTRUMENTATION
             .iter()
-            .filter(|(marker, _)| !text.contains(marker))
-            .map(|(_, label)| {
-                LintResult::with_fix(
-                    format!("AGENTS.md missing managed block for {label}"),
-                    Severity::Warning,
-                    "ddl init",
-                )
-            })
-            .collect())
+            .filter(|entry| entry.is_scoped(&root, &pins))
+            .collect();
+
+        let agents_path = root.join("AGENTS.md");
+        let agents = agents_path
+            .exists()
+            .then(|| std::fs::read_to_string(&agents_path))
+            .transpose()
+            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+
+        let mut problems = Vec::new();
+        let openspec_installed = crate::diagnostics::which("openspec").is_some();
+        let block_tools: Vec<&str> = scoped
+            .iter()
+            .filter(|entry| entry.is_block())
+            .map(|entry| entry.tool)
+            .collect();
+
+        match agents.as_deref() {
+            // No AGENTS.md: only a scoped block-publishing tool has a claim on
+            // it. Artifact publishers are checked below regardless.
+            None => {
+                if !block_tools.is_empty() {
+                    problems.push(LintResult::with_fix(
+                        format!(
+                            "AGENTS.md missing — no managed blocks for {}",
+                            block_tools.join(", ")
+                        ),
+                        Severity::Warning,
+                        "ddl init",
+                    ));
+                }
+            }
+            Some(text) => {
+                for entry in scoped.iter().filter(|entry| entry.is_block()) {
+                    let Instrumentation::Block { start, end, writer } = entry.published else {
+                        continue;
+                    };
+                    if !text.contains(start) || !text.contains(end) {
+                        problems.push(LintResult::with_fix(
+                            format!("AGENTS.md missing managed block for {}", entry.tool),
+                            Severity::Warning,
+                            writer,
+                        ));
+                    }
+                }
+                if let Some(finding) = retired_openspec_block_finding(text, openspec_installed) {
+                    problems.push(finding);
+                }
+            }
+        }
+
+        for entry in scoped.iter().filter(|entry| !entry.is_block()) {
+            problems.extend(artifact_findings(&root, entry, openspec_installed));
+        }
+
+        Ok(problems)
     }
+}
+
+/// openspec 1.0.0 ("The OPSX Release", PR #578) retired this managed block: it
+/// writes no `AGENTS.md`, and `openspec update` removes authentic legacy
+/// copies (fingerprint-gated). ddl never writes or requires it — a repo still
+/// carrying the block gets one advisory naming the supported removal, whether
+/// or not it is on the artifact layout.
+fn retired_openspec_block_finding(text: &str, installed: bool) -> Option<LintResult> {
+    const MARKER: &str = "OPENSPEC:START";
+    if !text.contains(MARKER) {
+        return None;
+    }
+    let message = format!(
+        "AGENTS.md carries the retired {MARKER} managed block — openspec 1.0.0 \
+         no longer publishes it"
+    );
+    Some(if installed {
+        LintResult::with_fix(
+            message,
+            Severity::Warning,
+            "openspec update (removes authentic legacy blocks)",
+        )
+    } else {
+        LintResult::new(
+            format!("{message} (openspec not installed)"),
+            Severity::Warning,
+        )
+    })
+}
+
+/// Findings for an artifact-publishing tool. Presence of the artifact passes;
+/// the layout it replaced is a migration advisory; neither file on a scoped
+/// repo is a missing-artifact warning. A fix hint is emitted only when the
+/// tool is installed, so doctor never names a command that cannot run.
+fn artifact_findings(
+    root: &Path,
+    entry: &InstrumentationEntry,
+    installed: bool,
+) -> Vec<LintResult> {
+    let (path, legacy, writer) = match entry.published {
+        Instrumentation::Artifact {
+            path,
+            legacy,
+            writer,
+        } => (path, legacy, writer),
+        Instrumentation::Block { .. } => return vec![],
+    };
+    let tool = entry.tool;
+    let artifact = root.join(path).exists();
+    let legacy_present = legacy.is_some_and(|(legacy_path, _)| root.join(legacy_path).exists());
+    let (message, fix) = match (artifact, legacy_present) {
+        (true, false) => return vec![],
+        (true, true) => {
+            let legacy_path = legacy.map(|(legacy_path, _)| legacy_path).unwrap_or(path);
+            (
+                format!(
+                    "{tool} hybrid layout: {path} is authoritative — migrate and \
+                     delete {legacy_path}"
+                ),
+                writer,
+            )
+        }
+        (false, true) => {
+            let (legacy_path, hint) = legacy.unwrap_or((path, writer));
+            (
+                format!(
+                    "{tool} legacy layout: {legacy_path} is not read by {tool} 1.x — \
+                     migrate it into {path}"
+                ),
+                hint,
+            )
+        }
+        (false, false) => (
+            format!("{tool} is scoped but {path} is missing — the tool published no artifact"),
+            writer,
+        ),
+    };
+    let finding = if installed {
+        LintResult::with_fix(message, Severity::Warning, fix)
+    } else {
+        LintResult::new(
+            format!("{message} ({tool} not installed)"),
+            Severity::Warning,
+        )
+    };
+    vec![finding]
 }
 
 /// Check the repo's .gitignore coverage of tool data dirs (DDL-6zn.5).

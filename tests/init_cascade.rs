@@ -412,6 +412,91 @@ fn ah_init_runs_after_openspec_init() {
     assert!(temp.path().join("openspec").is_dir());
 }
 
+/// DDL-ehu (proposal task 3.2): the init cascade scaffolds openspec with
+/// `openspec init --tools none` and MUST NOT run `openspec update` — that
+/// command rewrites the repo's committed `.agents/skills/openspec-*` files
+/// and prints tool-detection output, so migration stays an explicit,
+/// per-repo step. A fake `openspec` on PATH records its argv: exactly one
+/// init invocation, never `update`.
+#[test]
+fn cascade_never_invokes_openspec_update() {
+    let temp = tempfile::tempdir().unwrap();
+    // The layout the contract targets: a git root with openspec/ present.
+    let mut git = std::process::Command::new("git");
+    git.env_remove("GIT_DIR").env_remove("GIT_WORK_TREE");
+    let git_out = git
+        .args(["init", "-q"])
+        .current_dir(temp.path())
+        .output()
+        .expect("git init runs");
+    assert!(
+        git_out.status.success(),
+        "git init failed: {:?}",
+        git_out.stderr
+    );
+    let openspec_dir = temp.path().join("openspec");
+    std::fs::create_dir_all(&openspec_dir).unwrap();
+    std::fs::write(openspec_dir.join("config.yaml"), "schema: spec-driven\n").unwrap();
+
+    let mut cmd = Command::cargo_bin("ddl").unwrap();
+    common::clean_git_env(&mut cmd);
+    cmd.current_dir(temp.path());
+    // Sandboxed HOME: `.ddl/bin` must not shadow the stub with a real tool.
+    cmd.env("HOME", temp.path().join("home"));
+
+    // Record argv here; `--version` probes answer without appending, so the
+    // recorded lines are exactly the init invocations.
+    let argv_log = temp.path().join("openspec-argv");
+    let stub = format!(
+        "if [ \"$1\" = \"--version\" ]; then echo \"openspec 0.19.0\"; exit 0; fi\n\
+         echo \"$@\" >> \"{}\"\n\
+         exit 0",
+        argv_log.display()
+    );
+    // `wai` is force-initialized by init's tail even under --tools scoping.
+    stub_tools(
+        &mut cmd,
+        &temp,
+        &[("openspec", stub.as_str()), ("wai", "exit 0")],
+    );
+
+    // Scope to openspec so no host-installed tool runs a real init.
+    cmd.args([
+        "init",
+        "--yes",
+        "--no-install",
+        "--tools",
+        "openspec",
+        "--human",
+    ]);
+    cmd.timeout(CMD_TIMEOUT);
+    let output = cmd.assert().success().get_output().clone();
+
+    // The fake openspec ran exactly once, with the scaffold invocation.
+    assert!(argv_log.exists(), "cascade never invoked the fake openspec");
+    let recorded = std::fs::read_to_string(&argv_log)
+        .unwrap_or_else(|e| panic!("read recorded openspec argv: {e}"));
+    assert_eq!(
+        recorded.lines().collect::<Vec<_>>(),
+        vec!["init --tools none"],
+        "cascade must invoke only `openspec init --tools none`, got: {recorded}"
+    );
+    assert!(
+        !recorded.contains("update"),
+        "cascade passed `update` to openspec: {recorded}"
+    );
+
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        !combined.contains("openspec update"),
+        "cascade output must not advertise/run `openspec update`: {combined}"
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn init_reaches_tool_only_at_ddl_bin_destination() {

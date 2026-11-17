@@ -296,7 +296,7 @@ fn wired_git_repo() -> tempfile::TempDir {
     std::fs::write(temp.path().join(".gitignore"), &gitignore).unwrap();
     std::fs::write(
         temp.path().join("AGENTS.md"),
-        "<!-- WAI:START -->\n<!-- WAI:END -->\n<!-- OPENSPEC:START -->\n<!-- OPENSPEC:END -->\n<!-- BEGIN BEADS INTEGRATION -->\n<!-- END BEADS INTEGRATION -->\n<!-- DDL:START -->\n<!-- DDL:END -->\n",
+        "<!-- WAI:START -->\n<!-- WAI:END -->\n<!-- BEGIN BEADS INTEGRATION -->\n<!-- END BEADS INTEGRATION -->\n<!-- DDL:START -->\n<!-- DDL:END -->\n",
     )
     .unwrap();
     std::fs::write(
@@ -437,5 +437,216 @@ fn test_doctor_repo_checks_warn_in_unwired_git_repo() {
             .unwrap_or("")
             .contains("ddl init --gates"),
         "gates findings carry the fix command: {gates}"
+    );
+}
+
+// ===================== agent instrumentation layouts (DDL-ehu) =====================
+
+/// AGENTS.md carrying the blocks of the tools that still publish one. openspec
+/// is deliberately absent: since 1.0.0 it publishes `openspec/config.yaml`.
+const BLOCK_DOC: &str = "<!-- DDL:START -->\n<!-- DDL:END -->\n<!-- WAI:START -->\n<!-- WAI:END -->\n<!-- BEGIN BEADS INTEGRATION -->\n<!-- END BEADS INTEGRATION -->\n";
+
+/// Run `RepoAgentBlocksCheck` directly against a fresh git repo containing
+/// `files` (plus `versions.ddl.toml` when `pins` is given).
+fn block_findings(
+    files: &[(&str, &str)],
+    pins: Option<&str>,
+) -> Vec<genesis::suite_linter::LintResult> {
+    let temp = tempfile::tempdir().unwrap();
+    git_init(temp.path());
+    for (path, contents) in files {
+        let full = temp.path().join(path);
+        if let Some(parent) = full.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&full, contents).unwrap();
+    }
+    if let Some(pins) = pins {
+        std::fs::write(temp.path().join("versions.ddl.toml"), pins).unwrap();
+    }
+    let check = dulce_de_leche::diagnostics::RepoAgentBlocksCheck;
+    genesis::doctor::DoctorCheck::run(&check, temp.path()).unwrap()
+}
+
+/// Only the findings about openspec (the layout under test).
+fn openspec_findings(
+    files: &[(&str, &str)],
+    pins: Option<&str>,
+) -> Vec<genesis::suite_linter::LintResult> {
+    block_findings(files, pins)
+        .into_iter()
+        .filter(|f| f.message.contains("openspec"))
+        .collect()
+}
+
+#[test]
+fn test_blocks_check_passes_openspec_config_layout() {
+    let findings = openspec_findings(
+        &[
+            ("AGENTS.md", BLOCK_DOC),
+            ("openspec/config.yaml", "schema: spec-driven\n"),
+        ],
+        None,
+    );
+    assert!(
+        findings.is_empty(),
+        "openspec/config.yaml is the published artifact; no finding: {findings:?}"
+    );
+}
+
+#[test]
+fn test_blocks_check_openspec_legacy_layout_is_a_migration_warning() {
+    let findings = openspec_findings(
+        &[
+            ("AGENTS.md", BLOCK_DOC),
+            ("openspec/project.md", "# Project Context\n"),
+        ],
+        None,
+    );
+    assert_eq!(
+        findings.len(),
+        1,
+        "project.md alone is one migration finding: {findings:?}"
+    );
+    let finding = &findings[0];
+    assert!(
+        finding.message.contains("legacy layout")
+            && finding.message.contains("openspec/config.yaml"),
+        "legacy finding names the layout and the artifact: {finding:?}"
+    );
+    assert!(
+        !finding.message.contains("managed block"),
+        "openspec never requires a managed block: {finding:?}"
+    );
+    if let Some(fix) = finding.fix.as_deref() {
+        assert!(
+            fix.contains("openspec update"),
+            "legacy fix is the migration command: {finding:?}"
+        );
+    }
+    assert!(!finding.fix.as_deref().unwrap_or("").contains("ddl init"));
+}
+
+#[test]
+fn test_blocks_check_openspec_hybrid_layout_names_config_as_authoritative() {
+    let findings = openspec_findings(
+        &[
+            ("AGENTS.md", BLOCK_DOC),
+            ("openspec/config.yaml", "schema: spec-driven\n"),
+            ("openspec/project.md", "# Project Context\n"),
+        ],
+        None,
+    );
+    assert_eq!(
+        findings.len(),
+        1,
+        "hybrid layout is one advisory on the stale file: {findings:?}"
+    );
+    let finding = &findings[0];
+    assert!(
+        finding.message.contains("hybrid layout")
+            && finding.message.contains("authoritative")
+            && finding.message.contains("project.md"),
+        "hybrid finding names precedence and the stale file: {finding:?}"
+    );
+    if let Some(fix) = finding.fix.as_deref() {
+        assert!(
+            fix.contains("openspec update"),
+            "hybrid fix is the migration command: {finding:?}"
+        );
+    }
+}
+
+#[test]
+fn test_blocks_check_warns_when_scoped_openspec_published_nothing() {
+    // openspec/ exists (genesis-style: used, not necessarily pinned) but
+    // carries neither artifact.
+    let findings = openspec_findings(
+        &[("AGENTS.md", BLOCK_DOC), ("openspec/changes/.keep", "")],
+        None,
+    );
+    assert_eq!(
+        findings.len(),
+        1,
+        "openspec/ without an artifact is one finding: {findings:?}"
+    );
+    assert!(
+        findings[0]
+            .message
+            .contains("openspec/config.yaml is missing")
+    );
+    assert!(!findings[0].message.contains("managed block"));
+    if let Some(fix) = findings[0].fix.as_deref() {
+        assert_eq!(fix, "openspec update");
+    }
+}
+
+#[test]
+fn test_blocks_check_skips_openspec_without_dir_or_pin() {
+    let findings = block_findings(&[("AGENTS.md", BLOCK_DOC)], None);
+    assert!(
+        findings.is_empty(),
+        "a repo that does not use openspec gets no finding: {findings:?}"
+    );
+}
+
+#[test]
+fn test_blocks_check_scopes_openspec_by_pin() {
+    let findings = openspec_findings(
+        &[("AGENTS.md", BLOCK_DOC)],
+        Some("[tools]\nopenspec = \"0.19.0\"\n"),
+    );
+    assert_eq!(
+        findings.len(),
+        1,
+        "a pin scopes the artifact check even without openspec/: {findings:?}"
+    );
+    assert!(
+        findings[0]
+            .message
+            .contains("openspec/config.yaml is missing")
+    );
+}
+
+#[test]
+fn test_blocks_check_reports_retired_openspec_block_once() {
+    let agents = format!("{BLOCK_DOC}<!-- OPENSPEC:START -->\n<!-- OPENSPEC:END -->\n");
+    let findings = openspec_findings(&[("AGENTS.md", agents.as_str())], None);
+    assert_eq!(
+        findings.len(),
+        1,
+        "the retired block is a single advisory: {findings:?}"
+    );
+    let finding = &findings[0];
+    assert!(
+        finding.message.contains("retired") && finding.message.contains("OPENSPEC:START"),
+        "advisory names the retired block: {finding:?}"
+    );
+    assert!(
+        !finding.message.contains("missing managed block"),
+        "a retired block is never demanded: {finding:?}"
+    );
+    if let Some(fix) = finding.fix.as_deref() {
+        assert!(fix.contains("openspec update"), "{finding:?}");
+    }
+}
+
+#[test]
+fn test_blocks_check_missing_agents_lists_only_block_tools() {
+    // openspec is scoped but publishes an artifact, so it has no claim on
+    // AGENTS.md; the warning names only the block-publishing tools.
+    let findings = block_findings(
+        &[("openspec/config.yaml", "schema: spec-driven\n")],
+        Some("[tools]\nwai = \"2026.11.11\"\nopenspec = \"0.19.0\"\n"),
+    );
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    let message = &findings[0].message;
+    assert!(
+        message.contains("ddl") && message.contains("wai"),
+        "missing AGENTS.md lists the scoped block tools: {message}"
+    );
+    assert!(
+        !message.contains("openspec"),
+        "openspec is an artifact publisher, not a block tool: {message}"
     );
 }
