@@ -188,7 +188,7 @@ jobs:
           key: security
 
       # The audit/scan steps run just recipes — install just or they exit 127
-      - uses: extractions/setup-just@dd310ad5a97d8e7b41793f8ef055398d51ad4de6 # v2
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
 
       - name: Dependency advisory audit (RustSec)
         run: just advisory
