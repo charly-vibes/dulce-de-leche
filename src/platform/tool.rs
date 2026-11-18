@@ -147,7 +147,9 @@ pub const MANAGED_TOOLS: &[Tool] = &[
     Tool {
         name: "sad",
         description: "Documentation gate — code should speak for itself; prose means refactor",
-        crate_name: "sad",
+        // crates.io `sad` is owned by an unrelated 2021 placeholder project,
+        // so there is no cargo-install fallback; sad ships release binaries.
+        crate_name: "",
         formula_name: "sad",
         repo: "charly-vibes/sad",
         npm_package: None,

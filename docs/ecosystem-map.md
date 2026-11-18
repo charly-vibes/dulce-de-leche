@@ -189,7 +189,7 @@ ddl manages a tool when all of the following hold:
 | **dont** | `dont`, `dt` | `dont-cli` | ✓ | Epistemic discipline state machine. Claims, evidence, vocabulary tracking. Cozo DB backend. |
 | **espectacular** | `ah` | `espectacular` | ✓ | Behavioral verification. Spec-test correspondence enforcement. |
 | **pretender** | `pretender` | `pretender` | ✓ | Multi-language structural code quality. Tree-sitter-based complexity, duplication, mutation testing. |
-| **sad** | `sad` | `sad` | ✓ | Documentation gate: comments and doc strings outside the three structural channels (file header, doc summary, resolvable marker) become findings. Install-only under ddl — config is repo-local `sad.toml`; there is no `ddl init` migration. |
+| **sad** | `sad` | — (name owned by an unrelated placeholder; ships release binaries) | ✓ | Documentation gate: comments and doc strings outside the three structural channels (file header, doc summary, resolvable marker) become findings. Install-only under ddl — config is repo-local `sad.toml`; there is no `ddl init` migration. |
 | **testaruda** | `testaruda`, `testaruda-adapter-rust`, `testaruda-adapter-python` | `testaruda` | ✓ | Test selection engine. Ascent Datalog + provenance semiring. SQLite store. |
 | **vampiro** | `vampiro` | `vampiro` | ✓ | Cross-language composition checking at call, module, effect, law, retry, resource, and trust boundaries. Crate workspace with per-language tracers. |
 | **wild** | `wild` | `wild-vibes` | — | Machine-checked compatibility and composition of software components, modelled as a category of contracts. `wild extract` / `wild check`. |
