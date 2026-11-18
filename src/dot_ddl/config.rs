@@ -3,6 +3,23 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+/// Gate command lines rendered into the lefthook managed block (DDL-1bz).
+///
+/// Every field is optional: absent (`None`) uses the shipped default, and
+/// `Some("")` omits that command from the rendered block entirely.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GatesConfig {
+    /// Command run by the `ddl-ah-check` hook entry (default `ah check`).
+    #[serde(default)]
+    pub ah_check: Option<String>,
+    /// Command run by the `ddl-pretender-gate` hook entry.
+    #[serde(default)]
+    pub pretender_gate: Option<String>,
+    /// Command run by the `ddl-spk-lint` hook entry (empty omits the entry).
+    #[serde(default)]
+    pub spk_lint: Option<String>,
+}
+
 /// ddl's own configuration, written to `.ddl/config.toml`.
 ///
 /// Implements `genesis::config::ConfigFile` for standard read/write/validate.
@@ -18,6 +35,9 @@ pub struct DdlConfig {
     /// Strategy for .gitignore entries: "auto", "prompt", "skip"
     #[serde(default = "default_gitignore_strategy")]
     pub gitignore_strategy: String,
+    /// Command overrides for the managed lefthook gate blocks.
+    #[serde(default)]
+    pub gates: GatesConfig,
 }
 
 fn default_install_source() -> String {
@@ -34,6 +54,7 @@ impl Default for DdlConfig {
             install_source: "auto".to_string(),
             auto_upgrade: false,
             gitignore_strategy: "prompt".to_string(),
+            gates: GatesConfig::default(),
         }
     }
 }
@@ -68,6 +89,20 @@ impl genesis::config::ConfigFile for DdlConfig {
                     other
                 ),
             )),
+        }
+        for (field, value) in [
+            ("gates.ah_check", &self.gates.ah_check),
+            ("gates.pretender_gate", &self.gates.pretender_gate),
+            ("gates.spk_lint", &self.gates.spk_lint),
+        ] {
+            if let Some(value) = value
+                && value.contains('\n')
+            {
+                results.push(genesis::config::ConfigValidation::warning(
+                    field,
+                    format!("{field} must be a single line (a newline would corrupt the managed lefthook block)"),
+                ));
+            }
         }
         Ok(results)
     }

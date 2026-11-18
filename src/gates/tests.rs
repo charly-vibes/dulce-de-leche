@@ -3,6 +3,11 @@
 #[cfg(test)]
 use super::*;
 
+/// Default gate commands — the shipped rendering (`PRE_COMMIT_BLOCK`).
+fn default_gates() -> GateCommands {
+    GateCommands::default()
+}
+
 const COMMANDS_HOOK: &str = "\
 pre-commit:
   parallel: true
@@ -21,7 +26,7 @@ bd:
 
 #[test]
 fn missing_lefthook_yml_is_created_with_both_managed_blocks() {
-    let (out, change) = ensure_lefthook_gates(None).unwrap();
+    let (out, change) = ensure_lefthook_gates(None, &default_gates()).unwrap();
     assert_eq!(change, Change::Created);
     assert!(out.contains("pre-commit:"));
     assert!(out.contains("pre-push:"));
@@ -45,7 +50,7 @@ fn missing_lefthook_yml_is_created_with_both_managed_blocks() {
 
 #[test]
 fn block_is_inserted_inside_commands_preserving_existing_commands() {
-    let (out, change) = ensure_lefthook_gates(Some(COMMANDS_HOOK)).unwrap();
+    let (out, change) = ensure_lefthook_gates(Some(COMMANDS_HOOK), &default_gates()).unwrap();
     assert_eq!(change, Change::Updated);
     // existing commands preserved
     assert!(out.contains("bd hooks run pre-commit"));
@@ -61,8 +66,8 @@ fn block_is_inserted_inside_commands_preserving_existing_commands() {
 
 #[test]
 fn rerun_is_idempotent_no_duplicates() {
-    let (once, _) = ensure_lefthook_gates(Some(COMMANDS_HOOK)).unwrap();
-    let (twice, change) = ensure_lefthook_gates(Some(&once)).unwrap();
+    let (once, _) = ensure_lefthook_gates(Some(COMMANDS_HOOK), &default_gates()).unwrap();
+    let (twice, change) = ensure_lefthook_gates(Some(&once), &default_gates()).unwrap();
     assert_eq!(change, Change::Unchanged);
     assert_eq!(once, twice);
     assert_eq!(twice.matches(MARKER_START_PREFIX).count(), 2); // one per hook
@@ -76,7 +81,7 @@ fn mangled_block_outside_commands_is_repaired() {
 pre-commit:
 # ddl:managed:start (pre-commit)
   ah-check:
-run: ah check
+    run: ah check
 # ddl:managed:end (pre-commit)
 
   parallel: true
@@ -84,7 +89,7 @@ run: ah check
 spec-gates:
   run: spk lint openspec
 ";
-    let (out, change) = ensure_lefthook_gates(Some(mangled)).unwrap();
+    let (out, change) = ensure_lefthook_gates(Some(mangled), &default_gates()).unwrap();
     assert_eq!(change, Change::Updated);
     // stray block removed (no markers glued at top of section)
     assert!(!out.contains("\n# ddl:managed:start (pre-commit)\n"));
@@ -102,7 +107,7 @@ spec-gates:
 #[test]
 fn hook_without_commands_gets_commands_added() {
     let bare = "pre-commit:\n  parallel: true\n";
-    let (out, change) = ensure_lefthook_gates(Some(bare)).unwrap();
+    let (out, change) = ensure_lefthook_gates(Some(bare), &default_gates()).unwrap();
     assert_eq!(change, Change::Updated);
     let cmds_pos = out.find("  commands:").unwrap();
     let managed_pos = out.find(MARKER_START_PREFIX).unwrap();
@@ -278,25 +283,25 @@ fn beads_export_needs_export_only_when_db_exists_and_jsonl_missing() {
 #[test]
 fn detect_flags_missing_file_and_clean_wiring() {
     assert_eq!(
-        detect_lefthook_gates_problems(None),
+        detect_lefthook_gates_problems(None, &default_gates()),
         vec!["lefthook.yml not found — run `ddl init --gates`"]
     );
     // The fixture fixture has the managed blocks wired by hand? No — the
     // plain COMMANDS_HOOK fixture has no managed blocks at all.
-    let problems = detect_lefthook_gates_problems(Some(COMMANDS_HOOK));
+    let problems = detect_lefthook_gates_problems(Some(COMMANDS_HOOK), &default_gates());
     assert_eq!(problems.len(), 2, "both hooks missing: {problems:?}");
     assert!(problems[0].contains("pre-commit managed block missing"));
     assert!(problems[1].contains("pre-push managed block missing"));
 
     // Fully wired (idempotent output of ensure) → no problems.
-    let (wired, _) = ensure_lefthook_gates(Some(COMMANDS_HOOK)).unwrap();
-    assert!(detect_lefthook_gates_problems(Some(&wired)).is_empty());
+    let (wired, _) = ensure_lefthook_gates(Some(COMMANDS_HOOK), &default_gates()).unwrap();
+    assert!(detect_lefthook_gates_problems(Some(&wired), &default_gates()).is_empty());
 
     // A file that merely exists but has no managed blocks still counts
     // as unwired — existence alone is not "gates wired".
     let bare_header = "# lefthook.yml — ddl-managed gates (created by `ddl init --gates`)\n";
     assert_eq!(
-        detect_lefthook_gates_problems(Some(bare_header)).len(),
+        detect_lefthook_gates_problems(Some(bare_header), &default_gates()).len(),
         2,
         "both hooks flagged"
     );
@@ -306,7 +311,7 @@ fn detect_flags_missing_file_and_clean_wiring() {
 fn detect_flags_mangled_duplicate_and_mismatched_blocks() {
     // Block glued outside commands: (espectacular mangle class)
     let mangled = "pre-commit:\n# ddl:managed:start (pre-commit)\n  ah-check:\n    run: ah check\n# ddl:managed:end (pre-commit)\n\n  commands:\n    spec-gates:\n      run: spk lint openspec\n";
-    let problems = detect_lefthook_gates_problems(Some(mangled));
+    let problems = detect_lefthook_gates_problems(Some(mangled), &default_gates());
     assert!(
         problems.iter().any(|p| p.contains("outside commands:")),
         "mangled block flagged: {problems:?}"
@@ -318,9 +323,9 @@ fn detect_flags_mangled_duplicate_and_mismatched_blocks() {
     );
 
     // Duplicate blocks
-    let (once, _) = ensure_lefthook_gates(Some(COMMANDS_HOOK)).unwrap();
+    let (once, _) = ensure_lefthook_gates(Some(COMMANDS_HOOK), &default_gates()).unwrap();
     let duplicated = format!("{once}\n{}\n", PRE_COMMIT_BLOCK);
-    let problems = detect_lefthook_gates_problems(Some(&duplicated));
+    let problems = detect_lefthook_gates_problems(Some(&duplicated), &default_gates());
     assert!(
         problems
             .iter()
@@ -330,12 +335,220 @@ fn detect_flags_mangled_duplicate_and_mismatched_blocks() {
 
     // Mismatched markers: start without end
     let mismatched = format!("{once}\n# ddl:managed:start (pre-commit)\n");
-    let problems = detect_lefthook_gates_problems(Some(&mismatched));
+    let problems = detect_lefthook_gates_problems(Some(&mismatched), &default_gates());
     assert!(
         problems
             .iter()
             .any(|p| p.contains("pre-commit managed block has mismatched start/end")),
         "mismatch flagged: {problems:?}"
+    );
+}
+
+#[test]
+fn default_render_matches_the_canonical_pre_commit_block() {
+    assert_eq!(render_pre_commit_block(&default_gates()), PRE_COMMIT_BLOCK);
+}
+
+#[test]
+fn default_render_matches_the_canonical_pre_push_block() {
+    assert_eq!(render_pre_push_block(&default_gates()), PRE_PUSH_BLOCK);
+}
+
+#[test]
+fn ah_check_override_changes_both_rendered_spans() {
+    let commands = GateCommands {
+        ah_check: "python3 scripts/ah_check_ratchet.py".to_string(),
+        ..default_gates()
+    };
+    assert_eq!(
+        render_pre_push_block(&commands),
+        "    # ddl:managed:start (pre-push)\n    ddl-ah-check:\n      run: python3 scripts/ah_check_ratchet.py\n    # ddl:managed:end (pre-push)"
+    );
+
+    let (wired, _) = ensure_lefthook_gates(Some(COMMANDS_HOOK), &default_gates()).unwrap();
+    let (out, change) = ensure_lefthook_gates(Some(&wired), &commands).unwrap();
+    assert_eq!(change, Change::Updated);
+    assert_eq!(
+        out.matches("run: python3 scripts/ah_check_ratchet.py")
+            .count(),
+        2,
+        "pre-commit and pre-push both carry the ratchet: {out}"
+    );
+    assert!(!out.contains("run: ah check\n"), "{out}");
+    assert!(!out.contains(PRE_PUSH_BLOCK), "{out}");
+}
+
+#[test]
+fn empty_ah_check_omits_the_entry_from_both_spans() {
+    let commands = GateCommands {
+        ah_check: String::new(),
+        ..default_gates()
+    };
+    assert_eq!(
+        render_pre_push_block(&commands),
+        "    # ddl:managed:start (pre-push)\n    # ddl:managed:end (pre-push)"
+    );
+    assert!(!render_pre_commit_block(&commands).contains("ddl-ah-check"));
+}
+
+#[test]
+fn stale_pre_push_span_is_replaced_with_the_configured_command() {
+    let (wired, _) = ensure_lefthook_gates(Some(COMMANDS_HOOK), &default_gates()).unwrap();
+    assert!(wired.contains(PRE_PUSH_BLOCK));
+
+    let commands = GateCommands {
+        ah_check: "python3 scripts/ah_check_ratchet.py".to_string(),
+        ..default_gates()
+    };
+    let (out, change) = ensure_lefthook_gates(Some(&wired), &commands).unwrap();
+    assert_eq!(
+        change,
+        Change::Updated,
+        "stale pre-push span is not a no-op"
+    );
+    assert!(out.contains(&render_pre_push_block(&commands)), "{out}");
+    assert!(!out.contains(PRE_PUSH_BLOCK), "{out}");
+    // Replacement, not duplication: one marker pair per hook.
+    assert_eq!(out.matches("(pre-push)").count(), 2);
+    assert_eq!(out.matches("(pre-commit)").count(), 2);
+}
+
+#[test]
+fn detect_reports_drift_for_hand_mutated_pre_push_command() {
+    let configured = GateCommands {
+        ah_check: "ah check --all".to_string(),
+        ..default_gates()
+    };
+    let (wired, _) = ensure_lefthook_gates(Some(COMMANDS_HOOK), &configured).unwrap();
+    // Hand-revert only the pre-push span to the old bare `ah check`.
+    let mutated = wired.replace(&render_pre_push_block(&configured), PRE_PUSH_BLOCK);
+    assert_ne!(mutated, wired);
+
+    let problems = detect_lefthook_gates_problems(Some(&mutated), &configured);
+    assert_eq!(problems.len(), 1, "{problems:?}");
+    assert!(
+        problems[0].contains("pre-push managed block has drifted"),
+        "{problems:?}"
+    );
+    assert!(problems[0].contains("ddl init --gates"), "{problems:?}");
+
+    // A span matching the configured rendering is clean.
+    assert!(detect_lefthook_gates_problems(Some(&wired), &configured).is_empty());
+}
+
+#[test]
+fn configured_command_overrides_change_the_rendered_line() {
+    let commands = GateCommands {
+        ah_check: "ah check --strict".to_string(),
+        ..default_gates()
+    };
+    let block = render_pre_commit_block(&commands);
+    assert!(block.contains("      run: ah check --strict"), "{block}");
+    assert!(!block.contains("      run: ah check\n"), "{block}");
+    // Untouched overrides keep their defaults.
+    assert!(block.contains("      run: pretender check --diff-only --mode gate"));
+    assert!(block.contains("      run: spk lint openspec/specs || test $? -eq 2"));
+}
+
+#[test]
+fn empty_spk_lint_omits_the_managed_entry() {
+    let commands = GateCommands {
+        spk_lint: String::new(),
+        ..default_gates()
+    };
+    let block = render_pre_commit_block(&commands);
+    assert!(!block.contains("ddl-spk-lint"), "{block}");
+    assert!(!block.contains("spk lint"), "{block}");
+    assert!(block.contains("ddl-ah-check"));
+    assert!(block.contains("ddl-pretender-gate"));
+    assert!(block.contains("# ddl:managed:end (pre-commit)"));
+}
+
+#[test]
+fn stale_span_is_replaced_with_the_configured_commands() {
+    let (wired, change) = ensure_lefthook_gates(Some(COMMANDS_HOOK), &default_gates()).unwrap();
+    assert_eq!(change, Change::Updated);
+
+    let commands = GateCommands {
+        ah_check: "ah check --strict".to_string(),
+        ..default_gates()
+    };
+    let (out, change) = ensure_lefthook_gates(Some(&wired), &commands).unwrap();
+    assert_eq!(change, Change::Updated, "stale span is not a no-op");
+    assert!(out.contains(&render_pre_commit_block(&commands)), "{out}");
+    assert!(
+        !out.contains(PRE_COMMIT_BLOCK),
+        "stale canonical span replaced: {out}"
+    );
+    // Exactly one marker pair per hook — replacement, not duplication.
+    assert_eq!(out.matches("(pre-commit)").count(), 2);
+    assert_eq!(out.matches("(pre-push)").count(), 2);
+    // The pre-push span follows the same ah_check override.
+    assert!(out.contains(&render_pre_push_block(&commands)), "{out}");
+    assert!(!out.contains(PRE_PUSH_BLOCK), "{out}");
+}
+
+#[test]
+fn detect_reports_drift_for_hand_mutated_command_inside_correct_span() {
+    let (wired, _) = ensure_lefthook_gates(Some(COMMANDS_HOOK), &default_gates()).unwrap();
+    let mutated_block = PRE_COMMIT_BLOCK.replace("run: ah check", "run: ah check --all");
+    let mutated = wired.replace(PRE_COMMIT_BLOCK, &mutated_block);
+    assert_ne!(mutated, wired);
+
+    let problems = detect_lefthook_gates_problems(Some(&mutated), &default_gates());
+    assert!(
+        problems.iter().any(|p| p.contains("drifted")),
+        "hand-mutated command flagged as drift: {problems:?}"
+    );
+    // Placement is fine — the only reported defect is the drift.
+    assert_eq!(problems.len(), 1, "{problems:?}");
+    assert!(
+        problems[0].contains("ddl init --gates"),
+        "fix command named: {problems:?}"
+    );
+
+    // A wiring produced from the configured rendering is clean.
+    let configured = GateCommands {
+        ah_check: "ah check --all".to_string(),
+        ..default_gates()
+    };
+    let (wired_configured, _) = ensure_lefthook_gates(Some(COMMANDS_HOOK), &configured).unwrap();
+    assert!(detect_lefthook_gates_problems(Some(&wired_configured), &configured).is_empty());
+}
+
+#[test]
+fn fresh_canonical_template_contains_both_managed_blocks() {
+    let (out, change) = ensure_lefthook_gates(None, &default_gates()).unwrap();
+    assert_eq!(change, Change::Created);
+    assert!(out.contains(PRE_COMMIT_BLOCK));
+    assert!(out.contains(PRE_PUSH_BLOCK));
+    assert!(detect_lefthook_gates_problems(Some(&out), &default_gates()).is_empty());
+}
+
+#[test]
+fn init_wiring_renders_spans_from_ddl_config() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join(".ddl")).unwrap();
+    std::fs::write(
+        dir.path().join(".ddl/config.toml"),
+        "[gates]\nah_check = \"ah check --strict\"\nspk_lint = \"\"\n",
+    )
+    .unwrap();
+    // Existing canonical wiring is stale against this config.
+    let (wired, _) = ensure_lefthook_gates(None, &default_gates()).unwrap();
+    std::fs::write(dir.path().join("lefthook.yml"), &wired).unwrap();
+
+    let report = apply_gates_wiring(dir.path()).unwrap();
+    assert_eq!(report.lefthook, Change::Updated, "stale span rewritten");
+    let out = std::fs::read_to_string(dir.path().join("lefthook.yml")).unwrap();
+    assert_eq!(
+        out.matches("      run: ah check --strict").count(),
+        2,
+        "both spans rendered from config: {out}"
+    );
+    assert!(
+        !out.contains("ddl-spk-lint"),
+        "empty spk_lint omitted: {out}"
     );
 }
 

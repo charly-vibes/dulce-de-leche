@@ -20,6 +20,8 @@ pub const MARKER_END_PREFIX: &str = "# ddl:managed:end (";
 pub const GITIGNORE_TOOL_DIR_ENTRIES: &[&str] = &[".testaruda/", ".pretender/"];
 
 /// Managed pre-commit command block (4-space indent, inside `commands:`).
+/// This is the default rendering — [`render_pre_commit_block`] reproduces it
+/// from [`GateCommands::default`] and overlays `.ddl/config.toml` values.
 /// NOTE: no leading `\`-continuation — Rust strips next-line indentation there.
 pub const PRE_COMMIT_BLOCK: &str = "    # ddl:managed:start (pre-commit)
     ddl-ah-check:
@@ -30,11 +32,94 @@ pub const PRE_COMMIT_BLOCK: &str = "    # ddl:managed:start (pre-commit)
       run: spk lint openspec/specs || test $? -eq 2
     # ddl:managed:end (pre-commit)";
 
-/// Managed pre-push command block.
+/// Shipped default for the `ddl-ah-check` hook entry.
+pub const DEFAULT_AH_CHECK: &str = "ah check";
+/// Shipped default for the `ddl-pretender-gate` hook entry.
+pub const DEFAULT_PRETENDER_GATE: &str = "pretender check --diff-only --mode gate";
+/// Shipped default for the `ddl-spk-lint` hook entry.
+pub const DEFAULT_SPK_LINT: &str = "spk lint openspec/specs || test $? -eq 2";
+
+/// Gate command lines rendered into the managed pre-commit block (DDL-1bz).
+///
+/// Built from [`crate::dot_ddl::GatesConfig`]; an empty string omits that
+/// command id from the rendered block.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GateCommands {
+    pub ah_check: String,
+    pub pretender_gate: String,
+    pub spk_lint: String,
+}
+
+impl Default for GateCommands {
+    fn default() -> Self {
+        Self {
+            ah_check: DEFAULT_AH_CHECK.to_string(),
+            pretender_gate: DEFAULT_PRETENDER_GATE.to_string(),
+            spk_lint: DEFAULT_SPK_LINT.to_string(),
+        }
+    }
+}
+
+impl GateCommands {
+    /// Resolve the effective commands from config overrides: `None` keeps
+    /// the shipped default, `Some("")` disables that entry.
+    pub fn from_config(config: &crate::dot_ddl::GatesConfig) -> Self {
+        let pick = |value: &Option<String>, default: &str| match value {
+            Some(v) => v.clone(),
+            None => default.to_string(),
+        };
+        Self {
+            ah_check: pick(&config.ah_check, DEFAULT_AH_CHECK),
+            pretender_gate: pick(&config.pretender_gate, DEFAULT_PRETENDER_GATE),
+            spk_lint: pick(&config.spk_lint, DEFAULT_SPK_LINT),
+        }
+    }
+
+    /// Load `.ddl/config.toml` under `repo_root`; missing or unreadable
+    /// config falls back to the defaults.
+    pub fn for_repo(repo_root: &std::path::Path) -> Self {
+        use genesis::config::ConfigFile;
+        let config = crate::dot_ddl::DdlConfig::read(&repo_root.join(".ddl")).unwrap_or_default();
+        Self::from_config(&config.gates)
+    }
+}
+
+/// Render the managed pre-commit block for `commands`, in the canonical
+/// shape (4-space indent, marker pair, one entry per non-empty command).
+pub fn render_pre_commit_block(commands: &GateCommands) -> String {
+    let mut lines = vec![format!("    {MARKER_START_PREFIX}pre-commit)")];
+    let mut entry = |id: &str, run: &str| {
+        if !run.is_empty() {
+            lines.push(format!("    {id}:"));
+            lines.push(format!("      run: {run}"));
+        }
+    };
+    entry("ddl-ah-check", &commands.ah_check);
+    entry("ddl-pretender-gate", &commands.pretender_gate);
+    entry("ddl-spk-lint", &commands.spk_lint);
+    lines.push(format!("    {MARKER_END_PREFIX}pre-commit)"));
+    lines.join("\n")
+}
+
+/// Managed pre-push command block (default rendering, matching
+/// [`render_pre_push_block`] for the default gate commands).
 pub const PRE_PUSH_BLOCK: &str = "    # ddl:managed:start (pre-push)
     ddl-ah-check:
       run: ah check
     # ddl:managed:end (pre-push)";
+
+/// Render the managed pre-push block for `commands`. The pre-push gate runs
+/// the same `ah_check` command as pre-commit (repos with a ratchet wrapper
+/// must gate pushes on it too); an empty value omits the entry.
+pub fn render_pre_push_block(commands: &GateCommands) -> String {
+    let mut lines = vec![format!("    {MARKER_START_PREFIX}pre-push)")];
+    if !commands.ah_check.is_empty() {
+        lines.push("    ddl-ah-check:".to_string());
+        lines.push(format!("      run: {}", commands.ah_check));
+    }
+    lines.push(format!("    {MARKER_END_PREFIX}pre-push)"));
+    lines.join("\n")
+}
 
 /// The canonical lefthook.yml template written when a repo has none
 /// (DDL-fw7): managed gate blocks plus the beads hook chaining the
@@ -50,21 +135,27 @@ pub const CANONICAL_LEFTHOOK_TEMPLATE: &str = "# lefthook.yml — ddl-managed ga
 /// - missing file → create with both managed blocks (Created)
 /// - managed block absent → insert inside `commands:` of the hook section
 ///   (adding `commands:` if the hook exists without one) (Updated)
-/// - managed block present inside `commands:` → no-op (Unchanged)
+/// - managed block present inside `commands:` → no-op (Unchanged) when its
+///   text matches `commands`; stale text is re-rendered (Updated)
 /// - managed block present but OUTSIDE `commands:` (mangle class) →
 ///   remove the stray block and re-insert inside `commands:` (Updated)
-pub fn ensure_lefthook_gates(content: Option<&str>) -> Result<(String, Change)> {
-    const HOOKS: &[(&str, &str)] = &[
-        ("pre-commit", PRE_COMMIT_BLOCK),
-        ("pre-push", PRE_PUSH_BLOCK),
+pub fn ensure_lefthook_gates(
+    content: Option<&str>,
+    commands: &GateCommands,
+) -> Result<(String, Change)> {
+    let pre_commit = render_pre_commit_block(commands);
+    let pre_push = render_pre_push_block(commands);
+    let hooks: &[(&str, &str)] = &[
+        ("pre-commit", pre_commit.as_str()),
+        ("pre-push", pre_push.as_str()),
     ];
 
     let mut lines: Vec<String> = match content {
         // format! needs a literal first argument — the template is a
         // public const, so interpolate with targeted replaces instead.
         None => CANONICAL_LEFTHOOK_TEMPLATE
-            .replace("{pre_commit}", PRE_COMMIT_BLOCK)
-            .replace("{pre_push}", PRE_PUSH_BLOCK)
+            .replace("{pre_commit}", &pre_commit)
+            .replace("{pre_push}", &pre_push)
             .lines()
             .map(|l| l.to_string())
             .collect(),
@@ -73,7 +164,7 @@ pub fn ensure_lefthook_gates(content: Option<&str>) -> Result<(String, Change)> 
     let created = content.is_none();
     let mut changed = created;
 
-    for (hook, block) in HOOKS {
+    for (hook, block) in hooks {
         changed |= wire_hook(&mut lines, hook, block)?;
     }
 
@@ -132,20 +223,30 @@ fn wire_hook(lines: &mut Vec<String>, hook: &str, block: &str) -> Result<bool> {
         .position(|l| l.contains(&end_marker))
         .map(|i| h + i);
 
-    // Managed block already present *inside* commands:? → no-op.
+    // Managed block already present *inside* commands:? → compare text.
     // `commands:` must appear in the section before the marker start.
-    if let (Some(s), Some(_e)) = (marker_start, marker_end) {
+    if let (Some(s), Some(e)) = (marker_start, marker_end) {
+        if e < s {
+            return Err(DdlError::Other(format!(
+                "lefthook.yml managed block for '{hook}' has its end marker before its start marker — manual fix required"
+            )));
+        }
         let commands_before = section
             .iter()
             .take(s - h)
             .any(|l| l.trim_end() == "  commands:");
         if commands_before {
-            return Ok(false);
+            // DDL-1bz: a stale span (old command text, hand-edited line) is
+            // drift, not a no-op — re-render it from the effective config.
+            if lines[s..=e].join("\n").trim_end() == block.trim_end() {
+                return Ok(false);
+            }
+            let block_lines: Vec<String> = block.lines().map(|l| l.to_string()).collect();
+            lines.splice(s..=e, block_lines);
+            return Ok(true);
         }
         // Mangle class: markers glued outside `commands:` — remove the stray
         // block and re-insert properly. Malformed markers (no end) are an error.
-        // (e is always Some here: marker_end was already checked.)
-        let e = marker_end.expect("end marker checked above");
         lines.drain(s..=e);
     } else if marker_start.is_some() ^ marker_end.is_some() {
         return Err(DdlError::Other(format!(

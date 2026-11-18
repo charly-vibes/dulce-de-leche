@@ -16,6 +16,8 @@
 mod beads;
 mod detect;
 mod lefthook;
+#[cfg(test)]
+mod tests;
 mod wiring;
 
 pub use beads::*;

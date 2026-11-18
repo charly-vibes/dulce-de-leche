@@ -21,6 +21,7 @@ fn test_ddl_config_via_fixture() {
         install_source: "cargo".to_string(),
         auto_upgrade: true,
         gitignore_strategy: "auto".to_string(),
+        gates: dulce_de_leche::dot_ddl::GatesConfig::default(),
     };
     config
         .write(fixture.root().join(".ddl").as_path())

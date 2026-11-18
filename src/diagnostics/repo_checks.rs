@@ -165,12 +165,13 @@ impl DoctorCheck for RepoGatesCheck {
             .then(|| std::fs::read_to_string(&path))
             .transpose()
             .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
-        Ok(
-            crate::gates::detect_lefthook_gates_problems(content.as_deref())
-                .into_iter()
-                .map(|problem| LintResult::with_fix(problem, Severity::Warning, "ddl init --gates"))
-                .collect(),
+        Ok(crate::gates::detect_lefthook_gates_problems(
+            content.as_deref(),
+            &crate::gates::GateCommands::for_repo(&root),
         )
+        .into_iter()
+        .map(|problem| LintResult::with_fix(problem, Severity::Warning, "ddl init --gates"))
+        .collect())
     }
 }
 

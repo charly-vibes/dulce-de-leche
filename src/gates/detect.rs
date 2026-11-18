@@ -55,9 +55,14 @@ pub fn detect_beads_export_problems(i: &BeadsExportProblemsInput) -> Vec<String>
 /// Read-only inspection of the on-disk lefthook gates wiring (DDL-6zn.5).
 /// Returns one problem message per defect; an empty Vec means the gates are
 /// fully wired: both managed blocks present, inside `commands:`, no
-/// duplicates, no mangled markers. This is the single source of truth for
-/// "gates wired" shared by `init --gates` and the repo-aware doctor.
-pub fn detect_lefthook_gates_problems(content: Option<&str>) -> Vec<String> {
+/// duplicates, no mangled markers, and each managed span matching the
+/// rendering derived from `commands` (DDL-1bz drift check). This is the
+/// single source of truth for "gates wired" shared by `init --gates` and the
+/// repo-aware doctor.
+pub fn detect_lefthook_gates_problems(
+    content: Option<&str>,
+    commands: &GateCommands,
+) -> Vec<String> {
     const HOOKS: &[&str] = &["pre-commit", "pre-push"];
     let Some(text) = content else {
         return vec!["lefthook.yml not found — run `ddl init --gates`".to_string()];
@@ -106,13 +111,30 @@ pub fn detect_lefthook_gates_problems(content: Option<&str>) -> Vec<String> {
             ));
             continue;
         };
-        let commands_before = lines[h..starts[0]]
-            .iter()
-            .any(|l| l.trim_end() == "  commands:");
+        let commands_before = starts[0] > h
+            && lines[h..starts[0]]
+                .iter()
+                .any(|l| l.trim_end() == "  commands:");
         if !commands_before {
             problems.push(format!(
                 "{hook} managed block is outside commands: (mangled) — run `ddl init --gates`"
             ));
+            continue;
+        }
+        // DDL-1bz: the span text must equal the effective rendering —
+        // hand-edited or stale command lines are drift, not a clean wiring.
+        if starts.len() == 1 && ends[0] > starts[0] {
+            let expected = if *hook == "pre-commit" {
+                render_pre_commit_block(commands)
+            } else {
+                render_pre_push_block(commands)
+            };
+            let span = lines[starts[0]..=ends[0]].join("\n");
+            if span.trim_end() != expected.trim_end() {
+                problems.push(format!(
+                    "{hook} managed block has drifted from the configured gate commands — run `ddl init --gates`"
+                ));
+            }
         }
     }
     problems

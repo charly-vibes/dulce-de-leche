@@ -34,9 +34,12 @@ pub fn apply_gates_wiring(repo_root: &std::path::Path) -> Result<WiringReport> {
         fs::write(p, content).map_err(DdlError::from)
     };
 
-    // 1. lefthook.yml
+    // 1. lefthook.yml — render from the repo's `.ddl/config.toml` gates
+    //    config (defaults when absent), so stale spans are rewritten (DDL-1bz).
+    let commands = GateCommands::for_repo(repo_root);
     let lefthook_path = repo_root.join("lefthook.yml");
-    let (lefthook_out, lefthook) = ensure_lefthook_gates(read(&lefthook_path)?.as_deref())?;
+    let (lefthook_out, lefthook) =
+        ensure_lefthook_gates(read(&lefthook_path)?.as_deref(), &commands)?;
     write(&lefthook_path, &lefthook_out)?;
 
     // 2. .gitignore tool data dirs
