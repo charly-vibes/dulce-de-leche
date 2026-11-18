@@ -256,6 +256,16 @@ pub const MANAGED_TOOLS: &[Tool] = &[
         category: ToolCategory::Extension,
         maturity: Maturity::Experimental,
     },
+    Tool {
+        name: "podras",
+        description: "Per-repository project-status brief for humans and AI agents — fixed-section brief, focus/park verbs, typed agent envelope",
+        crate_name: "podras",
+        formula_name: "podras",
+        repo: "charly-vibes/podras",
+        npm_package: None,
+        category: ToolCategory::Extension,
+        maturity: Maturity::Experimental,
+    },
 ];
 
 /// Find a tool by name (case-insensitive; matches the canonical name or

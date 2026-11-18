@@ -34,10 +34,10 @@ topics — browse the whole set at
 [topic:charly-vibes topic:dulce-de-leche](https://github.com/search?q=topic%3Acharly-vibes+topic%3Adulce-de-leche&type=repositories).
 
 <!-- MANAGED-TOOLS:START -->
-Managed tools (15):
+Managed tools (16):
 - Core (2): wai, testaruda.
 - Recommended (3): turu, dont, ah.
-- Extension (10): pretender, sad, vampiro, incitaciones, bd, openspec, specodelic, funkalization, wild, bajan.
+- Extension (11): pretender, sad, vampiro, incitaciones, bd, openspec, specodelic, funkalization, wild, bajan, podras.
 Run `ddl version` for the full picture. Additions and removals must update this block
 (enforced by `tests/tool_registry_drift.rs`).
 <!-- MANAGED-TOOLS:END -->

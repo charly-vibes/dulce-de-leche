@@ -22,6 +22,7 @@ const INSTALL_ONLY: &[&str] = &[
     "wild",
     "bajan",
     "sad",
+    "podras",
 ];
 
 fn registry_names() -> Vec<&'static str> {
@@ -158,6 +159,7 @@ const EXPECTED_CATEGORY: &[(&str, &str)] = &[
     ("funkalization", "extension"),
     ("wild", "extension"),
     ("bajan", "extension"),
+    ("podras", "extension"),
 ];
 
 #[test]
@@ -214,6 +216,7 @@ fn maturity_matches_ratified_assignments() {
         ("funkalization", "experimental"),
         ("wild", "experimental"),
         ("bajan", "experimental"),
+        ("podras", "experimental"),
     ];
     assert_eq!(
         ratified.len(),

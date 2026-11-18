@@ -151,6 +151,12 @@ ddl installs them, but their state lives outside `.ddl/`.
   <!-- utilities row (neutral) -->
   <rect x="40" y="588" width="680" height="72" rx="10" fill="var(--quote-bg,#2C2A4A)" fill-opacity="0.55" stroke="#9A9A9A"/>
   <text x="54" y="604" class="band" fill="#9A9A9A">UTILITIES</text>
+  <a href="https://github.com/charly-vibes/podras">
+    <rect x="54" y="608" width="220" height="46" rx="8" fill="var(--bg,#1e1c32)" stroke="#9A9A9A" stroke-dasharray="4 3"/>
+    <text x="66" y="626" class="n">podras</text>
+    <text x="66" y="640" class="b">podras</text>
+    <text x="66" y="651" class="d">per-repo status brief · BRIEF.md · agents</text>
+  </a>
   <a href="https://github.com/charly-vibes/gently">
     <rect x="300" y="608" width="220" height="46" rx="8" fill="var(--bg,#1e1c32)" stroke="#9A9A9A"/>
     <text x="312" y="626" class="n">gently</text>

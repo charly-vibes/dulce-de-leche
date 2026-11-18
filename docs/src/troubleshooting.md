@@ -30,6 +30,7 @@ Check available tools:
 - `funkalization` — Visual semantic design workspace (experimental)
 - `wild` — Contract-based compatibility checking (experimental)
 - `bajan` — Spec-driven knowledge-graph pipeline (experimental)
+- `podras` — Per-repo project status brief (experimental)
 
 (`ddl` itself is not installable via `ddl install` — it manages every tool
 except itself.)

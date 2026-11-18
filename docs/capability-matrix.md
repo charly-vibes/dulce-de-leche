@@ -20,5 +20,6 @@ Intent → tool mapping for the charly-vibes ecosystem, generated from ddl's too
 | funkalization | `funkalization` | Visual semantic design workspace — versioned design semantics, obligations, scoped evidence, loss-reporting adapters | extension | experimental |
 | wild | `wild` | Contract-based compatibility checking for software updates | extension | experimental |
 | bajan | `bajan` | Spec-driven knowledge-graph pipeline CLI — ingest sources, extract claims, human-gated adoption and entity review | extension | experimental |
+| podras | `podras` | Per-repository project-status brief for humans and AI agents — fixed-section brief, focus/park verbs, typed agent envelope | extension | experimental |
 
-Install any of these with `ddl install <name>` — 15 tools total.
+Install any of these with `ddl install <name>` — 16 tools total.

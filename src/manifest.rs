@@ -265,7 +265,8 @@ pub const EMBEDDED_COMPATIBILITY: &str = r#"{
     "bd": ">=0.0.0",
     "openspec": ">=0.0.0",
     "wild": ">=0.0.0",
-    "bajan": ">=0.1.0"
+    "bajan": ">=0.1.0",
+    "podras": ">=0.0.0"
 }"#;
 
 /// Parse the `[tools]` entries of a `versions.ddl.toml`-shaped pin file

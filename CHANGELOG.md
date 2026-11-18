@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`podras` joins the managed registry** (16th tool, extension/experimental) —
+  per-repository project-status brief for humans and AI agents
+  (`charly-vibes/podras`). Capability matrix, README block, ecosystem map,
+  troubleshooting list, and the §4 dogfood matrix updated; `ddl install podras`
+  works once podras publishes its first crates.io/GitHub Release. ddl
+  dogfoods it locally: `BRIEF.md`/`BRIEF.json` committed at the repo root.
+
 ### Changed
 
 - **`ddl init` installs openspec project skills** — on openspec 2.1+ it runs

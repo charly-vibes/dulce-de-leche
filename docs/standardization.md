@@ -161,24 +161,27 @@ a broken release of any tool must not break CI of the whole fleet.
 Rows are in-org repos only; external consumers (bd, openspec, turu) appear as
 **columns** and are installed only where a repo genuinely consumes them.
 
-| Consumer ↓ runs | pretender (lint/complexity) | wai (workflow) | bd (issues) | openspec (proposals) | dont (grounding) | testaruda (test selection) | ddl (status) |
-|---|---|---|---|---|---|---|---|
-| wai          | ✅ (already) | — | ✅ | ✅ | ◻ opt | — | ✅ |
-| testaruda    | ✅ (has pretender.toml) | ✅ | ✅ | ✅ | ◻ opt | — | ✅ |
-| dont         | ✅ | ✅ (already) | ✅ | ✅ | — | ◻ opt | ✅ |
-| pretender    | — | ✅ | ✅ | ✅ | ◻ opt | ◻ opt | ✅ |
-| vampiro      | ✅ | ✅ | ✅ | ✅ (already) | ✅ (already) | ◻ opt | ✅ |
-| specodelic   | ✅ | ✅ | ✅ | ✅ | ◻ opt | — | ✅ |
-| incitaciones | ✅ | ✅ | ✅ | — | ◻ opt | — | ✅ |
-| espectacular (`ah`) | ✅ | ✅ | ✅ | ✅ | ◻ opt | ◻ opt | ✅ |
-| whisper (`turu`) | ✅ | ✅ | ✅ | — | ◻ opt | — | ✅ |
-| funkalization | ✅ | ✅ | ✅ | ✅ | ◻ opt | — | ✅ |
-| ddl          | ✅ | ✅ | ✅ | ✅ | ◻ opt | — | — |
+| Consumer ↓ runs | pretender (lint/complexity) | wai (workflow) | bd (issues) | openspec (proposals) | dont (grounding) | testaruda (test selection) | ddl (status) | podras (status brief) |
+|---|---|---|---|---|---|---|---|---|
+| wai          | ✅ (already) | — | ✅ | ✅ | ◻ opt | — | ✅ | ◻ opt |
+| testaruda    | ✅ (has pretender.toml) | ✅ | ✅ | ✅ | ◻ opt | — | ✅ | ◻ opt |
+| dont         | ✅ | ✅ (already) | ✅ | ✅ | — | ◻ opt | ✅ | ◻ opt |
+| pretender    | — | ✅ | ✅ | ✅ | ◻ opt | ◻ opt | ✅ | ◻ opt |
+| vampiro      | ✅ | ✅ | ✅ | ✅ (already) | ✅ (already) | ◻ opt | ✅ | ◻ opt |
+| specodelic   | ✅ | ✅ | ✅ | ✅ | ◻ opt | — | ✅ | ◻ opt |
+| incitaciones | ✅ | ✅ | ✅ | — | ◻ opt | — | ✅ | ◻ opt |
+| espectacular (`ah`) | ✅ | ✅ | ✅ | ✅ | ◻ opt | ◻ opt | ✅ | ◻ opt |
+| whisper (`turu`) | ✅ | ✅ | ✅ | — | ◻ opt | — | ✅ | ◻ opt |
+| funkalization | ✅ | ✅ | ✅ | ✅ | ◻ opt | — | ✅ | ◻ opt |
+| ddl          | ✅ | ✅ | ✅ | ✅ | ◻ opt | — | — | ◻ opt |
 
 `✅` = required in `ci.yml` (unless the section says otherwise); `◻ opt` = opt-in;
 `—` = self/not applicable.
 `ddl status` is the runtime check: the registry drift test enforces the
 README block, and each tool's status page links back to ddl.
+`podras` (registered 2026-11-18) is pre-release — no crates.io publish or
+GitHub Release yet — so every cell is `◻ opt` until its first publish;
+ddl dogfoods it locally (`BRIEF.md`/`BRIEF.json` committed at the repo root).
 
 ### 4.1 Per-repo `ddl init --gates` rollout (DDL-d73)
 
