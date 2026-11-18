@@ -145,6 +145,16 @@ pub const MANAGED_TOOLS: &[Tool] = &[
         maturity: Maturity::Beta,
     },
     Tool {
+        name: "sad",
+        description: "Documentation gate — code should speak for itself; prose means refactor",
+        crate_name: "sad",
+        formula_name: "sad",
+        repo: "charly-vibes/sad",
+        npm_package: None,
+        category: ToolCategory::Extension,
+        maturity: Maturity::Experimental,
+    },
+    Tool {
         name: "testaruda",
         description: "Test selection and prioritization",
         crate_name: "testaruda",

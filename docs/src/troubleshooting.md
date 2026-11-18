@@ -19,6 +19,7 @@ Check available tools:
 - `dont` — Epistemic discipline
 - `ah` — Behavioral specification testing
 - `pretender` — Code quality
+- `sad` — Documentation gate
 - `testaruda` — Test selection
 - `vampiro` — Composition checking
 - `specodelic` — Markdown spec format + linter (binary: `spk`)

@@ -177,7 +177,7 @@ ddl manages a tool when all of the following hold:
 
 1. It is an installable CLI — users run it in a terminal (not a desktop app, library, static site, or content repo).
 2. It has (or is about to get) a distribution channel in the charly-vibes tap/bucket.
-3. It has a config convention ddl can manage (or is explicitly install-only, like bd, openspec, and incitaciones).
+3. It has a config convention ddl can manage (or is explicitly install-only, like sad, bd, openspec, and incitaciones).
 
 ## Active Tools
 
@@ -189,6 +189,7 @@ ddl manages a tool when all of the following hold:
 | **dont** | `dont`, `dt` | `dont-cli` | ✓ | Epistemic discipline state machine. Claims, evidence, vocabulary tracking. Cozo DB backend. |
 | **espectacular** | `ah` | `espectacular` | ✓ | Behavioral verification. Spec-test correspondence enforcement. |
 | **pretender** | `pretender` | `pretender` | ✓ | Multi-language structural code quality. Tree-sitter-based complexity, duplication, mutation testing. |
+| **sad** | `sad` | `sad` | ✓ | Documentation gate: comments and doc strings outside the three structural channels (file header, doc summary, resolvable marker) become findings. Install-only under ddl — config is repo-local `sad.toml`; there is no `ddl init` migration. |
 | **testaruda** | `testaruda`, `testaruda-adapter-rust`, `testaruda-adapter-python` | `testaruda` | ✓ | Test selection engine. Ascent Datalog + provenance semiring. SQLite store. |
 | **vampiro** | `vampiro` | `vampiro` | ✓ | Cross-language composition checking at call, module, effect, law, retry, resource, and trust boundaries. Crate workspace with per-language tracers. |
 | **wild** | `wild` | `wild-vibes` | — | Machine-checked compatibility and composition of software components, modelled as a category of contracts. `wild extract` / `wild check`. |
@@ -235,11 +236,11 @@ After ddl migration (Phase 1):
 | specodelic | `.ddl/specodelic/` → `.specs/` | ✓ symlink |
 | funkalization | `.ddl/funkalization/` → `.funkalization/` | ✓ symlink |
 
-`bd`, `openspec`, `incitaciones`, and `turu` are install-only — their state lives outside `.ddl/` (bd manages repo-local `.beads/` itself; openspec manages `openspec/` itself), so there is nothing to migrate.
+`bd`, `openspec`, `incitaciones`, `turu`, and `sad` are install-only — their state lives outside `.ddl/` (bd manages repo-local `.beads/` itself; openspec manages `openspec/` itself; sad reads repo-local `sad.toml` directly), so there is nothing to migrate.
 
 ## Shared infrastructure (genesis-vibes)
 
-Genesis-consuming tools (wai, dont, espectacular, pretender, testaruda,
+Genesis-consuming tools (wai, dont, espectacular, pretender, sad, testaruda,
 vampiro, bajan) depend on `genesis-vibes`; wild and gently do not yet. Genesis
 provides:
 

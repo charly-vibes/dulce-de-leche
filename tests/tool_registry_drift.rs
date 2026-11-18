@@ -14,7 +14,15 @@ const README: &str = include_str!("../README.md");
 const ECOSYSTEM_MAP: &str = include_str!("../docs/ecosystem-map.md");
 
 /// Tools that are install-only (no legacy config to migrate).
-const INSTALL_ONLY: &[&str] = &["bd", "openspec", "incitaciones", "turu", "wild", "bajan"];
+const INSTALL_ONLY: &[&str] = &[
+    "bd",
+    "openspec",
+    "incitaciones",
+    "turu",
+    "wild",
+    "bajan",
+    "sad",
+];
 
 fn registry_names() -> Vec<&'static str> {
     MANAGED_TOOLS.iter().map(|t| t.name).collect()
@@ -141,6 +149,7 @@ const EXPECTED_CATEGORY: &[(&str, &str)] = &[
     ("dont", "recommended"),
     ("ah", "recommended"),
     ("pretender", "extension"),
+    ("sad", "extension"),
     ("vampiro", "extension"),
     ("incitaciones", "extension"),
     ("bd", "extension"),
@@ -194,6 +203,7 @@ fn maturity_matches_ratified_assignments() {
         ("dont", "beta"),
         ("ah", "beta"),
         ("pretender", "beta"),
+        ("sad", "experimental"),
         ("testaruda", "stable"),
         ("vampiro", "beta"),
         ("bd", "stable"),

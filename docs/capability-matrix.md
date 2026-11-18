@@ -9,6 +9,7 @@ Intent → tool mapping for the charly-vibes ecosystem, generated from ddl's too
 | dont | `dont` | Epistemic discipline for AI-driven development | recommended | beta |
 | ah | `ah` | Behavioral specification testing | recommended | beta |
 | pretender | `pretender` | Code quality automation | extension | beta |
+| sad | `sad` | Documentation gate — code should speak for itself; prose means refactor | extension | experimental |
 | testaruda | `testaruda` | Test selection and prioritization | core | stable |
 | vampiro | `vampiro` | Cross-language composition checking at call boundaries | extension | beta |
 | bd | `bd` | Issue tracker with first-class dependency support (beads) | extension | stable |
@@ -20,4 +21,4 @@ Intent → tool mapping for the charly-vibes ecosystem, generated from ddl's too
 | wild | `wild` | Contract-based compatibility checking for software updates | extension | experimental |
 | bajan | `bajan` | Spec-driven knowledge-graph pipeline CLI — ingest sources, extract claims, human-gated adoption and entity review | extension | experimental |
 
-Install any of these with `ddl install <name>` — 14 tools total.
+Install any of these with `ddl install <name>` — 15 tools total.

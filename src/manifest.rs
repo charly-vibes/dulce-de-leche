@@ -255,6 +255,7 @@ pub const EMBEDDED_COMPATIBILITY: &str = r#"{
     "dont": ">=0.2.0",
     "ah": ">=0.2.0",
     "pretender": ">=0.3.0",
+    "sad": ">=0.1.0",
     "testaruda": ">=0.2.0",
     "vampiro": ">=0.4.0",
     "incitaciones": ">=0.8.0",

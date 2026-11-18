@@ -36,6 +36,7 @@ const RUST_REPOS: &[&str] = &[
     "testaruda",
     "dont",
     "pretender",
+    "sad",
     "vampiro",
     "specodelic",
     "espectacular",
@@ -48,6 +49,7 @@ const ALL_REPOS: &[&str] = &[
     "testaruda",
     "dont",
     "pretender",
+    "sad",
     "vampiro",
     "specodelic",
     "espectacular",
@@ -341,6 +343,17 @@ const DOGFOOD_MATRIX: &[(&str, &[&str])] = &[
         &["pretender", "wai", "bd", "openspec", "dulce-de-leche"],
     ),
     ("whisper", &["pretender", "wai", "bd", "dulce-de-leche"]),
+    (
+        "sad",
+        &[
+            "pretender",
+            "wai",
+            "bd",
+            "openspec",
+            "espectacular",
+            "dulce-de-leche",
+        ],
+    ),
     (
         "dulce-de-leche",
         &["pretender", "wai", "bd", "openspec", "dont"],
