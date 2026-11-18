@@ -1,0 +1,417 @@
+{
+  "ok": true,
+  "envelope_version": "0.1",
+  "cli_version": "0.1.0",
+  "envelope_kind": "ok",
+  "data": {
+    "schema_version": "brief.v1",
+    "as_of": "2026-11-18",
+    "generated_at": "2026-11-18T20:59:19.032875645Z",
+    "sources": [
+      {
+        "name": "beads",
+        "status": "present",
+        "observed_at": "2026-11-18T16:09:40Z",
+        "staleness": "fresh",
+        "detail": "23 malformed line(s) skipped in .beads/issues.jsonl"
+      },
+      {
+        "name": "git",
+        "status": "present",
+        "observed_at": "2026-11-18T16:09:48Z",
+        "staleness": "fresh",
+        "detail": null
+      },
+      {
+        "name": "openspec",
+        "status": "present",
+        "observed_at": "2026-11-17T19:50:38.377716055Z",
+        "staleness": "fresh",
+        "detail": null
+      },
+      {
+        "name": "whisper",
+        "status": "present",
+        "observed_at": "2026-10-21T23:42:29Z",
+        "staleness": "stale",
+        "detail": null
+      },
+      {
+        "name": "curation",
+        "status": "present",
+        "observed_at": "2026-11-18T20:59:19.029130551Z",
+        "staleness": "fresh",
+        "detail": null
+      }
+    ],
+    "curation": {
+      "updated_at": "2026-11-18T20:59:19.029130551Z",
+      "confirmed_at": "2026-11-18T00:00:00Z"
+    },
+    "purpose_lite": "dulce-de-leche (ddl) — orchestrator that installs, configures, and updates every charly-vibes tool",
+    "focus": [],
+    "in_flight": [
+      {
+        "id": "DDL-3et",
+        "title": "Research: Hegel property-based testing plan (antithesis-research)",
+        "status": "open",
+        "priority": 1,
+        "blocked_by": [],
+        "age_days": 2,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "DDL-7a7",
+        "title": "Implement Hegel property tests",
+        "status": "open",
+        "priority": 1,
+        "blocked_by": [
+          "DDL-3et"
+        ],
+        "age_days": 2,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "DDL-9x4",
+        "title": "P1 epic: fleet provenance.json rollout — make fail-closed installs actually pass (DDL-yts/wof completion)",
+        "status": "open",
+        "priority": 1,
+        "blocked_by": [],
+        "age_days": 28,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "DDL-cfd",
+        "title": "docs: apply README front-door standard v0.4 (§5.1)",
+        "status": "open",
+        "priority": 1,
+        "blocked_by": [],
+        "age_days": 2,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "DDL-sl9",
+        "title": "[bug] pre-commit pretender gate is a no-op: --diff-only reads the unstaged tree",
+        "status": "open",
+        "priority": 1,
+        "blocked_by": [],
+        "age_days": 5,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "DDL-3av",
+        "title": "Fleet-wide: release tarballs ship binaries without the exec bit — curl | tar xz && ./tool fails",
+        "status": "open",
+        "priority": 2,
+        "blocked_by": [],
+        "age_days": 44,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "DDL-6gq",
+        "title": "ddl init invokes a stale wai and re-injects a duplicate ah managed block",
+        "status": "open",
+        "priority": 2,
+        "blocked_by": [],
+        "age_days": 0,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "DDL-7ag",
+        "title": "Replicate dont CI speedup pattern (rust-cache + cargo-binstall + nightly coverage) across charly-vibes repos",
+        "status": "open",
+        "priority": 2,
+        "blocked_by": [],
+        "age_days": 35,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "DDL-85p",
+        "title": "Standard: testaruda-backed just test recipes across the DDL repos",
+        "status": "open",
+        "priority": 2,
+        "blocked_by": [],
+        "age_days": 33,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "DDL-9x4.11",
+        "title": "DESIGN: external-tool provenance gap — bd (gastownhall) cannot publish our provenance.json",
+        "status": "open",
+        "priority": 2,
+        "blocked_by": [],
+        "age_days": 28,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "DDL-arb",
+        "title": "vampiro main CI red: openspec validate --all exits 1 in dogfood smoke",
+        "status": "open",
+        "priority": 2,
+        "blocked_by": [],
+        "age_days": 35,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "DDL-d95",
+        "title": "dont main CI red: openspec validate --all exits 1 in dogfood smoke",
+        "status": "open",
+        "priority": 2,
+        "blocked_by": [],
+        "age_days": 35,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "DDL-myf",
+        "title": "Fleet sweep: migrate the nine legacy openspec repos (openspec update, project.md → config.yaml)",
+        "status": "in_progress",
+        "priority": 2,
+        "blocked_by": [],
+        "age_days": 1,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "DDL-t5r",
+        "title": "ddl: manage just as a DDL tool + doctor gate for the DDL-85p test-runner recipes",
+        "status": "open",
+        "priority": 2,
+        "blocked_by": [],
+        "age_days": 33,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "DDL-udq",
+        "title": "docs: add ddl.repo.readme-frontdoor conformance check",
+        "status": "open",
+        "priority": 2,
+        "blocked_by": [],
+        "age_days": 2,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "DDL-01q",
+        "title": "Test flakes under parallel load: init/gates integration tests fail non-deterministically (test_init_json_output, gates_is_idempotent_on_rerun, test_init_yes_creates_ddl_dir each failed a different full `cargo test` run on 2026-10-16 during the v0.9.0 release; all pass in isolation). Likely shared-state or resource contention — a release test job rerun-risk. Diagnose and de-flake (serial_test or per-test temp isolation).",
+        "status": "open",
+        "priority": 3,
+        "blocked_by": [],
+        "age_days": 33,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "DDL-61p",
+        "title": "[bug] dont release.yml crates.io publish fails on dirty-worktree check (uncommitted generated files)",
+        "status": "open",
+        "priority": 3,
+        "blocked_by": [],
+        "age_days": 28,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "DDL-g30",
+        "title": "[bug] wai release.yml crates.io publish fails: Cargo.toml calendar version != release tag",
+        "status": "open",
+        "priority": 3,
+        "blocked_by": [],
+        "age_days": 28,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "DDL-g6w",
+        "title": "Adoption/UX reframe: reduce onboarding friction (setup-wizard entry point experiment)",
+        "status": "open",
+        "priority": 3,
+        "blocked_by": [],
+        "age_days": 29,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "DDL-g6w.7",
+        "title": "Wizard release: managed-tool docs surface block + CHANGELOG entry (tasks 3.1–3.2)",
+        "status": "blocked",
+        "priority": 3,
+        "blocked_by": [],
+        "age_days": 29,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "DDL-ndn",
+        "title": "[bug] dont release.yml crates.io publish fails on dirty-worktree check (11 uncommitted generated files)",
+        "status": "open",
+        "priority": 3,
+        "blocked_by": [],
+        "age_days": 28,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "DDL-xr4",
+        "title": "Test flakes under parallel load: init/gates integration tests fail non-deterministically",
+        "status": "open",
+        "priority": 3,
+        "blocked_by": [],
+        "age_days": 33,
+        "reason": null,
+        "confirmed_at": null
+      }
+    ],
+    "blocked": [
+      {
+        "id": "DDL-7a7",
+        "title": "Implement Hegel property tests",
+        "status": "open",
+        "priority": 1,
+        "blocked_by": [
+          "DDL-3et"
+        ],
+        "age_days": 2,
+        "reason": null,
+        "confirmed_at": null
+      }
+    ],
+    "next": [
+      {
+        "id": "DDL-3et",
+        "title": "Research: Hegel property-based testing plan (antithesis-research)",
+        "status": "open",
+        "priority": 1,
+        "blocked_by": [],
+        "age_days": 2,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "DDL-9x4",
+        "title": "P1 epic: fleet provenance.json rollout — make fail-closed installs actually pass (DDL-yts/wof completion)",
+        "status": "open",
+        "priority": 1,
+        "blocked_by": [],
+        "age_days": 28,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "DDL-cfd",
+        "title": "docs: apply README front-door standard v0.4 (§5.1)",
+        "status": "open",
+        "priority": 1,
+        "blocked_by": [],
+        "age_days": 2,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "DDL-sl9",
+        "title": "[bug] pre-commit pretender gate is a no-op: --diff-only reads the unstaged tree",
+        "status": "open",
+        "priority": 1,
+        "blocked_by": [],
+        "age_days": 5,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "DDL-3av",
+        "title": "Fleet-wide: release tarballs ship binaries without the exec bit — curl | tar xz && ./tool fails",
+        "status": "open",
+        "priority": 2,
+        "blocked_by": [],
+        "age_days": 44,
+        "reason": null,
+        "confirmed_at": null
+      }
+    ],
+    "parked": [],
+    "needs_retriage": [],
+    "recent": [
+      {
+        "sha": "af5ed57ec3e0427475193d95cebfddce5183ed88",
+        "committed_at": "2026-11-18T16:09:48Z",
+        "subject": "beads: file the ddl init collateral defect",
+        "outcome": null
+      },
+      {
+        "sha": "25ca1aa41aade4f7aa357dc0e2e6f4557f4e32f1",
+        "committed_at": "2026-11-18T16:08:13Z",
+        "subject": "beads: close DDL-1bz",
+        "outcome": null
+      },
+      {
+        "sha": "29136c8468d54611b172c37155a4658fecd1c395",
+        "committed_at": "2026-11-18T15:56:14Z",
+        "subject": "fix(gates): compare managed spans with the configured commands; per-repo overrides",
+        "outcome": null
+      },
+      {
+        "sha": "f52d1ed9991aa1b71539abf69d80574144678da3",
+        "committed_at": "2026-11-18T15:11:01Z",
+        "subject": "fix(registry): disable cargo fallback for sad — crates.io name is squatted",
+        "outcome": null
+      },
+      {
+        "sha": "c5654ae826f97b8eef7fc99026c16823797bc086",
+        "committed_at": "2026-11-18T15:07:20Z",
+        "subject": "chore(openspec): migrate project.md into config.yaml",
+        "outcome": null
+      }
+    ],
+    "health": {
+      "status": "amber",
+      "basis": "human",
+      "signals": [
+        {
+          "kind": "orphan_commits",
+          "reason": "38 commits in the 14-day window link no tracker id or open work-item path: 0b4d771446a01111d594adddb4d91e6641ae8661 (chore(deps): clear the RustSec advisories blocking the 0.10.0 release); 0b7e1b97f72d1a2229a56441c190247ddd9002d1 (docs: apply issue-review fixes to README/release tickets); 144a7f6b39bc6741aec6fd489accf5ddd2085429 (refactor: record removals of superseded top-level module files); 19727f73cf2bca6c4580a0c48cfa41db66209d38 (refactor(commands): split commands/init.rs (496 lines) into init/ submodule dir); 198d1fc20e2e5be4c5c7ab3a23856e67a0daeabd (refactor(setup_wizard): split setup_wizard.rs (537 lines) into setup_wizard/ module dir); 1be7069013552a6304bd3b4d76a93aa17e2687eb (docs(brief): pretender debt fix brief (dulce-de-leche) — orchestrator artifact); 24229e5cde3c0f5f2309a6e0cec3a2397fb76178 (fix(installer): poll for child status reap after pipe EOF in run_child_captured); 29136c8468d54611b172c37155a4658fecd1c395 (fix(gates): compare managed spans with the configured commands; per-repo overrides); 2aef635a5c18b0d3153eea707e126e96f847dcf8 (test: keep the doctor-clean contract hermetic against third-party block writers); 2dbe3bf54b5bd7243123def94fb6ad28e4df0fd7 (feat: register bajan in the managed tool registry (bajan-23s)); 2ed591896de59122d4cbfa79cb222184209aab85 (test(quality): add explicit assertions to assert_cmd-based tests); 33b0b2946eb09ab03775475bc015d29948efbefb (refactor(quality): split workflow-security helpers to meet complexity budgets); 3d0f13a52df317eef9d1f792d3ce9713d1506e5d (refactor(installer): split installer.rs (3186 lines) into installer/ module dir); 4999cac5af7d77d46041f9d5b9fcb0fb25131e0a (docs: file README front-door conformance check ticket); 547a90ce2996204429884a5c30633e921a8fd392 (docs: apply issue-review fixes to README/release tickets); 688f479efaf3148f89d699c0425709aa0a826c74 (refactor(gates): split gates.rs (939 lines) into gates/ module dir); 6bb3384c50e7a0d5596eeb629076a4da22d35c9a (refactor(installer): decompose oversized functions into ≤40-line units); 6d6af399f841404153e12ebe4342aa65d1df8b37 (refactor(diagnostics): decompose ToolCheck::run, run_full_diagnostic, classify_nested_doctor, StatusContributor::status); 6db838deb4b0c510b50248362e3b1973d5d34a8a (beads: file the stale gate block defect found in the genesis repair); 7f330650bdb88cd59c2eb42a8e44ef6b65db2cf6 (refactor(platform): split platform.rs (496 lines) into platform/ module dir); 8f01b69a3bc95a738277c988a1ec3ed12a02f608 (docs: correct release conformance status in §1); 9918a0a9136024c8b5b41b0d4e1e848f69ab62f0 (docs: require prebuilt GitHub Release binaries; track ddl README conformance); 9f6f7ef2b2ccb1a2d0b53e4e331f997eb5a1c913 (refactor(commands,cli): decompose cmd_setup, cmd_feedback, ensure_incitaciones_skills, check_updates_human, migrate_forward); ab2c8e3fc5f28fbf7212f92849cb8cc87fd835dd (refactor: decompose cmd_init, install_phase, interactive_select, wait_captured_child, install_binary, upgrade_success_result, extract_zip_staged); af5ed57ec3e0427475193d95cebfddce5183ed88 (beads: file the ddl init collateral defect); b2589940e7dc575afb4a7228edc3724550c5298f (refactor(diagnostics): split diagnostics.rs (1252 lines) into diagnostics/ module dir); b5a9ee5bea5cf83baa6e4223b1ec893f636cd2c4 (docs: link the ecosystem standard from the README); b974383c9d1aa4f13f58c8717368138be37f2598 (beads: block the sweep on the wai release); bd018cda9727b5366c095a9b32cf67d90fc0b687 (feat(registry): register sad as a managed tool (sad-8b7)); bf7983bc3981ba1ba2c5ab50240dd42dedb32c22 (beads: record the sweep sequencing decision); c19c6793984672b6ce229356ccdd8758f10d7869 (chore(openspec): adopt the 2.1 artifact layout); c5654ae826f97b8eef7fc99026c16823797bc086 (chore(openspec): migrate project.md into config.yaml); c7dcd78a2d159f85a53279a62e1139d1346c6fc9 (release: 0.10.0 — provenance verification that accepts fleet releases); e954cbee52cc8d3e79b502094252808ade5c4052 (docs: add README front-door contract to the ecosystem standard); f0c616dda3aacd7e6ec202188db7d32fa2bb3d03 (refactor(dot_ddl): split dot_ddl.rs (1114 lines) into dot_ddl/ module dir); f4e2b7da20d5aedb4acc4db26ce658219dc3920d (beads: record the openspec instrument check decision and follow-ups); f52d1ed9991aa1b71539abf69d80574144678da3 (fix(registry): disable cargo fallback for sad — crates.io name is squatted); f9d5ef1577590e966ff581eecf256e2301491c59 (refactor(cli): split main.rs (1199 lines) into commands/ module, decompose cmd_init)"
+        },
+        {
+          "kind": "spec_change_without_bead",
+          "reason": "openspec changes link no tracker id: `fix-agent-instrumentation-check` changed 1 days ago"
+        }
+      ],
+      "owner": "charly",
+      "reason": "human green downgraded by signals: orphan_commits: 38 commits in the 14-day window link no tracker id or open work-item path: 0b4d771446a01111d594adddb4d91e6641ae8661 (chore(deps): clear the RustSec advisories blocking the 0.10.0 release); 0b7e1b97f72d1a2229a56441c190247ddd9002d1 (docs: apply issue-review fixes to README/release tickets); 144a7f6b39bc6741aec6fd489accf5ddd2085429 (refactor: record removals of superseded top-level module files); 19727f73cf2bca6c4580a0c48cfa41db66209d38 (refactor(commands): split commands/init.rs (496 lines) into init/ submodule dir); 198d1fc20e2e5be4c5c7ab3a23856e67a0daeabd (refactor(setup_wizard): split setup_wizard.rs (537 lines) into setup_wizard/ module dir); 1be7069013552a6304bd3b4d76a93aa17e2687eb (docs(brief): pretender debt fix brief (dulce-de-leche) — orchestrator artifact); 24229e5cde3c0f5f2309a6e0cec3a2397fb76178 (fix(installer): poll for child status reap after pipe EOF in run_child_captured); 29136c8468d54611b172c37155a4658fecd1c395 (fix(gates): compare managed spans with the configured commands; per-repo overrides); 2aef635a5c18b0d3153eea707e126e96f847dcf8 (test: keep the doctor-clean contract hermetic against third-party block writers); 2dbe3bf54b5bd7243123def94fb6ad28e4df0fd7 (feat: register bajan in the managed tool registry (bajan-23s)); 2ed591896de59122d4cbfa79cb222184209aab85 (test(quality): add explicit assertions to assert_cmd-based tests); 33b0b2946eb09ab03775475bc015d29948efbefb (refactor(quality): split workflow-security helpers to meet complexity budgets); 3d0f13a52df317eef9d1f792d3ce9713d1506e5d (refactor(installer): split installer.rs (3186 lines) into installer/ module dir); 4999cac5af7d77d46041f9d5b9fcb0fb25131e0a (docs: file README front-door conformance check ticket); 547a90ce2996204429884a5c30633e921a8fd392 (docs: apply issue-review fixes to README/release tickets); 688f479efaf3148f89d699c0425709aa0a826c74 (refactor(gates): split gates.rs (939 lines) into gates/ module dir); 6bb3384c50e7a0d5596eeb629076a4da22d35c9a (refactor(installer): decompose oversized functions into ≤40-line units); 6d6af399f841404153e12ebe4342aa65d1df8b37 (refactor(diagnostics): decompose ToolCheck::run, run_full_diagnostic, classify_nested_doctor, StatusContributor::status); 6db838deb4b0c510b50248362e3b1973d5d34a8a (beads: file the stale gate block defect found in the genesis repair); 7f330650bdb88cd59c2eb42a8e44ef6b65db2cf6 (refactor(platform): split platform.rs (496 lines) into platform/ module dir); 8f01b69a3bc95a738277c988a1ec3ed12a02f608 (docs: correct release conformance status in §1); 9918a0a9136024c8b5b41b0d4e1e848f69ab62f0 (docs: require prebuilt GitHub Release binaries; track ddl README conformance); 9f6f7ef2b2ccb1a2d0b53e4e331f997eb5a1c913 (refactor(commands,cli): decompose cmd_setup, cmd_feedback, ensure_incitaciones_skills, check_updates_human, migrate_forward); ab2c8e3fc5f28fbf7212f92849cb8cc87fd835dd (refactor: decompose cmd_init, install_phase, interactive_select, wait_captured_child, install_binary, upgrade_success_result, extract_zip_staged); af5ed57ec3e0427475193d95cebfddce5183ed88 (beads: file the ddl init collateral defect); b2589940e7dc575afb4a7228edc3724550c5298f (refactor(diagnostics): split diagnostics.rs (1252 lines) into diagnostics/ module dir); b5a9ee5bea5cf83baa6e4223b1ec893f636cd2c4 (docs: link the ecosystem standard from the README); b974383c9d1aa4f13f58c8717368138be37f2598 (beads: block the sweep on the wai release); bd018cda9727b5366c095a9b32cf67d90fc0b687 (feat(registry): register sad as a managed tool (sad-8b7)); bf7983bc3981ba1ba2c5ab50240dd42dedb32c22 (beads: record the sweep sequencing decision); c19c6793984672b6ce229356ccdd8758f10d7869 (chore(openspec): adopt the 2.1 artifact layout); c5654ae826f97b8eef7fc99026c16823797bc086 (chore(openspec): migrate project.md into config.yaml); c7dcd78a2d159f85a53279a62e1139d1346c6fc9 (release: 0.10.0 — provenance verification that accepts fleet releases); e954cbee52cc8d3e79b502094252808ade5c4052 (docs: add README front-door contract to the ecosystem standard); f0c616dda3aacd7e6ec202188db7d32fa2bb3d03 (refactor(dot_ddl): split dot_ddl.rs (1114 lines) into dot_ddl/ module dir); f4e2b7da20d5aedb4acc4db26ce658219dc3920d (beads: record the openspec instrument check decision and follow-ups); f52d1ed9991aa1b71539abf69d80574144678da3 (fix(registry): disable cargo fallback for sad — crates.io name is squatted); f9d5ef1577590e966ff581eecf256e2301491c59 (refactor(cli): split main.rs (1199 lines) into commands/ module, decompose cmd_init); spec_change_without_bead: openspec changes link no tracker id: `fix-agent-instrumentation-check` changed 1 days ago"
+    },
+    "truncation": {
+      "applied": true,
+      "omitted_counts": {
+        "next": 14,
+        "recent": 195
+      }
+    },
+    "head_sha": "af5ed57ec3e0427475193d95cebfddce5183ed88",
+    "source_hash": "b9927738844a9447df42408cd4e8860959fab2d89dd6c71fce2b2041f4392904",
+    "warnings": [
+      {
+        "source": "beads",
+        "code": "beads_parse_error",
+        "detail": "23 malformed line(s) skipped in .beads/issues.jsonl"
+      }
+    ]
+  },
+  "warnings": [],
+  "hints": [],
+  "meta": {
+    "duration_ms": 0,
+    "tx": null,
+    "request_id": null
+  }
+}

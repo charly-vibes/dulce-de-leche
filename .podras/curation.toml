@@ -1,0 +1,11 @@
+# .podras/curation.toml — human-owned intent for this repository.
+# Maintained by hand and by `podras focus` / `podras park`; agents never edit it.
+
+purpose_lite = "dulce-de-leche (ddl) — orchestrator that installs, configures, and updates every charly-vibes tool"
+max_focus = 1
+
+[health]
+status = "green"
+owner = "charly"
+confirmed_at = "2026-11-18"
+reason = "v0.10.0 shipped; registry at 16 tools; CI green on main"
