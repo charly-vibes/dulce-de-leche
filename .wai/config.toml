@@ -2,8 +2,8 @@ plugins = []
 
 [project]
 name = "dulce-de-leche"
-version = "2026.10.4"
+version = "2026.11.17"
 description = ""
-tool_commit = "4b806a0"
+tool_commit = "5a9a135"
 
 [llm]

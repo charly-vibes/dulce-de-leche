@@ -1,0 +1,72 @@
+schema: spec-driven
+
+context: |
+  dulce-de-leche (CLI: `ddl`) is the cross-platform bootstrap and orchestration
+  tool for the charly-vibes ecosystem: one entry point to install, configure,
+  and manage the fleet's CLI tools (wai, dont, ah, pretender, testaruda,
+  vampiro, turu, specodelic, bd, openspec, incitaciones) on macOS, Linux, and
+  Windows. The value proposition is "one binary, one command, any platform": a
+  single pre-compiled static binary plus `ddl init` sets up the toolset with no
+  package-manager prerequisites and no Rust toolchain.
+
+  Stack: Rust (clap CLI, miette diagnostics, genesis scaffold/doctor), TOML
+  config, JSON manifest, subprocess communication with managed tools (no shared
+  library linking), cross-compilation for macos/linux/windows on amd64/arm64.
+
+  Architecture:
+  - Subprocess protocol: ddl talks to each tool through its CLI (e.g. `wai
+    status --json`), which decouples release cycles; never link a tool as a
+    library.
+  - Platform detection at runtime chooses the installation strategy.
+  - Fallback chain: release binary download then cargo install (when no release
+    binary exists and cargo is available); npm for incitaciones. Homebrew/Scoop
+    formulas stay published for manual installs but are not install decisions.
+  - Every command is idempotent: safe to re-run, no destructive side effects
+    without confirmation.
+  - Layout: openspec/specs/<capability>/spec.md is built truth,
+    openspec/changes/<change-id>/ holds proposals.
+
+  Domain concepts: `.ddl/` is the config directory created by `ddl init`,
+  holding per-tool configs and a shared manifest; `.ddl/manifest.json` tracks
+  installed versions, migration state, and the ddl version; a "managed tool" is
+  any fleet tool ddl can install and check.
+
+  In scope: cross-platform bootstrap, single-tool install, cross-tool status
+  (aggregated by subprocess), cross-tool doctor, version pinning through the
+  manifest, global upgrade, `.ddl/` config directory.
+
+  Out of scope: resolving packages (ddl calls existing package managers, it
+  does not reimplement them), a unified launcher (each tool keeps its own CLI
+  grammar), database merging (dont and testaruda keep independent stores), and
+  CI/CD wiring (each tool owns its own).
+
+  Constraints: CLI must stay fast (<100ms for simple commands); errors must
+  suggest fixes (self-healing); must work offline for already-installed tools;
+  must handle partial installations gracefully; placeholder Homebrew formulas
+  are detected and skipped with clear messaging, never installed; the Linux
+  binary is statically linked; every command supports `--json`; `NO_COLOR` is
+  respected.
+
+  External dependencies: runtime none (static binary); install-time optionally
+  brew, cargo, npm, or scoop; communication via subprocess calls to managed
+  tools.
+
+rules:
+  proposal:
+    - State which managed tool or platform path the change affects and what is
+      out of scope (no package resolution, no unified launcher)
+  specs:
+    - Keep the managed-tool matrix in the bootstrap spec in sync with any new
+      or retired tool
+  tasks:
+    - Map each task to a spec scenario and a red then green then refactor cycle
+
+operations:
+  apply:
+    guidance:
+      - Verify idempotency for every mutating command (re-run it twice in a
+        test or by hand)
+      - Keep the doctor's checks aligned with what each tool actually publishes
+  archive:
+    guidance:
+      - Confirm the archived capability's checks run in CI before finishing
