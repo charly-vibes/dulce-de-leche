@@ -204,6 +204,7 @@ ddl manages a tool when all of the following hold:
 | **specodelic** | `specodelic`, `spk` | `specodelic` | ✓ | Markdown spec format (Intent / Constraints / Model / Properties) with the CLI that lints, compiles, verifies, and refactors it. Repo-local `.specs/` corpus. |
 | **funkalization** | `funkalization` | `funkalization` | — | Visual semantic design workspace. Versioned design semantics with typed design edits, generated obligations, scoped evidence, and loss-reporting adapters toward Specodelic and OpenSpec. Planned repo-local `.funkalization/` workspace. |
 | **bajan** | `bajan` | `bajan` | ✓ | Spec-driven knowledge-graph pipeline CLI — ingest sources, extract claims, query the graph. SQLite-backed triple store, provenance as graph structure. |
+| **kaya** | `kaya` | `kaya-vibes` | — | Research-record compiler: captures wai/git/test events into an append-only `kaya.event/v0` ledger and compiles a self-hosted research dossier with byte-preserved authored sections. |
 | **gently** | `gently` | not yet published | — | Rust port of Perl's Graph::Easy: build graphs, lay them out deterministically, render as ASCII art, boxart, HTML, or Graphviz DOT — plus parse Graph::Easy and DOT input. |
 
 ### Non-Rust tools

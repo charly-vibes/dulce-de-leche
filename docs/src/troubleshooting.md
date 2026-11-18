@@ -31,6 +31,7 @@ Check available tools:
 - `wild` — Contract-based compatibility checking (experimental)
 - `bajan` — Spec-driven knowledge-graph pipeline (experimental)
 - `podras` — Per-repo project status brief (experimental; pre-release — `ddl install` works after podras's first crates.io/GitHub Release, tracked in charly-vibes/podras)
+- `kaya` — Research-record compiler (experimental; binary `kaya`, crate `kaya-vibes`)
 
 (`ddl` itself is not installable via `ddl install` — it manages every tool
 except itself.)

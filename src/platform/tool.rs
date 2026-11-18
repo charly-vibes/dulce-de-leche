@@ -266,6 +266,16 @@ pub const MANAGED_TOOLS: &[Tool] = &[
         category: ToolCategory::Extension,
         maturity: Maturity::Experimental,
     },
+    Tool {
+        name: "kaya",
+        description: "Research-record compiler — captures wai/git/test events into an append-only ledger and compiles a self-hosted research dossier",
+        crate_name: "kaya-vibes",
+        formula_name: "kaya",
+        repo: "charly-vibes/kaya",
+        npm_package: None,
+        category: ToolCategory::Extension,
+        maturity: Maturity::Experimental,
+    },
 ];
 
 /// Find a tool by name (case-insensitive; matches the canonical name or

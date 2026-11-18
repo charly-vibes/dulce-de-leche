@@ -34,10 +34,10 @@ topics — browse the whole set at
 [topic:charly-vibes topic:dulce-de-leche](https://github.com/search?q=topic%3Acharly-vibes+topic%3Adulce-de-leche&type=repositories).
 
 <!-- MANAGED-TOOLS:START -->
-Managed tools (16):
+Managed tools (17):
 - Core (2): wai, testaruda.
 - Recommended (3): turu, dont, ah.
-- Extension (11): pretender, sad, vampiro, incitaciones, bd, openspec, specodelic, funkalization, wild, bajan, podras.
+- Extension (12): pretender, sad, vampiro, incitaciones, bd, openspec, specodelic, funkalization, wild, bajan, podras, kaya.
 Run `ddl version` for the full picture. Additions and removals must update this block
 (enforced by `tests/tool_registry_drift.rs`).
 <!-- MANAGED-TOOLS:END -->
@@ -53,6 +53,7 @@ spelling, but the repo is always the third column):
 | `turu` | `whisper-vibes` | `charly-vibes/whisper` |
 | `wild` | `wild-vibes` | `charly-vibes/wild` |
 | `bajan` | `bajan` | `charly-vibes/bajan` |
+| `kaya` | `kaya-vibes` | `charly-vibes/kaya` |
 | `openspec` | `@fission-ai/openspec` (npm) | `fission-ai/openspec` |
 | `ddl` (this tool) | `dulce-de-leche` | `charly-vibes/dulce-de-leche` |
 
