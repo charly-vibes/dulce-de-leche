@@ -141,6 +141,11 @@ fn ddl_init_args(temp: &tempfile::TempDir, args: &[&str]) -> assert_cmd::assert:
             // this silent stub keeps the cascade from running whatever
             // openspec release the host happens to have (DDL-ehu).
             ("openspec", "#!/bin/sh\nexit 0\n"),
+            // pretender <= 0.11.1 still injects the retired OPENSPEC block at
+            // init, which the instrumentation check correctly reports. Keep
+            // the contract hermetic: this test asserts ddl's own behavior,
+            // not a pinned third-party writer's (fixed separately).
+            ("pretender", "#!/bin/sh\nexit 0\n"),
         ],
     );
     cmd.args(args);
