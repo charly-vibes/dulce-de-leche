@@ -174,6 +174,7 @@ Rows are in-org repos only; external consumers (bd, openspec, turu) appear as
 | whisper (`turu`) | ✅ | ✅ | ✅ | — | ◻ opt | — | ✅ | ◻ opt |
 | funkalization | ✅ | ✅ | ✅ | ✅ | ◻ opt | — | ✅ | ◻ opt |
 | ddl          | ✅ | ✅ | ✅ | ✅ | ◻ opt | — | — | ◻ opt |
+| podras       | ◻ opt | ◻ opt | ◻ opt | ◻ opt | ◻ opt | ◻ opt | ◻ opt | — |
 
 `✅` = required in `ci.yml` (unless the section says otherwise); `◻ opt` = opt-in;
 `—` = self/not applicable.
