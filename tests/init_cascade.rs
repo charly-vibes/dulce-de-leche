@@ -167,7 +167,10 @@ fn ddl_cmd() -> (Command, tempfile::TempDir) {
     let temp = tempfile::tempdir().unwrap();
     let mut cmd = Command::cargo_bin("ddl").unwrap();
     common::clean_git_env(&mut cmd);
-    common::clean_git_env(&mut cmd);
+    // DDL-ab4: sandbox HOME so build_tool_init_command's `~/.ddl/bin` prepend
+    // can never shadow the stubs with real fleet binaries on dev machines that
+    // ran `ddl init` for real (the DDL-uu8 override wins by design).
+    cmd.env("HOME", temp.path().join("home"));
     cmd.current_dir(temp.path());
     (cmd, temp)
 }
@@ -400,16 +403,66 @@ fn ah_init_runs_after_openspec_init() {
         &[
             (
                 "ah",
-                "[ -d openspec ] || { echo 'openspec/ directory not found' >&2; exit 1; }",
+                // Require the probe marker, not just the dir: ddl now
+                // pre-scaffolds openspec/ itself (DDL-cxh), so dir-existence
+                // alone no longer proves the cascade ordering.
+                "[ -f openspec/.ddl-order-probe ] || { echo 'openspec/ not initialized' >&2; exit 1; }",
             ),
-            ("openspec", "mkdir -p openspec"),
+            (
+                "openspec",
+                "mkdir -p openspec && touch openspec/.ddl-order-probe",
+            ),
         ],
     );
     cmd.args(["init", "--yes", "--no-install"]);
     cmd.timeout(CMD_TIMEOUT);
     cmd.assert().success();
-    // sanity: the stub really created it via the ordered cascade
-    assert!(temp.path().join("openspec").is_dir());
+    // sanity: the stub really created the marker via the ordered cascade
+    assert!(temp.path().join("openspec/.ddl-order-probe").is_file());
+}
+
+/// DDL-cxh: real ah (0.12.x) refuses init when openspec/ does not exist
+/// (`ensure!(repo_root.join("openspec").exists())` in espectacular's init).
+/// When ah is in the cascade but the openspec tool-init is not (e.g.
+/// `--tools espectacular`), ddl must scaffold the directory itself.
+#[test]
+fn espectacular_init_scaffolds_missing_openspec_dir() {
+    let (mut cmd, temp) = ddl_cmd();
+    stub_tools(
+        &mut cmd,
+        &temp,
+        &[("ah", "[ -d openspec ] || exit 1; echo 'ah stub init'")],
+    );
+    cmd.args(["init", "--tools", "espectacular", "--no-install", "--human"]);
+    cmd.timeout(CMD_TIMEOUT);
+    let cmd_asserted = cmd.assert().success();
+    assert!(
+        String::from_utf8_lossy(&cmd_asserted.get_output().stderr).contains("ah initialized"),
+        "ah init should succeed after ddl scaffolds openspec/"
+    );
+    assert!(
+        temp.path().join("openspec").is_dir(),
+        "ddl must scaffold openspec/ before ah init"
+    );
+}
+
+/// DDL-cxh idempotency: the scaffold must never touch an existing openspec/
+/// (repo operations guidance: verify idempotency for every mutating command).
+#[test]
+fn espectacular_init_never_clobbers_existing_openspec() {
+    let (mut cmd, temp) = ddl_cmd();
+    let spec = temp.path().join("openspec/specs/spec.md");
+    std::fs::create_dir_all(spec.parent().unwrap()).unwrap();
+    std::fs::write(&spec, "#### Scenario: marker\n").unwrap();
+    stub_tools(&mut cmd, &temp, &[("ah", "exit 0")]);
+    cmd.args(["init", "--tools", "espectacular", "--no-install", "--human"]);
+    cmd.timeout(CMD_TIMEOUT);
+    cmd.assert().success();
+    assert_eq!(
+        std::fs::read_to_string(&spec).unwrap(),
+        "#### Scenario: marker\n",
+        "existing openspec/ content must be preserved"
+    );
 }
 
 /// DDL-ehu (proposal task 3.2): the init cascade scaffolds openspec with

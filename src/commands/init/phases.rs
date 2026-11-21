@@ -160,6 +160,18 @@ pub fn init_cascade(
     candidates: &[String],
     args: &crate::cli::Args,
 ) -> Vec<crate::installer::InitFailure> {
+    // DDL-cxh: ah (>=0.12) refuses init without openspec/ (espectacular's
+    // `ensure!(repo_root.join("openspec").exists())`). When ah is in the
+    // cascade but the openspec tool-init is not (e.g. `--tools espectacular`),
+    // scaffold the directory here — idempotent, never touches existing
+    // content; the ordered openspec init still runs when in scope.
+    if candidates
+        .iter()
+        .any(|t| crate::platform::resolve_tool(t).is_ok_and(|tool| tool.name == "ah"))
+        && let Err(e) = std::fs::create_dir_all("openspec")
+    {
+        eprintln!("  ⚠ could not scaffold openspec/ for ah init: {e}");
+    }
     let ordered: Vec<&str> =
         crate::gates::tool_init_order(&candidates.iter().map(|s| s.as_str()).collect::<Vec<_>>());
     let non_interactive = args.yes || args.is_json();
