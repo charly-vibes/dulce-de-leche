@@ -562,3 +562,91 @@ fn openspec_inits_before_ah() {
     );
     assert!(tool_init_order(&[]).is_empty());
 }
+
+// ---- sad gate wiring (sad-8ov): ddl invokes `sad hooks install`; advisory otherwise.
+
+/// A stub `sad` executable whose `hooks install` emulates sad's marker
+/// wiring idempotently, keeping the assertions deterministic without the
+/// real binary on PATH. sad owns the marker and gate command (boundary
+/// rule) — the stub only stands in for the binary ddl invokes.
+fn write_stub_sad(bin_dir: &std::path::Path, body: &str) -> std::path::PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::create_dir_all(bin_dir).unwrap();
+    let stub = bin_dir.join("sad");
+    std::fs::write(&stub, format!("#!/bin/sh\n{body}")).unwrap();
+    std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).unwrap();
+    stub
+}
+
+const STUB_INSTALL: &str = "\
+# test stub: emulates `sad hooks install` marker wiring
+set -eu
+f=lefthook.yml
+[ -f \"$f\" ] || { echo 'no lefthook.yml: sad never creates a config' >&2; exit 1; }
+if ! grep -q 'sad:managed:start' \"$f\"; then
+  printf '%s\\n' '# sad:managed:start' '    sad-check:' '      run: sad check' '# sad:managed:end' >> \"$f\"
+fi
+echo wired
+";
+
+#[test]
+fn sad_gate_wired_via_hooks_install_and_idempotent() {
+    let dir = tempfile::tempdir().unwrap();
+    let bin = tempfile::tempdir().unwrap();
+    let stub = write_stub_sad(bin.path(), STUB_INSTALL);
+
+    let report = apply_gates_wiring_with_sad(dir.path(), Some(&stub)).unwrap();
+    assert_eq!(report.sad, SadGateOutcome::Wired("wired".into()));
+
+    let out = std::fs::read_to_string(dir.path().join("lefthook.yml")).unwrap();
+    assert!(
+        out.contains("# sad:managed:start"),
+        "sad block wired: {out}"
+    );
+    assert!(out.contains("run: sad check"));
+    // ddl-managed blocks unaffected: separate markers, no clobber.
+    assert!(out.contains(PRE_COMMIT_BLOCK));
+    assert!(out.contains(PRE_PUSH_BLOCK));
+
+    // Second run: idempotent — no duplicated sad block, byte-identical file.
+    let report2 = apply_gates_wiring_with_sad(dir.path(), Some(&stub)).unwrap();
+    let out2 = std::fs::read_to_string(dir.path().join("lefthook.yml")).unwrap();
+    assert_eq!(out, out2, "re-run must not change the file");
+    assert_eq!(out.matches("# sad:managed:start").count(), 1);
+    assert!(
+        matches!(report2.sad, SadGateOutcome::Wired(_)),
+        "stub re-run stays exit 0 (already wired)"
+    );
+}
+
+#[test]
+fn sad_gate_skipped_with_advisory_when_absent() {
+    let dir = tempfile::tempdir().unwrap();
+    let report = apply_gates_wiring_with_sad(dir.path(), None).unwrap();
+    assert_eq!(report.sad, SadGateOutcome::NotInstalled);
+    let out = std::fs::read_to_string(dir.path().join("lefthook.yml")).unwrap();
+    assert!(
+        !out.contains("sad:managed"),
+        "nothing wired without sad: {out}"
+    );
+    assert!(out.contains(PRE_COMMIT_BLOCK), "ddl wiring unaffected");
+}
+
+#[test]
+fn sad_gate_refusal_is_advisory_not_fatal() {
+    // Refuses unconditionally (as real sad does without a git repo or
+    // lefthook config): ddl's own wiring must still land, run stays green.
+    let dir = tempfile::tempdir().unwrap();
+    let bin = tempfile::tempdir().unwrap();
+    let stub = write_stub_sad(
+        bin.path(),
+        "echo 'no lefthook.yml: sad never creates a config' >&2\nexit 1\n",
+    );
+
+    let report = apply_gates_wiring_with_sad(dir.path(), Some(&stub)).unwrap();
+    assert!(matches!(report.sad, SadGateOutcome::Refused(_)));
+
+    let out = std::fs::read_to_string(dir.path().join("lefthook.yml")).unwrap();
+    assert!(out.contains(PRE_COMMIT_BLOCK), "ddl wiring landed: {out}");
+    assert!(!out.contains("sad:managed"));
+}

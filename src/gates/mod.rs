@@ -5,6 +5,8 @@
 //!   spk lint) and pre-push (ah check), inserted *inside* `commands:`,
 //!   idempotent, and self-repairing against the espectacular mangle class
 //!   (markers glued to content, block outside `commands:`, duplicates)
+//! - sad gate: invoke `sad hooks install` when sad is on PATH (sad owns
+//!   its markers and gate command); advisory skip or refusal note otherwise
 //! - .gitignore entries for tool data dirs (.testaruda/, .pretender/)
 //! - beads no-db stamping in .beads/config.yaml
 //! - init ordering: openspec init BEFORE ah init (ah needs openspec/)

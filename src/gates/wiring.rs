@@ -3,11 +3,27 @@
 use super::*;
 use crate::error::{DdlError, Result};
 
+/// Outcome of the sad-gate wiring step (sad-8ov): ddl invokes `sad hooks
+/// install` and reports the result — it never edits sad-owned markers
+/// itself (boundary rule: sad owns the marker and the gate command).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SadGateOutcome {
+    /// `sad hooks install` ran and exited 0; the note is its captured output.
+    Wired(String),
+    /// `sad` is not on PATH — advisory skip, nothing wired.
+    NotInstalled,
+    /// `sad hooks install` refused (no git repo, no lefthook config, unusable
+    /// config); the note carries sad's message. Advisory: wiring stays green.
+    Refused(String),
+}
+
 /// Summary of the on-disk gates wiring for one run.
 #[derive(Debug, Clone, PartialEq, Eq)]
 
 pub struct WiringReport {
     pub lefthook: Change,
+    /// What the sad-gate step did (invoke `sad hooks install` or skip).
+    pub sad: SadGateOutcome,
     pub gitignore_added: Vec<String>,
     pub beads: BeadsChange,
     /// `bd export -o .beads/issues.jsonl` was run (pre-flip data rescue).
@@ -21,6 +37,15 @@ pub struct WiringReport {
 /// lefthook.yml managed blocks, .gitignore tool-data entries, beads no-db.
 /// All steps are idempotent; errors are fatal (the user asked for gates).
 pub fn apply_gates_wiring(repo_root: &std::path::Path) -> Result<WiringReport> {
+    apply_gates_wiring_with_sad(repo_root, find_in_path("sad").as_deref())
+}
+
+/// Same wiring with the `sad` binary injected (test seam): `None` emulates
+/// sad being absent, keeping the sad step deterministic without PATH races.
+pub fn apply_gates_wiring_with_sad(
+    repo_root: &std::path::Path,
+    sad_bin: Option<&std::path::Path>,
+) -> Result<WiringReport> {
     use std::fs;
 
     let read = |p: &std::path::Path| -> Result<Option<String>> {
@@ -41,6 +66,13 @@ pub fn apply_gates_wiring(repo_root: &std::path::Path) -> Result<WiringReport> {
     let (lefthook_out, lefthook) =
         ensure_lefthook_gates(read(&lefthook_path)?.as_deref(), &commands)?;
     write(&lefthook_path, &lefthook_out)?;
+
+    // 1b. sad gate — sad owns its block markers and gate command (boundary
+    // rule), so ddl never renders a sad block itself: it invokes
+    // `sad hooks install` when the binary is present, advisory-skip
+    // otherwise. Best-effort: a refusal (no git repo, no config) must not
+    // abort the wiring the user asked for.
+    let sad = wire_sad_gate(repo_root, sad_bin);
 
     // 2. .gitignore tool data dirs
     let gitignore_path = repo_root.join(".gitignore");
@@ -77,11 +109,43 @@ pub fn apply_gates_wiring(repo_root: &std::path::Path) -> Result<WiringReport> {
 
     Ok(WiringReport {
         lefthook,
+        sad,
         gitignore_added,
         beads,
         beads_exported,
         beads_staged,
     })
+}
+
+/// Wire the sad gate by invoking `sad hooks install` in `repo_root`
+/// (best-effort). sad owns its managed-block markers and the gate command
+/// (boundary rule); ddl only invokes the installer when the binary is
+/// present — the advisory skip keeps repos without sad green.
+fn wire_sad_gate(repo_root: &std::path::Path, sad_bin: Option<&std::path::Path>) -> SadGateOutcome {
+    let Some(sad) = sad_bin else {
+        return SadGateOutcome::NotInstalled;
+    };
+    let output = std::process::Command::new(sad)
+        .args(["hooks", "install"])
+        .current_dir(repo_root)
+        .stdin(std::process::Stdio::null())
+        .output();
+    let note = |o: std::process::Output| {
+        let mut text = String::from_utf8_lossy(&o.stdout).trim().to_string();
+        let err = String::from_utf8_lossy(&o.stderr).trim().to_string();
+        if text.is_empty() {
+            text = err;
+        } else if !err.is_empty() {
+            text.push_str("; ");
+            text.push_str(&err);
+        }
+        text
+    };
+    match output {
+        Ok(o) if o.status.success() => SadGateOutcome::Wired(note(o)),
+        Ok(o) => SadGateOutcome::Refused(note(o)),
+        Err(e) => SadGateOutcome::Refused(e.to_string()),
+    }
 }
 
 /// Run `bd export -o .beads/issues.jsonl` in `repo_root` (best-effort).

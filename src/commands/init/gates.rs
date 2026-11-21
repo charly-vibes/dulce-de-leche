@@ -20,6 +20,17 @@ pub fn print_gates_report(report: &crate::gates::WiringReport) {
         "  ✓ lefthook.yml: {} (pre-commit: ah check, pretender gate, spk lint; pre-push: ah check)",
         label(report.lefthook)
     );
+    match &report.sad {
+        crate::gates::SadGateOutcome::Wired(_) => {
+            println!("  ✓ sad gate: wired (sad hooks install)");
+        }
+        crate::gates::SadGateOutcome::NotInstalled => println!(
+            "  ○ sad gate: sad not on PATH — skipped (install sad, then re-run `ddl init --gates`)"
+        ),
+        crate::gates::SadGateOutcome::Refused(note) => {
+            println!("  ○ sad gate: `sad hooks install` refused — advisory: {note}");
+        }
+    }
     if report.gitignore_added.is_empty() {
         println!("  ✓ .gitignore: tool data dirs already ignored");
     } else {
@@ -46,13 +57,18 @@ pub fn print_gates_report(report: &crate::gates::WiringReport) {
 
 /// JSON-mode one-line gates summary.
 fn gates_json_summary(report: &crate::gates::WiringReport) -> String {
-    use crate::gates::{BeadsChange, Change};
+    use crate::gates::{BeadsChange, Change, SadGateOutcome};
     format!(
-        "gates wired: lefthook {}, gitignore +{} entries, beads {}, export {}, staged +{}",
+        "gates wired: lefthook {}, sad {}, gitignore +{} entries, beads {}, export {}, staged +{}",
         match report.lefthook {
             Change::Created => "created",
             Change::Updated => "updated",
             Change::Unchanged => "unchanged",
+        },
+        match &report.sad {
+            SadGateOutcome::Wired(_) => "wired",
+            SadGateOutcome::NotInstalled => "skipped (sad not installed)",
+            SadGateOutcome::Refused(_) => "refused (advisory)",
         },
         report.gitignore_added.len(),
         match report.beads {
