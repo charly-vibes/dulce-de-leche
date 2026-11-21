@@ -165,11 +165,10 @@ pub fn init_cascade(
     // cascade but the openspec tool-init is not (e.g. `--tools espectacular`),
     // scaffold the directory here — idempotent, never touches existing
     // content; the ordered openspec init still runs when in scope.
-    if candidates.iter().any(|t| {
-        crate::platform::resolve_tool(t)
-            .map(|tool| tool.name == "ah")
-            .unwrap_or(false)
-    }) && let Err(e) = std::fs::create_dir_all("openspec")
+    if candidates
+        .iter()
+        .any(|t| crate::platform::resolve_tool(t).is_ok_and(|tool| tool.name == "ah"))
+        && let Err(e) = std::fs::create_dir_all("openspec")
     {
         eprintln!("  ⚠ could not scaffold openspec/ for ah init: {e}");
     }
