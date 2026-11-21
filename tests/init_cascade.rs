@@ -167,7 +167,6 @@ fn ddl_cmd() -> (Command, tempfile::TempDir) {
     let temp = tempfile::tempdir().unwrap();
     let mut cmd = Command::cargo_bin("ddl").unwrap();
     common::clean_git_env(&mut cmd);
-    common::clean_git_env(&mut cmd);
     // DDL-ab4: sandbox HOME so build_tool_init_command's `~/.ddl/bin` prepend
     // can never shadow the stubs with real fleet binaries on dev machines that
     // ran `ddl init` for real (the DDL-uu8 override wins by design).
