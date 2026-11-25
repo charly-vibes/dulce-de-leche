@@ -24,6 +24,31 @@ bd:
   run: bd hooks run pre-push
 ";
 
+/// DDL-sl9: the pre-commit pretender gate must be armed.
+///
+/// `--diff-only` computes the changed-file set from the *unstaged* working
+/// tree. A pre-commit hook runs after `git add`, so that set is empty by
+/// construction and the gate exits 0 without scanning a single file.
+/// `--staged` means "only check git-staged files", which is exactly the hook
+/// context, and it keeps DDL-3fd's intent (a commit touching untouched
+/// files that carry pre-existing violations is not blocked).
+#[test]
+fn pre_commit_pretender_gate_is_armed_against_staged_files() {
+    let block = render_pre_commit_block(&default_gates());
+    assert!(
+        block.contains("      run: pretender check --staged --mode gate"),
+        "pre-commit gate must scan staged files: {block}"
+    );
+    assert!(
+        !block.contains("--diff-only"),
+        "pre-commit gate must not read the unstaged tree: {block}"
+    );
+    // The default constant and the shipped block must agree, so the
+    // documented default and the rendered gate cannot drift apart.
+    assert!(DEFAULT_PRETENDER_GATE.contains("--staged"));
+    assert!(!DEFAULT_PRETENDER_GATE.contains("--diff-only"));
+}
+
 #[test]
 fn missing_lefthook_yml_is_created_with_both_managed_blocks() {
     let (out, change) = ensure_lefthook_gates(None, &default_gates()).unwrap();
@@ -97,7 +122,7 @@ spec-gates:
     let cmds_pos = out.find("  commands:").unwrap();
     let managed_pos = out.find(MARKER_START_PREFIX).unwrap();
     assert!(cmds_pos < managed_pos);
-    assert!(out.contains("run: pretender check --diff-only --mode gate"));
+    assert!(out.contains("run: pretender check --staged --mode gate"));
     assert!(out.contains("run: spk lint openspec/specs || test $? -eq 2"));
     assert!(out.contains(PRE_COMMIT_BLOCK));
     // exactly one pre-commit marker pair
@@ -446,7 +471,7 @@ fn configured_command_overrides_change_the_rendered_line() {
     assert!(block.contains("      run: ah check --strict"), "{block}");
     assert!(!block.contains("      run: ah check\n"), "{block}");
     // Untouched overrides keep their defaults.
-    assert!(block.contains("      run: pretender check --diff-only --mode gate"));
+    assert!(block.contains("      run: pretender check --staged --mode gate"));
     assert!(block.contains("      run: spk lint openspec/specs || test $? -eq 2"));
 }
 

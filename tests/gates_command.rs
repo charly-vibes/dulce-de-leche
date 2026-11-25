@@ -75,10 +75,14 @@ fn gates_wires_lefthook_gitignore_and_beads_in_fresh_repo() {
     assert!(lefthook.contains("# ddl:managed:start (pre-commit)"));
     assert!(lefthook.contains("# ddl:managed:start (pre-push)"));
     assert!(lefthook.contains("run: ah check"));
-    // DDL-3fd: pre-commit pretender gate must be diff-only (consistent with
-    // pre-push) — repo-wide mode fails commits touching untouched files that
-    // carry pre-existing violations.
-    assert!(lefthook.contains("run: pretender check --diff-only --mode gate"));
+    // DDL-sl9: the pre-commit gate must scan the files the commit contains.
+    // `--diff-only` diffs the *unstaged* tree, which is empty at pre-commit
+    // time (everything is already staged), so it silently checked nothing.
+    // `--staged` has the semantics the hook context needs, and it keeps
+    // DDL-3fd's intent (a commit that does not touch files carrying
+    // pre-existing violations is not blocked).
+    assert!(lefthook.contains("run: pretender check --staged --mode gate"));
+    assert!(!lefthook.contains("pretender check --diff-only --mode gate"));
     // DDL-3fd: spk lint targets the specs corpus and tolerates exit 2
     // (nothing-to-lint) — plain-openspec repos without specodelic frontmatter
     // must not be blocked until they adopt the dual format.
