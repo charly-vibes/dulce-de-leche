@@ -119,3 +119,34 @@
   Refs: RO5U review + ship evidence in .wai/projects/dulce-de-leche/{review,research,designs,plans}; gotchas in superseded snap (pyyaml user-install for python tests; gh pr merge from correct repo cwd; rg -rn is --replace, avoid).
   Debris: .wai/projects/dulce-de-leche/runs/pretender-debt*.log untracked — delete or gitignore sometime.
   Previous entry: 8bc971c51cf7bf34b57a640ada43f92d135b55143cde5cfdf1a3c451377496ef (supersedes 8bc971c51cf7bf34b57a640ada43f92d135b55143cde5cfdf1a3c451377496ef)
+- 2026-11-25T18:00:10Z [id:e155c1586f10baa1ae4eb9b2890c45d8e96c4a706844bb0c37a6c95701241515] (#resume-ddl-uce) Format: 1
+  Timestamp: 2026-11-25T17:59:39Z
+  Repo: charly-vibes/dulce-de-leche (git@cv:charly-vibes/dulce-de-leche.git)
+  Branch: main
+  HEAD: 2b88574671f1eab12bf0b6efef046af77262db67
+  Session: 01a2136b-97c7-763e-bd7c-83ecf0bd9bb0 (pi, MiniMax-M3.1-Flash)
+  Task: resume-ddl-uce - work the remediated ticket set from the 2026-11-25 cleanup round
+  Previous entry: none (an unrelated 2026-11-21 entry with topic resume-ddl-sl9 exists and was left untouched)
+  
+  Objective: land the follow-up work created by the rule-of-5 review of the DDL-sl9 investigation and the cleanup round. The round itself shipped: PR #104 (armed pre-commit gate) and PR #105 (repo hygiene) are merged to main (bdff65a, dc2fee2), main CI green.
+  
+  Phase: commit (complete for the round). The continuation begins at the ticket set.
+  
+  State: working tree clean on main, in sync with origin/main. 16 tickets open, all carrying metadata.files, base_commit (where the work lands in this repo), lane/complexity labels, estimates, acceptance criteria with a runnable verify command, and dependency edges. No in_progress claims exist, so no claim needs releasing or keeping. The review artifacts (RO5U review, 60-day retrospective) are now on main.
+  
+  Next action: claim DDL-uce, then correct the root-cause attribution in the merged PR #105 body (gh pr edit 105 --body-file) and in .whisper/env.md. PR #105 is already merged, so this is a post-merge documentation correction; the ticket's verify command still applies. Then DDL-k5n (a 'just hooks' recipe) and DDL-v4s (self-wiring).
+  
+  Decisions and constraints:
+  - Do not change gate semantics in the documentation tickets: the rendered command stays 'pretender check --staged --mode gate' (anti-goals recorded on DDL-9xf and DDL-3zm).
+  - The gate scans the working-tree copy of staged paths, not the index blob (verified 2026-11-25: an index blob that violates while the worktree is clean passes). Index-accurate scanning is DDL-api's decomposition in the pretender repo.
+  - Repo policy forbids direct pushes to main: all changes go through a feature branch and a PR. Merging into main requires explicit human authorization (given for this round).
+  - No release was cut. v0.10.0 is still the current tag, and the shipped gate default changed.
+  - The inert-hooks incident was a repo-local .git/config value pointing at a deleted OLYMPUS checkout; the global ~/.git-hooks was and is valid. Do not restate it as a global hijack.
+  
+  Validation: just test-full on merged main - 29 test binaries, 0 failures; just fmt-check clean; just lint 0 warnings; main CI green on both merge commits (45663145323, 45662837936).
+  
+  Unresolved findings and blockers:
+  - 'bajan not installed' still fails ddl doctor (environment, not code).
+  - A concurrent session was active in this repo during the session and merged its own work (epic DDL-9kz, fleet sweep DDL-9kz.3 plus 10 per-repo children). Re-read bd state before scheduling; do not assume this snapshot is the whole tracker.
+  - DDL-44k (fleet sweep to adopt the armed gate) is partially superseded by that concurrent sweep - re-verify the per-repo definition of done before running it.
+  - The merge of PR #105 needed a manual conflict resolution on the retrospective artifact (the concurrent session's newer CORR-009-corrected copy was kept).
