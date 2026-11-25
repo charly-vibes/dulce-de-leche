@@ -7,7 +7,8 @@
 # §4 matrix row (ddl): pretender ✅ · wai ✅ · bd ✅ · openspec ✅ · dont ✅
 # testaruda ✅ — the DDL-85p test runner (`just test`); CI must install it
 # or the test recipe cannot run at all (first CI run after 7afce34 caught it).
-# CI installs these pinned (see ci.yml).
+# kaya ✅ — research record gates (hooks + CI, #109); install mirrors bd's
+# pinned-release form. CI installs these pinned (see ci.yml).
 
 [tools]
 testaruda = "0.5.9"        # crates.io — DDL-85p test runner
@@ -17,6 +18,7 @@ dont = "0.2.2"             # crates.io: dont-cli (crate channel; newer release-o
 dulce-de-leche = "0.10.0"  # crates.io (bin: ddl) — self
 openspec = "2.1.0"         # npm: @fission-ai/openspec — artifacts live in openspec/config.yaml (no AGENTS block since 1.0.0); ddl init installs project skills only via `--tools agents --scope project` (2.1+)
 bd = "1.3.4"               # beads — pinned GitHub release download (no versioned homebrew-core formula)
+kaya = "0.4.1"             # kaya-vibes — pinned GitHub release download (crate deliberately not on crates.io) — research record compiler (.kaya ledger, record gates #109, nightly Record workflow)
 bajan = "0.1.0"            # crates.io — spec-driven knowledge-graph pipeline (bajan-23s)
 sad = "0.2.0"              # GitHub release download (sad-vibes repo; not on crates.io) — documentation gate (lefthook sad-check block; local gate only, no §4 matrix row yet — DDL-d0um)
 podras = "0.1.0"           # GitHub release download (podras repo; not on crates.io) — per-repo status brief (committed BRIEF renders + scripts/guards/brief-drift.sh; local gate only, no §4 matrix row yet — DDL-3jes)

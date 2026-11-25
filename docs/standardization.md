@@ -161,23 +161,26 @@ a broken release of any tool must not break CI of the whole fleet.
 Rows are in-org repos only; external consumers (bd, openspec, turu) appear as
 **columns** and are installed only where a repo genuinely consumes them.
 
-| Consumer ↓ runs | pretender (lint/complexity) | wai (workflow) | bd (issues) | openspec (proposals) | dont (grounding) | testaruda (test selection) | ddl (status) | podras (status brief) |
-|---|---|---|---|---|---|---|---|---|
-| wai          | ✅ (already) | — | ✅ | ✅ | ◻ opt | — | ✅ | ◻ opt |
-| testaruda    | ✅ (has pretender.toml) | ✅ | ✅ | ✅ | ◻ opt | — | ✅ | ◻ opt |
-| dont         | ✅ | ✅ (already) | ✅ | ✅ | — | ◻ opt | ✅ | ◻ opt |
-| pretender    | — | ✅ | ✅ | ✅ | ◻ opt | ◻ opt | ✅ | ◻ opt |
-| vampiro      | ✅ | ✅ | ✅ | ✅ (already) | ✅ (already) | ◻ opt | ✅ | ◻ opt |
-| specodelic   | ✅ | ✅ | ✅ | ✅ | ◻ opt | — | ✅ | ◻ opt |
-| incitaciones | ✅ | ✅ | ✅ | — | ◻ opt | — | ✅ | ◻ opt |
-| espectacular (`ah`) | ✅ | ✅ | ✅ | ✅ | ◻ opt | ◻ opt | ✅ | ◻ opt |
-| whisper (`turu`) | ✅ | ✅ | ✅ | — | ◻ opt | — | ✅ | ◻ opt |
-| funkalization | ✅ | ✅ | ✅ | ✅ | ◻ opt | — | ✅ | ◻ opt |
-| ddl          | ✅ | ✅ | ✅ | ✅ | ◻ opt | — | — | ◻ opt |
-| podras       | ◻ opt | ◻ opt | ◻ opt | ◻ opt | ◻ opt | ◻ opt | ◻ opt | — |
+| Consumer ↓ runs | pretender (lint/complexity) | wai (workflow) | bd (issues) | openspec (proposals) | dont (grounding) | testaruda (test selection) | ddl (status) | podras (status brief) | kaya (record) |
+|---|---|---|---|---|---|---|---|---|---|
+| wai          | ✅ (already) | — | ✅ | ✅ | ◻ opt | — | ✅ | ◻ opt | ◻ opt |
+| testaruda    | ✅ (has pretender.toml) | ✅ | ✅ | ✅ | ◻ opt | — | ✅ | ◻ opt | ◻ opt |
+| dont         | ✅ | ✅ (already) | ✅ | ✅ | — | ◻ opt | ✅ | ◻ opt | ◻ opt |
+| pretender    | — | ✅ | ✅ | ✅ | ◻ opt | ◻ opt | ✅ | ◻ opt | ◻ opt |
+| vampiro      | ✅ | ✅ | ✅ | ✅ (already) | ✅ (already) | ◻ opt | ✅ | ◻ opt | ◻ opt |
+| specodelic   | ✅ | ✅ | ✅ | ✅ | ◻ opt | — | ✅ | ◻ opt | ◻ opt |
+| incitaciones | ✅ | ✅ | ✅ | — | ◻ opt | — | ✅ | ◻ opt | ◻ opt |
+| espectacular (`ah`) | ✅ | ✅ | ✅ | ✅ | ◻ opt | ◻ opt | ✅ | ◻ opt | ◻ opt |
+| whisper (`turu`) | ✅ | ✅ | ✅ | — | ◻ opt | — | ✅ | ◻ opt | ◻ opt |
+| funkalization | ✅ | ✅ | ✅ | ✅ | ◻ opt | — | ✅ | ◻ opt | ◻ opt |
+| ddl          | ✅ | ✅ | ✅ | ✅ | ◻ opt | — | — | ◻ opt | ✅ (#109) |
+| podras       | ◻ opt | ◻ opt | ◻ opt | ◻ opt | ◻ opt | ◻ opt | ◻ opt | — | ◻ opt |
 
 `✅` = required in `ci.yml` (unless the section says otherwise); `◻ opt` = opt-in;
 `—` = self/not applicable.
+`kaya` installs are pinned release downloads (`<tool>_<pin>_<target>.tar.gz`,
+mirroring bd — the `kaya-vibes` crate is deliberately not on crates.io); other
+rows adopt it via the fleet pin flip unblocked by ddl's cutover (DDL-csx.7).
 `ddl status` is the runtime check: the registry drift test enforces the
 README block, and each tool's status page links back to ddl.
 `podras` (registered 2026-11-18) is pre-release — no crates.io publish or

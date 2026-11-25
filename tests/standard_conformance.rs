@@ -308,6 +308,8 @@ fn s4_pinned_versions_file_committed() {
 /// §4 dogfooding matrix: required (✅) columns per consumer row.
 /// `◻ opt` and `—` (self) are excluded. `genesis` is absent: lib-crate
 /// carve-out (§4) — its CI installs no in-org family tools.
+/// `kaya` is currently required only in ddl (record gates, #109); the other
+/// rows adopt it via the fleet pin flip that this pin unblocks.
 const DOGFOOD_MATRIX: &[(&str, &[&str])] = &[
     ("wai", &["pretender", "bd", "openspec", "dulce-de-leche"]),
     (
@@ -356,7 +358,7 @@ const DOGFOOD_MATRIX: &[(&str, &[&str])] = &[
     ),
     (
         "dulce-de-leche",
-        &["pretender", "wai", "bd", "openspec", "dont"],
+        &["pretender", "wai", "bd", "openspec", "dont", "kaya"],
     ),
     (
         "funkalization",
@@ -369,8 +371,9 @@ const DOGFOOD_MATRIX: &[(&str, &[&str])] = &[
 /// assertion mechanical:
 /// - crates.io tools: `cargo install <pkg>@<pin>` (package name, not bin name)
 /// - npm tools: `<pkg>@<pin>`
-/// - bd: GitHub release asset `beads_<pin>_<target>.tar.gz` (no versioned
-///   homebrew-core formula — release download is the pinned mechanism)
+/// - bd, kaya: GitHub release asset `<tool>_<pin>_<target>.tar.gz` (no
+///   crates.io channel — release download is the pinned mechanism; kaya's
+///   crate `kaya-vibes` is deliberately not published)
 fn install_marker(tool: &str, pin: &str) -> String {
     match tool {
         "pretender" | "espectacular" | "specodelic" | "dulce-de-leche" => {
@@ -380,6 +383,7 @@ fn install_marker(tool: &str, pin: &str) -> String {
         "dont" => format!("dont-cli@{pin}"),
         "openspec" => format!("@fission-ai/openspec@{pin}"),
         "bd" => format!("beads_{pin}_"),
+        "kaya" => format!("kaya_{pin}_"),
         other => panic!("unknown dogfood tool {other}"),
     }
 }

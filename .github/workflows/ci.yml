@@ -62,7 +62,7 @@ jobs:
           # SEC-06: verify the archive against a pinned SHA-256 digest BEFORE
           # extracting or executing anything from it. Not on crates.io — the
           # fleet-standard GitHub release channel is the pinned mechanism;
-          # the versions.ddl.toml pin lands with the SSOT cutover (DDL-csx.7).
+          # the pin lives in versions.ddl.toml (§4 SSOT, DDL-csx.7).
           echo "f2d286a8e035a3713a1f2fb6965ffe426e26b5e0c1a28e36ee15d273bf69a565  $tmp/kaya.tgz" | sha256sum -c -
           tar -xzf "$tmp/kaya.tgz" -C "$tmp" kaya
           sudo mv "$tmp/kaya" /usr/local/bin/kaya
