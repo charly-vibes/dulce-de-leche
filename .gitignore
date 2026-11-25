@@ -58,3 +58,8 @@ docs/src/ecosystem-map.md
 # ignore it rather than move it)
 .whisper/private/
 .whisper/**/*.usage.jsonl
+
+# kaya research record (DDL-csx.1) — ledger + seeds are tracked;
+# the incremental build cache and the record-capture flock target are local
+.kaya/build-state.json
+.kaya/capture.lock
