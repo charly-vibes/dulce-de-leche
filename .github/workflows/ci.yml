@@ -66,6 +66,8 @@ jobs:
           echo "f2d286a8e035a3713a1f2fb6965ffe426e26b5e0c1a28e36ee15d273bf69a565  $tmp/kaya.tgz" | sha256sum -c -
           tar -xzf "$tmp/kaya.tgz" -C "$tmp" kaya
           sudo mv "$tmp/kaya" /usr/local/bin/kaya
+      - name: Install mdbook (pinned — docs build runs in the record gates, DDL-csx.6)
+        run: cargo install --locked mdbook@0.5.2
       - name: Install bd (beads, pinned §4, checksum-verified)
         run: |
           tmp=$(mktemp -d)
