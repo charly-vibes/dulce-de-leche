@@ -55,11 +55,11 @@ none
 
 ## Recent
 
+- 03c49826788e7459b13e5af535a51677b9342c04 feat(docs): generated publication dossier in book artifact + link check (DDL-csx.6) (#111) (2026-11-25T19:21:52Z)
+- 7b0beb88ab5361db37299e181299ff9ab7336bc3 beads: close DDL-csx.7 — kaya pin landed, fleet flip unblocked (PR #110) (2026-11-25T19:07:42Z)
 - b6af27af13deb6d53dba808ff8af0943037a05d3 feat(ssot): pin kaya 0.4.1 — §4 matrix row, fleet flip unblocked (DDL-csx.7) (#110) (2026-11-25T19:02:29Z)
 - 33a15b598c0bb813527e88f2c9c95ff4dc468bba beads: close DDL-csx.5 — kaya record gates shipped (PR #109) (2026-11-25T18:50:18Z)
 - 1cf8e63402e6c035f70defe5c783f5a84607473d beads: file catherine's frozen-repo gate blocker (DDL-07z2); note the fail-closed-gate pattern (2026-11-25T18:47:56Z)
-- b70657c71d6d7fd1e98cffaab2eb5b0cef1f92d5 feat(gates): kaya record gates — hooks, CI parity, record-lag (DDL-csx.5) (#109) (2026-11-25T18:47:07Z)
-- c3d89e3cfb699c058e86b2dd572682820c24d575 beads: close dogfood trio (DDL-csx.1 kaya #106, DDL-d0um sad #107, DDL-3jes podras #107+#108); file DDL-jjox brief-drift upstream (2026-11-25T18:31:03Z)
 (195 more omitted)
 
 ## Health + confidence
@@ -73,11 +73,11 @@ Health: **amber** — basis: human — owner: charly — reason: human green dow
 | source | status | observed_at | staleness | detail |
 | --- | --- | --- | --- | --- |
 | beads | present | 2026-11-25T18:51:29Z | fresh | 28 malformed line(s) skipped in .beads/issues.jsonl |
-| git | present | 2026-11-25T19:02:29Z | fresh | none |
+| git | present | 2026-11-25T19:21:52Z | fresh | none |
 | openspec | present | 2026-11-17T19:50:38Z | fresh | none |
 | whisper | present | 2026-11-25T18:00:10Z | fresh | none |
 | curation | present | 2026-11-18T21:37:03Z | fresh | none |
 
 Curation: updated_at 2026-11-18T21:37:03Z; confirmed_at 2026-11-18T00:00:00Z.
 
-Freshness: generated_at 2026-11-25T19:07:38Z; per-source observed_at and staleness are listed above.
+Freshness: generated_at 2026-11-25T19:25:39Z; per-source observed_at and staleness are listed above.

@@ -6,7 +6,7 @@
   "data": {
     "schema_version": "brief.v1",
     "as_of": "2026-11-25",
-    "generated_at": "2026-11-25T19:07:38.478527750Z",
+    "generated_at": "2026-11-25T19:25:39.674879704Z",
     "sources": [
       {
         "name": "beads",
@@ -18,7 +18,7 @@
       {
         "name": "git",
         "status": "present",
-        "observed_at": "2026-11-25T19:02:29Z",
+        "observed_at": "2026-11-25T19:21:52Z",
         "staleness": "fresh",
         "detail": null
       },
@@ -326,6 +326,18 @@
     "needs_retriage": [],
     "recent": [
       {
+        "sha": "03c49826788e7459b13e5af535a51677b9342c04",
+        "committed_at": "2026-11-25T19:21:52Z",
+        "subject": "feat(docs): generated publication dossier in book artifact + link check (DDL-csx.6) (#111)",
+        "outcome": null
+      },
+      {
+        "sha": "7b0beb88ab5361db37299e181299ff9ab7336bc3",
+        "committed_at": "2026-11-25T19:07:42Z",
+        "subject": "beads: close DDL-csx.7 — kaya pin landed, fleet flip unblocked (PR #110)",
+        "outcome": null
+      },
+      {
         "sha": "b6af27af13deb6d53dba808ff8af0943037a05d3",
         "committed_at": "2026-11-25T19:02:29Z",
         "subject": "feat(ssot): pin kaya 0.4.1 — §4 matrix row, fleet flip unblocked (DDL-csx.7) (#110)",
@@ -341,18 +353,6 @@
         "sha": "1cf8e63402e6c035f70defe5c783f5a84607473d",
         "committed_at": "2026-11-25T18:47:56Z",
         "subject": "beads: file catherine's frozen-repo gate blocker (DDL-07z2); note the fail-closed-gate pattern",
-        "outcome": null
-      },
-      {
-        "sha": "b70657c71d6d7fd1e98cffaab2eb5b0cef1f92d5",
-        "committed_at": "2026-11-25T18:47:07Z",
-        "subject": "feat(gates): kaya record gates — hooks, CI parity, record-lag (DDL-csx.5) (#109)",
-        "outcome": null
-      },
-      {
-        "sha": "c3d89e3cfb699c058e86b2dd572682820c24d575",
-        "committed_at": "2026-11-25T18:31:03Z",
-        "subject": "beads: close dogfood trio (DDL-csx.1 kaya #106, DDL-d0um sad #107, DDL-3jes podras #107+#108); file DDL-jjox brief-drift upstream",
         "outcome": null
       }
     ],
@@ -381,8 +381,8 @@
         "recent": 195
       }
     },
-    "head_sha": "b6af27af13deb6d53dba808ff8af0943037a05d3",
-    "source_hash": "d1d577f54ad1f067abb07892d451fd19804adcb737863c73895a9180e30e203b",
+    "head_sha": "03c49826788e7459b13e5af535a51677b9342c04",
+    "source_hash": "6f8476a8b08f074cbd51237c5b463adb603d3d214210497e3253a972d4baf24d",
     "warnings": [
       {
         "source": "beads",
