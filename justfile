@@ -149,6 +149,29 @@ docs:
 docs-serve:
     mdbook serve
 
+# === Research Record Commands ===
+
+# Capture the research record (kaya — DDL-csx.1): import wai artifacts and
+# git history into the append-only ledger (.kaya/ledger.jsonl), then rebuild
+# the generated projections (docs/research/, docs/public/). Serialized under
+# .kaya/capture.lock; skipped on a dirty tree — commit or stash first
+# (pattern: charly-vibes/kaya justfile:record-capture @ v0.4.1). Record
+# commits use the "chore(record):" prefix so the next capture skips them.
+record-capture:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p .kaya
+    exec 9>.kaya/capture.lock
+    flock 9
+    if [ -n "$(git status --porcelain)" ]; then
+      echo "record-capture: SKIP - working tree is dirty; commit or stash first"
+      exit 0
+    fi
+    kaya import wai
+    kaya import git --exclude-message-prefix "chore(record):"
+    kaya build
+    kaya publish
+
 # === Design Commands ===
 
 # Show design doc
