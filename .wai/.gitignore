@@ -1,3 +1,7 @@
 # Local-only files
 *.local
 *.cache
+
+# Machine-local pipeline + run state (transient; not decision history)
+pipeline-runs/
+projects/*/runs/
