@@ -33,6 +33,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # full history: the kaya record gates (record-lag) walk commit
+          # ranges from the ledger's capture frontier to HEAD
+          fetch-depth: 0
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
@@ -51,6 +55,17 @@ jobs:
           npm install -g @fission-ai/openspec@2.1.0
       - name: Install pytest (pinned — python adapter of the DDL-85p test runner)
         run: pip install pytest==9.0.3
+      - name: Install kaya (research record compiler, pinned §4 — DDL-csx.5)
+        run: |
+          tmp=$(mktemp -d)
+          curl -fsSL https://github.com/charly-vibes/kaya/releases/download/v0.4.1/kaya_0.4.1_linux_amd64.tar.gz -o "$tmp/kaya.tgz"
+          # SEC-06: verify the archive against a pinned SHA-256 digest BEFORE
+          # extracting or executing anything from it. Not on crates.io — the
+          # fleet-standard GitHub release channel is the pinned mechanism;
+          # the versions.ddl.toml pin lands with the SSOT cutover (DDL-csx.7).
+          echo "f2d286a8e035a3713a1f2fb6965ffe426e26b5e0c1a28e36ee15d273bf69a565  $tmp/kaya.tgz" | sha256sum -c -
+          tar -xzf "$tmp/kaya.tgz" -C "$tmp" kaya
+          sudo mv "$tmp/kaya" /usr/local/bin/kaya
       - name: Install bd (beads, pinned §4, checksum-verified)
         run: |
           tmp=$(mktemp -d)
@@ -73,11 +88,19 @@ jobs:
           testaruda --version >/dev/null
           openspec validate --all >/dev/null
           pretender check --mode guidance >/dev/null
+          kaya --version >/dev/null
       # DDL-43g: smoke our own live Pages URL. A 404'd book must fail THIS
       # repo's CI immediately, not wait for the next hub conformance run
       # (the turu failure mode). Mirrored in every Pages-deploying sibling.
       - name: Smoke live Pages URL
         run: curl -fsS --max-time 10 --retry 2 https://charly-vibes.github.io/dulce-de-leche/ >/dev/null
+      # kaya record gates (DDL-csx.5): warn on pull requests, fail on main —
+      # the same `just record-check` developers run locally.
+      - name: Run record gates
+        run: |
+          mode=warn
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then mode=fail; fi
+          just record-check "$mode"
       # Run the exact same command as local development
       - name: Run CI pipeline
         run: just ci

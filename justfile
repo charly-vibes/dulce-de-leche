@@ -172,6 +172,22 @@ record-capture:
     kaya build
     kaya publish
 
+# Verify the committed record against its projections without writing.
+record-verify:
+    kaya check
+
+# Fail when the record's capture frontier is more than `bound` commits behind
+# on record-relevant paths (nightly-only capture makes a day of lag normal;
+# the bound also stays under kaya import git's 100-commit window so a stale
+# record can never silently drop history).
+record-lag mode="fail" bound="60":
+    python3 scripts/record-lag.py --mode {{mode}} --bound {{bound}}
+
+# Full record gate: verify + lag (mode warn|fail). Link/claims checks land
+# with the publication child (DDL-csx.6).
+record-check mode="warn": record-verify
+    just record-lag {{mode}}
+
 # === Design Commands ===
 
 # Show design doc

@@ -1,0 +1,84 @@
+# Record workflow — capture a scheduled snapshot on main (kaya, DDL-csx.5)
+#
+# Runs nightly (and on demand) on main only: observe the wai artifact tree and
+# recent commits, rebuild the research and publication products, and commit
+# the snapshot deliberately. Capture never runs in a pre-commit hook or on a
+# pull request; kaya evaluates no thresholds here.
+#
+# Deliberately NOT triggered on push: a capture derived from push N collides
+# with local commits landing while the run executes (the same race forced two
+# rebases in the kaya repo during its v0.3.0). The nightly snapshot already
+# covers pushed state; dispatch runs the capture whenever an immediate one is
+# wanted. The push uses git pull --rebase + a bounded retry loop — never a
+# bare cron push.
+
+name: Record
+
+on:
+  schedule:
+    - cron: "23 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: record
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    if: github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]'
+    name: Capture record snapshot
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # full history: kaya import git reads the recent commit window
+          fetch-depth: 0
+
+      - name: Install kaya (pinned §4 — DDL-csx.5)
+        run: |
+          tmp=$(mktemp -d)
+          curl -fsSL https://github.com/charly-vibes/kaya/releases/download/v0.4.1/kaya_0.4.1_linux_amd64.tar.gz -o "$tmp/kaya.tgz"
+          echo "f2d286a8e035a3713a1f2fb6965ffe426e26b5e0c1a28e36ee15d273bf69a565  $tmp/kaya.tgz" | sha256sum -c -
+          tar -xzf "$tmp/kaya.tgz" -C "$tmp" kaya
+          sudo mv "$tmp/kaya" /usr/local/bin/kaya
+
+      - name: Install just
+        uses: extractions/setup-just@dd310ad5a97d8e7b41793f8ef055398d51ad4de6 # v2.0.0
+
+      - name: Configure git
+        run: |
+          git config user.name "ddl record"
+          git config user.email "record@dulce-de-leche.invalid"
+
+      - name: Capture and compile
+        run: just record-capture
+
+      - name: Commit the snapshot
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "record is current; nothing to commit"
+            exit 0
+          fi
+          git commit -m "chore(record): capture scheduled snapshot"
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase --autostash origin main && git push origin main; then
+              echo "pushed on attempt $attempt"
+              exit 0
+            fi
+            if [ -d .git/rebase-merge ]; then
+              echo "snapshot push abandoned: rebase conflict; dispatch a fresh run after the conflicting push lands" >&2
+              exit 1
+            fi
+            if [ "$attempt" -lt 5 ]; then
+              sleep $((attempt * 5))
+            fi
+          done
+          echo "snapshot push failed after 5 attempts" >&2
+          exit 1
