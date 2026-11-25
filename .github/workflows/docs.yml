@@ -39,7 +39,8 @@ jobs:
       - name: Install mdBook
         uses: peaceiris/actions-mdbook@v2
         with:
-          mdbook-version: 'latest'
+          # pinned §4 (never latest); matches ci.yml's mdbook pin
+          mdbook-version: '0.5.2'
 
       - name: Copy OpenSpec specs into docs source
         run: |
@@ -82,6 +83,9 @@ jobs:
 
       - name: Build docs
         run: mdbook build
+
+      - name: Render publication and research trees into the artifact (DDL-csx.6)
+        run: python3 scripts/build-publications.py
 
       - name: Copy LLM summaries to site root
         run: cp llms.txt llm.txt book/

@@ -17,6 +17,7 @@ pretender = "0.11.1"       # crates.io — complexity gate (gate mode + changed-
 dont = "0.2.2"             # crates.io: dont-cli (crate channel; newer release-only builds exist)
 dulce-de-leche = "0.10.0"  # crates.io (bin: ddl) — self
 openspec = "2.1.0"         # npm: @fission-ai/openspec — artifacts live in openspec/config.yaml (no AGENTS block since 1.0.0); ddl init installs project skills only via `--tools agents --scope project` (2.1+)
+mdbook = "0.5.2"           # crates.io — docs build (ci.yml record gates + docs.yml Pages deploy; DDL-csx.6)
 bd = "1.3.4"               # beads — pinned GitHub release download (no versioned homebrew-core formula)
 kaya = "0.4.1"             # kaya-vibes — pinned GitHub release download (crate deliberately not on crates.io) — research record compiler (.kaya ledger, record gates #109, nightly Record workflow)
 bajan = "0.1.0"            # crates.io — spec-driven knowledge-graph pipeline (bajan-23s)

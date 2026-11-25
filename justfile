@@ -141,9 +141,17 @@ setup:
 
 # === Docs Commands ===
 
-# Build docs locally (requires mdbook)
+# Build docs locally (requires mdbook): the book, plus the kaya publication
+# and research trees rendered into the artifact (book/public, book/research —
+# DDL-csx.6; vendored renderer, no per-repo fork).
 docs:
     mdbook build
+    python3 scripts/build-publications.py
+
+# Fail when the built book contains a relative link the artifact cannot
+# resolve (requires a prior `just docs`).
+links: docs
+    python3 scripts/check-links.py
 
 # Live preview docs at localhost:3000 (requires mdbook)
 docs-serve:
@@ -183,9 +191,11 @@ record-verify:
 record-lag mode="fail" bound="60":
     python3 scripts/record-lag.py --mode {{mode}} --bound {{bound}}
 
-# Full record gate: verify + lag (mode warn|fail). Link/claims checks land
-# with the publication child (DDL-csx.6).
-record-check mode="warn": record-verify
+# Full record gate: verify + links + lag (mode warn|fail). Upstream's
+# release-claims check stays kaya-repo-only: ddl's release claims are already
+# generated from Cargo.toml in docs.yml (§6, DDL-nsl), so there are no
+# hand-typed version claims to contradict.
+record-check mode="warn": record-verify links
     just record-lag {{mode}}
 
 # === Design Commands ===
