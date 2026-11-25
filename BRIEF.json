@@ -6,7 +6,7 @@
   "data": {
     "schema_version": "brief.v1",
     "as_of": "2026-11-25",
-    "generated_at": "2026-11-25T18:47:56.355458548Z",
+    "generated_at": "2026-11-25T18:50:07.591450858Z",
     "sources": [
       {
         "name": "beads",
@@ -18,7 +18,7 @@
       {
         "name": "git",
         "status": "present",
-        "observed_at": "2026-11-25T18:47:07Z",
+        "observed_at": "2026-11-25T18:47:56Z",
         "staleness": "fresh",
         "detail": null
       },
@@ -326,6 +326,12 @@
     "needs_retriage": [],
     "recent": [
       {
+        "sha": "1cf8e63402e6c035f70defe5c783f5a84607473d",
+        "committed_at": "2026-11-25T18:47:56Z",
+        "subject": "beads: file catherine's frozen-repo gate blocker (DDL-07z2); note the fail-closed-gate pattern",
+        "outcome": null
+      },
+      {
         "sha": "b70657c71d6d7fd1e98cffaab2eb5b0cef1f92d5",
         "committed_at": "2026-11-25T18:47:07Z",
         "subject": "feat(gates): kaya record gates — hooks, CI parity, record-lag (DDL-csx.5) (#109)",
@@ -347,12 +353,6 @@
         "sha": "ed31895e928109fa0f548cf527158095f529b28a",
         "committed_at": "2026-11-25T18:26:47Z",
         "subject": "fix(guards): normalize HEAD-dependent sections out of brief-drift",
-        "outcome": null
-      },
-      {
-        "sha": "e72aa86bfb252da66ed20ccecf523f8595b001c1",
-        "committed_at": "2026-11-25T18:24:04Z",
-        "subject": "Merge pull request #107 from charly-vibes/chore/dogfood-sad-podras",
         "outcome": null
       }
     ],
@@ -381,8 +381,8 @@
         "recent": 195
       }
     },
-    "head_sha": "b70657c71d6d7fd1e98cffaab2eb5b0cef1f92d5",
-    "source_hash": "968353ffeafb490ac29e30eaae188f28536cdc1ce0b3c4f26f9044a230500bd7",
+    "head_sha": "1cf8e63402e6c035f70defe5c783f5a84607473d",
+    "source_hash": "9ac492df1723b38d3633e71c35056558fa2b53c7fea840d5ef3ef548f209871e",
     "warnings": [
       {
         "source": "beads",
