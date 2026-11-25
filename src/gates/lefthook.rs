@@ -23,11 +23,15 @@ pub const GITIGNORE_TOOL_DIR_ENTRIES: &[&str] = &[".testaruda/", ".pretender/"];
 /// This is the default rendering — [`render_pre_commit_block`] reproduces it
 /// from [`GateCommands::default`] and overlays `.ddl/config.toml` values.
 /// NOTE: no leading `\`-continuation — Rust strips next-line indentation there.
+///
+/// The `ddl-pretender-gate` entry must scan the staged files (`--staged`); the
+/// older `--diff-only` read the unstaged tree, which is empty once a commit
+/// is staged, so the gate silently checked nothing (DDL-sl9).
 pub const PRE_COMMIT_BLOCK: &str = "    # ddl:managed:start (pre-commit)
     ddl-ah-check:
       run: ah check
     ddl-pretender-gate:
-      run: pretender check --diff-only --mode gate
+      run: pretender check --staged --mode gate
     ddl-spk-lint:
       run: spk lint openspec/specs || test $? -eq 2
     # ddl:managed:end (pre-commit)";
@@ -35,7 +39,12 @@ pub const PRE_COMMIT_BLOCK: &str = "    # ddl:managed:start (pre-commit)
 /// Shipped default for the `ddl-ah-check` hook entry.
 pub const DEFAULT_AH_CHECK: &str = "ah check";
 /// Shipped default for the `ddl-pretender-gate` hook entry.
-pub const DEFAULT_PRETENDER_GATE: &str = "pretender check --diff-only --mode gate";
+///
+/// `--staged` (not `--diff-only`): a pre-commit hook runs after `git add`, so
+/// the unstaged diff is empty by construction and `--diff-only` would scan
+/// nothing and exit 0 — a silently disarmed gate (DDL-sl9). `--staged` checks
+/// exactly the files the commit contains.
+pub const DEFAULT_PRETENDER_GATE: &str = "pretender check --staged --mode gate";
 /// Shipped default for the `ddl-spk-lint` hook entry.
 pub const DEFAULT_SPK_LINT: &str = "spk lint openspec/specs || test $? -eq 2";
 

@@ -1,0 +1,5 @@
+---
+tags: [pipeline-run:tdd-ro5-2026-11-25-ddl-sl9, pipeline-step:red]
+---
+
+RED: command=cargo test --lib gates && cargo test --test gates_command; expected failure=managed pre-commit block renders 'pretender check --diff-only --mode gate' instead of '--staged'. Observed: cargo test --lib gates -> FAILED 26 passed / 3 failed (pre_commit_pretender_gate_is_armed_against_staged_files, configured_command_overrides_change_the_rendered_line, mangled_block_outside_commands_is_repaired); cargo test --test gates_command -> FAILED 2 passed / 1 failed (gates_wires_lefthook_gitignore_and_beads_in_fresh_repo). All failures are the missing behavior, not setup breakage. PLAN CORRECTION: the plan claimed the pre-push gate keeps --diff-only — false: PRE_PUSH_BLOCK renders only the ah_check entry, there is no pretender gate on pre-push, so the change is confined to the pre-commit default. Empirical probe (throwaway repo, 62-line staged function): 'pretender check --staged --mode gate' -> exit 1 naming ./probe.rs; '--diff-only' -> no staged file inspected.

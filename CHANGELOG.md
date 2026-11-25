@@ -18,6 +18,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **the managed pre-commit pretender gate is armed** — the ddl-managed
+  `ddl-pretender-gate` hook now runs `pretender check --staged --mode gate`
+  instead of `--diff-only`. `--diff-only` computes the changed-file set from
+  the *unstaged* tree, which is empty by construction at pre-commit time
+  (everything is already staged), so the gate exited 0 without scanning a
+  single file in every ddl-wired repo. `--staged` checks exactly the files
+  the commit contains and keeps the DDL-3fd intent (a commit that does not
+  touch files carrying pre-existing violations is not blocked). Repos can
+  override the command via `.ddl/config.toml` (`gates.pretender_gate`)
+  (`DDL-sl9`)
 - **`ddl init` installs openspec project skills** — on openspec 2.1+ it runs
   `openspec init --tools agents --scope project`; older (2.0 has no `--scope`)
   or unparseable versions keep the artifact-only `init --tools none` with a

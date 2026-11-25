@@ -1,0 +1,5 @@
+---
+tags: [pipeline-run:tdd-ro5-2026-11-25-ddl-sl9, pipeline-step:refactor]
+---
+
+REFACTOR: no behavior change — clarity only. (1) PRE_COMMIT_BLOCK doc comment now states the contract that the ddl-pretender-gate entry scans staged files and why (DDL-sl9), since this constant is what gets pasted into consumer repos. (2) DEFAULT_PRETENDER_GATE carries the same one-paragraph rationale at the definition site. (3) CHANGELOG Unreleased/Changed gained the user-visible entry, naming the config override path (.ddl/config.toml gates.pretender_gate) and the ticket. Drift between the literal block and the renderer is already guarded by src/gates/tests.rs:374 (render_pre_commit_block(default) == PRE_COMMIT_BLOCK), so no structural refactor was warranted — the duplication is intentional (a const usable in const contexts plus a drift test). Verified after refactor: just fmt-check (clean), just lint (0 warnings), cargo test --lib gates -> 29 passed / 0 failed, cargo test --test gates_command -> 3 passed / 0 failed.
