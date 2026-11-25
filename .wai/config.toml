@@ -4,6 +4,6 @@ plugins = []
 name = "dulce-de-leche"
 version = "2026.11.17"
 description = ""
-tool_commit = "5a9a135"
+tool_commit = "f1a3181"
 
 [llm]

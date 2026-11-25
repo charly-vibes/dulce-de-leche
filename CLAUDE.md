@@ -27,6 +27,15 @@ When context reaches ~40%: stop and tell the user — responses degrade past
 this point. Recommend `wai close` then `/clear` to resume cleanly.
 Do NOT skip `wai close` — it enables resume detection.
 
+## Available Pipelines
+
+| Pipeline | When to Use | Start |
+|----------|-------------|-------|
+| tdd-ro5 | Autonomous feature, bugfix, or refactor work where tests and review must gate progress | `wai pipeline start tdd-ro5 --topic=<topic>` |
+
+> Pipeline steps may have gates that enforce artifact creation, review coverage, and oracle checks before advancement. Run `wai pipeline gates <name>` for details.
+> **Before any edit**: run `wai pipeline current --json`; if a run is active for this project, resume it (`wai pipeline next`) rather than starting ad-hoc work.
+
 ## Autonomous Work Policy
 
 Proceed without routine confirmation when the next step is clear.
@@ -49,7 +58,7 @@ Read it at the start of your first session or when you need detailed guidance.
 Keep this managed block so `wai init` can refresh the instructions.
 
 
-<!-- provenance: generator=wai version=0.13.0 source=WAI sha=c2520444 -->
+<!-- provenance: generator=wai version=0.13.0 source=WAI sha=a0fa2c64 -->
 <!-- WAI:END -->
 
 # dulce-de-leche — Agent Context
