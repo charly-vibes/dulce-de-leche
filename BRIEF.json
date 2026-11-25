@@ -6,19 +6,19 @@
   "data": {
     "schema_version": "brief.v1",
     "as_of": "2026-11-25",
-    "generated_at": "2026-11-25T18:45:55.335285991Z",
+    "generated_at": "2026-11-25T18:47:56.355458548Z",
     "sources": [
       {
         "name": "beads",
         "status": "present",
-        "observed_at": "2026-11-25T18:45:45Z",
+        "observed_at": "2026-11-25T18:47:45Z",
         "staleness": "fresh",
         "detail": "28 malformed line(s) skipped in .beads/issues.jsonl"
       },
       {
         "name": "git",
         "status": "present",
-        "observed_at": "2026-11-25T18:43:30Z",
+        "observed_at": "2026-11-25T18:47:07Z",
         "staleness": "fresh",
         "detail": null
       },
@@ -68,6 +68,16 @@
         "title": "make the existing ddl.repo.beads-export check enforceable + repo-local .gitignore negation for .beads/",
         "status": "open",
         "priority": 0,
+        "blocked_by": [],
+        "age_days": 0,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "DDL-07z2",
+        "title": "[bug] at/catherine: pre-commit 'pretender-strict' gate is RED on pre-existing complexity debt -> the repo is FROZEN (no commit can land, incl. the beads export)",
+        "status": "open",
+        "priority": 1,
         "blocked_by": [],
         "age_days": 0,
         "reason": null,
@@ -196,18 +206,6 @@
         "age_days": 35,
         "reason": null,
         "confirmed_at": null
-      },
-      {
-        "id": "DDL-9xf",
-        "title": "docs(gates): correct the coverage wording for the armed pre-commit gate (source doc + CHANGELOG)",
-        "status": "open",
-        "priority": 1,
-        "blocked_by": [
-          "DDL-3zm"
-        ],
-        "age_days": 0,
-        "reason": null,
-        "confirmed_at": null
       }
     ],
     "blocked": [
@@ -284,6 +282,16 @@
         "confirmed_at": null
       },
       {
+        "id": "DDL-07z2",
+        "title": "[bug] at/catherine: pre-commit 'pretender-strict' gate is RED on pre-existing complexity debt -> the repo is FROZEN (no commit can land, incl. the beads export)",
+        "status": "open",
+        "priority": 1,
+        "blocked_by": [],
+        "age_days": 0,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
         "id": "DDL-3et",
         "title": "Research: Hegel property-based testing plan (antithesis-research)",
         "status": "open",
@@ -312,31 +320,15 @@
         "age_days": 0,
         "reason": null,
         "confirmed_at": null
-      },
-      {
-        "id": "DDL-9gso",
-        "title": "[bug] gently: pre-push cargo-gate is RED on clippy deny-warnings debt already on main - it blocks EVERY push (incl. the beads export)",
-        "status": "open",
-        "priority": 1,
-        "blocked_by": [],
-        "age_days": 0,
-        "reason": null,
-        "confirmed_at": null
       }
     ],
     "parked": [],
     "needs_retriage": [],
     "recent": [
       {
-        "sha": "3cc1cc54f541b85579e44cc50fd9f6d79176d8b1",
-        "committed_at": "2026-11-25T18:43:30Z",
-        "subject": "beads: file gently's clippy gate debt (push blocker found during 'push all'); regenerate brief",
-        "outcome": null
-      },
-      {
-        "sha": "10b0f3cf2fd378b766a042c7a056069bbea58e49",
-        "committed_at": "2026-11-25T18:38:44Z",
-        "subject": "feat(gates): kaya record gates — hooks, CI parity, record-lag (DDL-csx.5)",
+        "sha": "b70657c71d6d7fd1e98cffaab2eb5b0cef1f92d5",
+        "committed_at": "2026-11-25T18:47:07Z",
+        "subject": "feat(gates): kaya record gates — hooks, CI parity, record-lag (DDL-csx.5) (#109)",
         "outcome": null
       },
       {
@@ -356,6 +348,12 @@
         "committed_at": "2026-11-25T18:26:47Z",
         "subject": "fix(guards): normalize HEAD-dependent sections out of brief-drift",
         "outcome": null
+      },
+      {
+        "sha": "e72aa86bfb252da66ed20ccecf523f8595b001c1",
+        "committed_at": "2026-11-25T18:24:04Z",
+        "subject": "Merge pull request #107 from charly-vibes/chore/dogfood-sad-podras",
+        "outcome": null
       }
     ],
     "health": {
@@ -364,7 +362,7 @@
       "signals": [
         {
           "kind": "orphan_commits",
-          "reason": "54 commits in the 14-day window link no tracker id or open work-item path: 0b4d771446a01111d594adddb4d91e6641ae8661 (chore(deps): clear the RustSec advisories blocking the 0.10.0 release); 0b7e1b97f72d1a2229a56441c190247ddd9002d1 (docs: apply issue-review fixes to README/release tickets); 0ce2eb448cc818461ac164dfc57eb5908b518ff8 (wai: record the 60-day fleet session retrospective that scoped this cleanup); 10c6941297b315edef10db8554a0e09e05d9e46a (chore: dogfood podras — managed block, curation scaffold, committed brief); 24fd2d8f2d8a7b427a951eed5098310d0a499a85 (whisper: snap — 9x4.11.1 quick stash (verify_release_bytes policy, CI flake gotchas)); 27f990fb4167ab6643891feb611a99d10138fc8d (Merge pull request #103 from charly-vibes/feat/ddl-cxh-ah-init-openspec-scaffold); 29136c8468d54611b172c37155a4658fecd1c395 (fix(gates): compare managed spans with the configured commands; per-repo overrides); 2aef635a5c18b0d3153eea707e126e96f847dcf8 (test: keep the doctor-clean contract hermetic against third-party block writers); 2b88574671f1eab12bf0b6efef046af77262db67 (beads: file gate-blocked repos (bajan, gently) found during the fleet sweep); 3ba0cc55deca4c12a49f65b9378031567bce17ef (docs: mark podras pre-release on the install surfaces (troubleshooting, ecosystem map)); 3bd46e60fc978431edd20b2467032d2e106e78e7 (whisper: record the inert-hooks fact (repo-scope note)); 3cc1cc54f541b85579e44cc50fd9f6d79176d8b1 (beads: file gently's clippy gate debt (push blocker found during 'push all'); regenerate brief); 44a6b32c95911ac5c76a60be961689927125a016 (wai: adopt the corrected 60-day retrospective + sync the beads export); 482b72cd9f0155a1677784cc58589bb6829c3503 (wai: session-end handoff and resume marker); 4999cac5af7d77d46041f9d5b9fcb0fb25131e0a (docs: file README front-door conformance check ticket); 521e9e7cc0239e5f5736d2facd0cd0c3c99dd52d (Merge pull request #108 from charly-vibes/fix/brief-drift-head-churn); 547a90ce2996204429884a5c30633e921a8fd392 (docs: apply issue-review fixes to README/release tickets); 645740a4c0fa720521d3cb4b3f9f6bb2261e3949 (chore(wai): stop tracking the transient pipeline .last-run state file); 672f24c171a92fe3c9f3c52ada5c51bcb9964a88 (Merge pull request #102 from charly-vibes/registry-kaya); 69eeddd9a72e61f781f2bc5b38343bebf2e20e7a (merge main into chore/cleanup-round-1 (merge PR #104 into the cleanup branch)); 6db838deb4b0c510b50248362e3b1973d5d34a8a (beads: file the stale gate block defect found in the genesis repair); 6de0d41f83408502d587143dee6997c8272e8cde (docs(beads): align AGENTS.md beads block with no-db: true architecture); 727a2d022ab7f2e8f43ed2ea97b0c4c981c8d473 (chore(wai): refresh managed blocks and tool pin); 756544e4784ead62c11835c36b044c25ad707d1d (beads: title fix - retro corrections cover CORR-001..009); 840916d51f23191d0dfab6195955888762bc64c4 (beads: sync the remediated tracker state (same export as the cleanup branch)); 8f01b69a3bc95a738277c988a1ec3ed12a02f608 (docs: correct release conformance status in §1); 96fb05ee7c816d4924e1311eed838e2ed4e3c0c2 (chore: dogfood podras — init curation + committed brief artifacts); 9918a0a9136024c8b5b41b0d4e1e848f69ab62f0 (docs: require prebuilt GitHub Release binaries; track ddl README conformance); 99aac95ad62bf7b1330d6198f75280db3100b5e1 (chore(wai): stop tracking the transient pipeline .last-run state file); 99fa87dff42fdb8d2fad5374f6e2b7b7691bd26b (feat(registry): add kaya to the managed-tools registry); af5ed57ec3e0427475193d95cebfddce5183ed88 (beads: file the ddl init collateral defect); b09c38ea0db451c5676b8e33a99ff6036bc6d526 (dogfood: run podras on ddl itself); b3998675be68d7aac760ba64d24f4e5841dab80b (chore(whisper): stop tracking notes.usage.jsonl (already gitignored)); b5a9ee5bea5cf83baa6e4223b1ec893f636cd2c4 (docs: link the ecosystem standard from the README); b974383c9d1aa4f13f58c8717368138be37f2598 (beads: block the sweep on the wai release); bd018cda9727b5366c095a9b32cf67d90fc0b687 (feat(registry): register sad as a managed tool (sad-8b7)); bdff65a7635b4e88566df40a0353e5d4a7dd85b1 (Merge pull request #104 from charly-vibes/fix/ddl-sl9-staged-gate); bf7983bc3981ba1ba2c5ab50240dd42dedb32c22 (beads: record the sweep sequencing decision); c19c6793984672b6ce229356ccdd8758f10d7869 (chore(openspec): adopt the 2.1 artifact layout); c5654ae826f97b8eef7fc99026c16823797bc086 (chore(openspec): migrate project.md into config.yaml); c7dcd78a2d159f85a53279a62e1139d1346c6fc9 (release: 0.10.0 — provenance verification that accepts fleet releases); d336a6cfe2da67ec893fed51d0a1c98790095808 (beads: remediate the review ticket set per the tracer-bullet issue review); d5c5c21e98e0b73ccce89b823cb6a9750253c560 (feat(gates): wire sad gate via `sad hooks install` when on PATH (sad-8ov)); d687db88dd018e43aea50b62358b76c2fd2619ec (test: drop duplicated clean_git_env call in ddl_cmd (review Low, idempotent)); dc2fee23199ac84bb04ebe69bc9eeb695559ac77 (Merge pull request #105 from charly-vibes/chore/cleanup-round-1); dda55615012f9088afe407de4f197c3d23e3c82c (Merge pull request #106 from charly-vibes/chore/kaya-record); e70c67439dc9178bdf189e1a4766abf0025e5c8e (docs: add podras as a §4 dogfood-matrix row (all opt-in pre-release)); e72aa86bfb252da66ed20ccecf523f8595b001c1 (Merge pull request #107 from charly-vibes/chore/dogfood-sad-podras); e954cbee52cc8d3e79b502094252808ade5c4052 (docs: add README front-door contract to the ecosystem standard); ed31895e928109fa0f548cf527158095f529b28a (fix(guards): normalize HEAD-dependent sections out of brief-drift); f3c66c0e74a7feb9187fcc397eddc3887473314f (feat: register podras (16th managed tool, extension/experimental)); f4e2b7da20d5aedb4acc4db26ce658219dc3920d (beads: record the openspec instrument check decision and follow-ups); f52d1ed9991aa1b71539abf69d80574144678da3 (fix(registry): disable cargo fallback for sad — crates.io name is squatted); fee5f90c2ada4829c341172b68c11b2dcf9c57d7 (chore(deps): drop unused indicatif and shell-words dependencies)"
+          "reason": "53 commits in the 14-day window link no tracker id or open work-item path: 0b4d771446a01111d594adddb4d91e6641ae8661 (chore(deps): clear the RustSec advisories blocking the 0.10.0 release); 0b7e1b97f72d1a2229a56441c190247ddd9002d1 (docs: apply issue-review fixes to README/release tickets); 0ce2eb448cc818461ac164dfc57eb5908b518ff8 (wai: record the 60-day fleet session retrospective that scoped this cleanup); 10c6941297b315edef10db8554a0e09e05d9e46a (chore: dogfood podras — managed block, curation scaffold, committed brief); 24fd2d8f2d8a7b427a951eed5098310d0a499a85 (whisper: snap — 9x4.11.1 quick stash (verify_release_bytes policy, CI flake gotchas)); 27f990fb4167ab6643891feb611a99d10138fc8d (Merge pull request #103 from charly-vibes/feat/ddl-cxh-ah-init-openspec-scaffold); 29136c8468d54611b172c37155a4658fecd1c395 (fix(gates): compare managed spans with the configured commands; per-repo overrides); 2aef635a5c18b0d3153eea707e126e96f847dcf8 (test: keep the doctor-clean contract hermetic against third-party block writers); 2b88574671f1eab12bf0b6efef046af77262db67 (beads: file gate-blocked repos (bajan, gently) found during the fleet sweep); 3ba0cc55deca4c12a49f65b9378031567bce17ef (docs: mark podras pre-release on the install surfaces (troubleshooting, ecosystem map)); 3bd46e60fc978431edd20b2467032d2e106e78e7 (whisper: record the inert-hooks fact (repo-scope note)); 44a6b32c95911ac5c76a60be961689927125a016 (wai: adopt the corrected 60-day retrospective + sync the beads export); 482b72cd9f0155a1677784cc58589bb6829c3503 (wai: session-end handoff and resume marker); 4999cac5af7d77d46041f9d5b9fcb0fb25131e0a (docs: file README front-door conformance check ticket); 521e9e7cc0239e5f5736d2facd0cd0c3c99dd52d (Merge pull request #108 from charly-vibes/fix/brief-drift-head-churn); 547a90ce2996204429884a5c30633e921a8fd392 (docs: apply issue-review fixes to README/release tickets); 645740a4c0fa720521d3cb4b3f9f6bb2261e3949 (chore(wai): stop tracking the transient pipeline .last-run state file); 672f24c171a92fe3c9f3c52ada5c51bcb9964a88 (Merge pull request #102 from charly-vibes/registry-kaya); 69eeddd9a72e61f781f2bc5b38343bebf2e20e7a (merge main into chore/cleanup-round-1 (merge PR #104 into the cleanup branch)); 6db838deb4b0c510b50248362e3b1973d5d34a8a (beads: file the stale gate block defect found in the genesis repair); 6de0d41f83408502d587143dee6997c8272e8cde (docs(beads): align AGENTS.md beads block with no-db: true architecture); 727a2d022ab7f2e8f43ed2ea97b0c4c981c8d473 (chore(wai): refresh managed blocks and tool pin); 756544e4784ead62c11835c36b044c25ad707d1d (beads: title fix - retro corrections cover CORR-001..009); 840916d51f23191d0dfab6195955888762bc64c4 (beads: sync the remediated tracker state (same export as the cleanup branch)); 8f01b69a3bc95a738277c988a1ec3ed12a02f608 (docs: correct release conformance status in §1); 96fb05ee7c816d4924e1311eed838e2ed4e3c0c2 (chore: dogfood podras — init curation + committed brief artifacts); 9918a0a9136024c8b5b41b0d4e1e848f69ab62f0 (docs: require prebuilt GitHub Release binaries; track ddl README conformance); 99aac95ad62bf7b1330d6198f75280db3100b5e1 (chore(wai): stop tracking the transient pipeline .last-run state file); 99fa87dff42fdb8d2fad5374f6e2b7b7691bd26b (feat(registry): add kaya to the managed-tools registry); af5ed57ec3e0427475193d95cebfddce5183ed88 (beads: file the ddl init collateral defect); b09c38ea0db451c5676b8e33a99ff6036bc6d526 (dogfood: run podras on ddl itself); b3998675be68d7aac760ba64d24f4e5841dab80b (chore(whisper): stop tracking notes.usage.jsonl (already gitignored)); b5a9ee5bea5cf83baa6e4223b1ec893f636cd2c4 (docs: link the ecosystem standard from the README); b974383c9d1aa4f13f58c8717368138be37f2598 (beads: block the sweep on the wai release); bd018cda9727b5366c095a9b32cf67d90fc0b687 (feat(registry): register sad as a managed tool (sad-8b7)); bdff65a7635b4e88566df40a0353e5d4a7dd85b1 (Merge pull request #104 from charly-vibes/fix/ddl-sl9-staged-gate); bf7983bc3981ba1ba2c5ab50240dd42dedb32c22 (beads: record the sweep sequencing decision); c19c6793984672b6ce229356ccdd8758f10d7869 (chore(openspec): adopt the 2.1 artifact layout); c5654ae826f97b8eef7fc99026c16823797bc086 (chore(openspec): migrate project.md into config.yaml); c7dcd78a2d159f85a53279a62e1139d1346c6fc9 (release: 0.10.0 — provenance verification that accepts fleet releases); d336a6cfe2da67ec893fed51d0a1c98790095808 (beads: remediate the review ticket set per the tracer-bullet issue review); d5c5c21e98e0b73ccce89b823cb6a9750253c560 (feat(gates): wire sad gate via `sad hooks install` when on PATH (sad-8ov)); d687db88dd018e43aea50b62358b76c2fd2619ec (test: drop duplicated clean_git_env call in ddl_cmd (review Low, idempotent)); dc2fee23199ac84bb04ebe69bc9eeb695559ac77 (Merge pull request #105 from charly-vibes/chore/cleanup-round-1); dda55615012f9088afe407de4f197c3d23e3c82c (Merge pull request #106 from charly-vibes/chore/kaya-record); e70c67439dc9178bdf189e1a4766abf0025e5c8e (docs: add podras as a §4 dogfood-matrix row (all opt-in pre-release)); e72aa86bfb252da66ed20ccecf523f8595b001c1 (Merge pull request #107 from charly-vibes/chore/dogfood-sad-podras); e954cbee52cc8d3e79b502094252808ade5c4052 (docs: add README front-door contract to the ecosystem standard); ed31895e928109fa0f548cf527158095f529b28a (fix(guards): normalize HEAD-dependent sections out of brief-drift); f3c66c0e74a7feb9187fcc397eddc3887473314f (feat: register podras (16th managed tool, extension/experimental)); f4e2b7da20d5aedb4acc4db26ce658219dc3920d (beads: record the openspec instrument check decision and follow-ups); f52d1ed9991aa1b71539abf69d80574144678da3 (fix(registry): disable cargo fallback for sad — crates.io name is squatted); fee5f90c2ada4829c341172b68c11b2dcf9c57d7 (chore(deps): drop unused indicatif and shell-words dependencies)"
         },
         {
           "kind": "spec_change_without_bead",
@@ -372,19 +370,19 @@
         }
       ],
       "owner": "charly",
-      "reason": "human green downgraded by signals: orphan_commits: 54 commits in the 14-day window link no tracker id or open work-item path: 0b4d771446a01111d594adddb4d91e6641ae8661 (chore(deps): clear the RustSec advisories blocking the 0.10.0 release); 0b7e1b97f72d1a2229a56441c190247ddd9002d1 (docs: apply issue-review fixes to README/release tickets); 0ce2eb448cc818461ac164dfc57eb5908b518ff8 (wai: record the 60-day fleet session retrospective that scoped this cleanup); 10c6941297b315edef10db8554a0e09e05d9e46a (chore: dogfood podras — managed block, curation scaffold, committed brief); 24fd2d8f2d8a7b427a951eed5098310d0a499a85 (whisper: snap — 9x4.11.1 quick stash (verify_release_bytes policy, CI flake gotchas)); 27f990fb4167ab6643891feb611a99d10138fc8d (Merge pull request #103 from charly-vibes/feat/ddl-cxh-ah-init-openspec-scaffold); 29136c8468d54611b172c37155a4658fecd1c395 (fix(gates): compare managed spans with the configured commands; per-repo overrides); 2aef635a5c18b0d3153eea707e126e96f847dcf8 (test: keep the doctor-clean contract hermetic against third-party block writers); 2b88574671f1eab12bf0b6efef046af77262db67 (beads: file gate-blocked repos (bajan, gently) found during the fleet sweep); 3ba0cc55deca4c12a49f65b9378031567bce17ef (docs: mark podras pre-release on the install surfaces (troubleshooting, ecosystem map)); 3bd46e60fc978431edd20b2467032d2e106e78e7 (whisper: record the inert-hooks fact (repo-scope note)); 3cc1cc54f541b85579e44cc50fd9f6d79176d8b1 (beads: file gently's clippy gate debt (push blocker found during 'push all'); regenerate brief); 44a6b32c95911ac5c76a60be961689927125a016 (wai: adopt the corrected 60-day retrospective + sync the beads export); 482b72cd9f0155a1677784cc58589bb6829c3503 (wai: session-end handoff and resume marker); 4999cac5af7d77d46041f9d5b9fcb0fb25131e0a (docs: file README front-door conformance check ticket); 521e9e7cc0239e5f5736d2facd0cd0c3c99dd52d (Merge pull request #108 from charly-vibes/fix/brief-drift-head-churn); 547a90ce2996204429884a5c30633e921a8fd392 (docs: apply issue-review fixes to README/release tickets); 645740a4c0fa720521d3cb4b3f9f6bb2261e3949 (chore(wai): stop tracking the transient pipeline .last-run state file); 672f24c171a92fe3c9f3c52ada5c51bcb9964a88 (Merge pull request #102 from charly-vibes/registry-kaya); 69eeddd9a72e61f781f2bc5b38343bebf2e20e7a (merge main into chore/cleanup-round-1 (merge PR #104 into the cleanup branch)); 6db838deb4b0c510b50248362e3b1973d5d34a8a (beads: file the stale gate block defect found in the genesis repair); 6de0d41f83408502d587143dee6997c8272e8cde (docs(beads): align AGENTS.md beads block with no-db: true architecture); 727a2d022ab7f2e8f43ed2ea97b0c4c981c8d473 (chore(wai): refresh managed blocks and tool pin); 756544e4784ead62c11835c36b044c25ad707d1d (beads: title fix - retro corrections cover CORR-001..009); 840916d51f23191d0dfab6195955888762bc64c4 (beads: sync the remediated tracker state (same export as the cleanup branch)); 8f01b69a3bc95a738277c988a1ec3ed12a02f608 (docs: correct release conformance status in §1); 96fb05ee7c816d4924e1311eed838e2ed4e3c0c2 (chore: dogfood podras — init curation + committed brief artifacts); 9918a0a9136024c8b5b41b0d4e1e848f69ab62f0 (docs: require prebuilt GitHub Release binaries; track ddl README conformance); 99aac95ad62bf7b1330d6198f75280db3100b5e1 (chore(wai): stop tracking the transient pipeline .last-run state file); 99fa87dff42fdb8d2fad5374f6e2b7b7691bd26b (feat(registry): add kaya to the managed-tools registry); af5ed57ec3e0427475193d95cebfddce5183ed88 (beads: file the ddl init collateral defect); b09c38ea0db451c5676b8e33a99ff6036bc6d526 (dogfood: run podras on ddl itself); b3998675be68d7aac760ba64d24f4e5841dab80b (chore(whisper): stop tracking notes.usage.jsonl (already gitignored)); b5a9ee5bea5cf83baa6e4223b1ec893f636cd2c4 (docs: link the ecosystem standard from the README); b974383c9d1aa4f13f58c8717368138be37f2598 (beads: block the sweep on the wai release); bd018cda9727b5366c095a9b32cf67d90fc0b687 (feat(registry): register sad as a managed tool (sad-8b7)); bdff65a7635b4e88566df40a0353e5d4a7dd85b1 (Merge pull request #104 from charly-vibes/fix/ddl-sl9-staged-gate); bf7983bc3981ba1ba2c5ab50240dd42dedb32c22 (beads: record the sweep sequencing decision); c19c6793984672b6ce229356ccdd8758f10d7869 (chore(openspec): adopt the 2.1 artifact layout); c5654ae826f97b8eef7fc99026c16823797bc086 (chore(openspec): migrate project.md into config.yaml); c7dcd78a2d159f85a53279a62e1139d1346c6fc9 (release: 0.10.0 — provenance verification that accepts fleet releases); d336a6cfe2da67ec893fed51d0a1c98790095808 (beads: remediate the review ticket set per the tracer-bullet issue review); d5c5c21e98e0b73ccce89b823cb6a9750253c560 (feat(gates): wire sad gate via `sad hooks install` when on PATH (sad-8ov)); d687db88dd018e43aea50b62358b76c2fd2619ec (test: drop duplicated clean_git_env call in ddl_cmd (review Low, idempotent)); dc2fee23199ac84bb04ebe69bc9eeb695559ac77 (Merge pull request #105 from charly-vibes/chore/cleanup-round-1); dda55615012f9088afe407de4f197c3d23e3c82c (Merge pull request #106 from charly-vibes/chore/kaya-record); e70c67439dc9178bdf189e1a4766abf0025e5c8e (docs: add podras as a §4 dogfood-matrix row (all opt-in pre-release)); e72aa86bfb252da66ed20ccecf523f8595b001c1 (Merge pull request #107 from charly-vibes/chore/dogfood-sad-podras); e954cbee52cc8d3e79b502094252808ade5c4052 (docs: add README front-door contract to the ecosystem standard); ed31895e928109fa0f548cf527158095f529b28a (fix(guards): normalize HEAD-dependent sections out of brief-drift); f3c66c0e74a7feb9187fcc397eddc3887473314f (feat: register podras (16th managed tool, extension/experimental)); f4e2b7da20d5aedb4acc4db26ce658219dc3920d (beads: record the openspec instrument check decision and follow-ups); f52d1ed9991aa1b71539abf69d80574144678da3 (fix(registry): disable cargo fallback for sad — crates.io name is squatted); fee5f90c2ada4829c341172b68c11b2dcf9c57d7 (chore(deps): drop unused indicatif and shell-words dependencies); spec_change_without_bead: openspec changes link no tracker id: `fix-agent-instrumentation-check` changed 8 days ago"
+      "reason": "human green downgraded by signals: orphan_commits: 53 commits in the 14-day window link no tracker id or open work-item path: 0b4d771446a01111d594adddb4d91e6641ae8661 (chore(deps): clear the RustSec advisories blocking the 0.10.0 release); 0b7e1b97f72d1a2229a56441c190247ddd9002d1 (docs: apply issue-review fixes to README/release tickets); 0ce2eb448cc818461ac164dfc57eb5908b518ff8 (wai: record the 60-day fleet session retrospective that scoped this cleanup); 10c6941297b315edef10db8554a0e09e05d9e46a (chore: dogfood podras — managed block, curation scaffold, committed brief); 24fd2d8f2d8a7b427a951eed5098310d0a499a85 (whisper: snap — 9x4.11.1 quick stash (verify_release_bytes policy, CI flake gotchas)); 27f990fb4167ab6643891feb611a99d10138fc8d (Merge pull request #103 from charly-vibes/feat/ddl-cxh-ah-init-openspec-scaffold); 29136c8468d54611b172c37155a4658fecd1c395 (fix(gates): compare managed spans with the configured commands; per-repo overrides); 2aef635a5c18b0d3153eea707e126e96f847dcf8 (test: keep the doctor-clean contract hermetic against third-party block writers); 2b88574671f1eab12bf0b6efef046af77262db67 (beads: file gate-blocked repos (bajan, gently) found during the fleet sweep); 3ba0cc55deca4c12a49f65b9378031567bce17ef (docs: mark podras pre-release on the install surfaces (troubleshooting, ecosystem map)); 3bd46e60fc978431edd20b2467032d2e106e78e7 (whisper: record the inert-hooks fact (repo-scope note)); 44a6b32c95911ac5c76a60be961689927125a016 (wai: adopt the corrected 60-day retrospective + sync the beads export); 482b72cd9f0155a1677784cc58589bb6829c3503 (wai: session-end handoff and resume marker); 4999cac5af7d77d46041f9d5b9fcb0fb25131e0a (docs: file README front-door conformance check ticket); 521e9e7cc0239e5f5736d2facd0cd0c3c99dd52d (Merge pull request #108 from charly-vibes/fix/brief-drift-head-churn); 547a90ce2996204429884a5c30633e921a8fd392 (docs: apply issue-review fixes to README/release tickets); 645740a4c0fa720521d3cb4b3f9f6bb2261e3949 (chore(wai): stop tracking the transient pipeline .last-run state file); 672f24c171a92fe3c9f3c52ada5c51bcb9964a88 (Merge pull request #102 from charly-vibes/registry-kaya); 69eeddd9a72e61f781f2bc5b38343bebf2e20e7a (merge main into chore/cleanup-round-1 (merge PR #104 into the cleanup branch)); 6db838deb4b0c510b50248362e3b1973d5d34a8a (beads: file the stale gate block defect found in the genesis repair); 6de0d41f83408502d587143dee6997c8272e8cde (docs(beads): align AGENTS.md beads block with no-db: true architecture); 727a2d022ab7f2e8f43ed2ea97b0c4c981c8d473 (chore(wai): refresh managed blocks and tool pin); 756544e4784ead62c11835c36b044c25ad707d1d (beads: title fix - retro corrections cover CORR-001..009); 840916d51f23191d0dfab6195955888762bc64c4 (beads: sync the remediated tracker state (same export as the cleanup branch)); 8f01b69a3bc95a738277c988a1ec3ed12a02f608 (docs: correct release conformance status in §1); 96fb05ee7c816d4924e1311eed838e2ed4e3c0c2 (chore: dogfood podras — init curation + committed brief artifacts); 9918a0a9136024c8b5b41b0d4e1e848f69ab62f0 (docs: require prebuilt GitHub Release binaries; track ddl README conformance); 99aac95ad62bf7b1330d6198f75280db3100b5e1 (chore(wai): stop tracking the transient pipeline .last-run state file); 99fa87dff42fdb8d2fad5374f6e2b7b7691bd26b (feat(registry): add kaya to the managed-tools registry); af5ed57ec3e0427475193d95cebfddce5183ed88 (beads: file the ddl init collateral defect); b09c38ea0db451c5676b8e33a99ff6036bc6d526 (dogfood: run podras on ddl itself); b3998675be68d7aac760ba64d24f4e5841dab80b (chore(whisper): stop tracking notes.usage.jsonl (already gitignored)); b5a9ee5bea5cf83baa6e4223b1ec893f636cd2c4 (docs: link the ecosystem standard from the README); b974383c9d1aa4f13f58c8717368138be37f2598 (beads: block the sweep on the wai release); bd018cda9727b5366c095a9b32cf67d90fc0b687 (feat(registry): register sad as a managed tool (sad-8b7)); bdff65a7635b4e88566df40a0353e5d4a7dd85b1 (Merge pull request #104 from charly-vibes/fix/ddl-sl9-staged-gate); bf7983bc3981ba1ba2c5ab50240dd42dedb32c22 (beads: record the sweep sequencing decision); c19c6793984672b6ce229356ccdd8758f10d7869 (chore(openspec): adopt the 2.1 artifact layout); c5654ae826f97b8eef7fc99026c16823797bc086 (chore(openspec): migrate project.md into config.yaml); c7dcd78a2d159f85a53279a62e1139d1346c6fc9 (release: 0.10.0 — provenance verification that accepts fleet releases); d336a6cfe2da67ec893fed51d0a1c98790095808 (beads: remediate the review ticket set per the tracer-bullet issue review); d5c5c21e98e0b73ccce89b823cb6a9750253c560 (feat(gates): wire sad gate via `sad hooks install` when on PATH (sad-8ov)); d687db88dd018e43aea50b62358b76c2fd2619ec (test: drop duplicated clean_git_env call in ddl_cmd (review Low, idempotent)); dc2fee23199ac84bb04ebe69bc9eeb695559ac77 (Merge pull request #105 from charly-vibes/chore/cleanup-round-1); dda55615012f9088afe407de4f197c3d23e3c82c (Merge pull request #106 from charly-vibes/chore/kaya-record); e70c67439dc9178bdf189e1a4766abf0025e5c8e (docs: add podras as a §4 dogfood-matrix row (all opt-in pre-release)); e72aa86bfb252da66ed20ccecf523f8595b001c1 (Merge pull request #107 from charly-vibes/chore/dogfood-sad-podras); e954cbee52cc8d3e79b502094252808ade5c4052 (docs: add README front-door contract to the ecosystem standard); ed31895e928109fa0f548cf527158095f529b28a (fix(guards): normalize HEAD-dependent sections out of brief-drift); f3c66c0e74a7feb9187fcc397eddc3887473314f (feat: register podras (16th managed tool, extension/experimental)); f4e2b7da20d5aedb4acc4db26ce658219dc3920d (beads: record the openspec instrument check decision and follow-ups); f52d1ed9991aa1b71539abf69d80574144678da3 (fix(registry): disable cargo fallback for sad — crates.io name is squatted); fee5f90c2ada4829c341172b68c11b2dcf9c57d7 (chore(deps): drop unused indicatif and shell-words dependencies); spec_change_without_bead: openspec changes link no tracker id: `fix-agent-instrumentation-check` changed 8 days ago"
     },
     "truncation": {
       "applied": true,
       "omitted_counts": {
         "blocked": 3,
-        "in_flight": 43,
-        "next": 44,
+        "in_flight": 44,
+        "next": 45,
         "recent": 195
       }
     },
-    "head_sha": "3cc1cc54f541b85579e44cc50fd9f6d79176d8b1",
-    "source_hash": "6af254cc9be19839a5ebcfb0bf8b338043df17727d0fef49cfce6561b33af44a",
+    "head_sha": "b70657c71d6d7fd1e98cffaab2eb5b0cef1f92d5",
+    "source_hash": "968353ffeafb490ac29e30eaae188f28536cdc1ce0b3c4f26f9044a230500bd7",
     "warnings": [
       {
         "source": "beads",
