@@ -8,8 +8,14 @@ fleet actually works (repeated failures, good behaviours, missed gates)?
 
 > **Corrections applied 2026-11-25** after a Rule-of-5 review of this artifact (tracked as
 > `DDL-9kz.11`): the beads-violation count, the instruction-presence table, the dirty-repo
-> counts, the timeout count, the repo-scope sentence and the codex outcome row were re-measured
-> and corrected. Marked with *(corrected)* where they changed.
+> counts, the timeout count, the repo-scope sentence, the codex outcome row and the
+> `wai todo` attribution were re-measured and corrected. Marked with *(corrected)* where they
+> changed.
+>
+> **CORR-009 (added 2026-11-25, after issue review):** F8 attributed the todo-tool errors
+> ("Errors: done needs a task, items or a phase", 11 sessions) to `wai`. `wai` has no `todo`
+> command — the errors come from the **omp harness's `todo` tool** (and `task` tool). The
+> affected work therefore lands in the harness, not in `charly-vibes/wai`.
 
 ## Method
 
@@ -176,7 +182,7 @@ almost never run.
   as an artifact → `artifact '1' not found in project 'finanzas'`,
   `review target must be a filename, not a path: '.wai/projects/…/reviews/….md'`
   (26 occurrences, 17 sessions).
-- `wai todo done` misuse: "Errors: done needs a task, items or a phase" (11 sessions).
+- *(corrected)* `wai todo done` misuse: "Errors: done needs a task, items or a phase" (11 sessions) — **attribution corrected**: `wai` has no `todo` command (`wai --help` lists none; `wai todo` → "Unknown command 'todo'"); these messages come from the **omp harness's `todo` tool**, not from wai. The harness-tool ergonomics class also includes `task` tool rejections ("Missing `context`", "Per-call model is disabled for task calls").
 
 ### F9 — Fleet state debt today *(snapshot 2026-11-25 ~13:00–13:40 local; volatile)*
 

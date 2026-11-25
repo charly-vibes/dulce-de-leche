@@ -99,4 +99,23 @@
   - Tickets: DDL-cxh/DDL-ab4/DDL-1db/DDL-472 CLOSED with ship reasons + PR refs. All 3 PRs CI green before merge. tdd-ro5 pipeline ran full 9 steps (oracles scaffolded: .wai/resources/oracles/tests-pass.sh runs just test; artifacts committed on the branch).
   - Gotchas banked: (1) init_cascade reds on dev machines = check ~/.ddl/bin leakage FIRST (testaruda quarantine does NOT exempt in-run failures from the gate); (2) python test env needs pyyaml (installed --user --break-system-packages on brew 3.15); (3) gh pr merge must run from the right repo cwd; (4) wai pipeline init tdd-ro5 needed scaffolding in ddl; WAI_PROJECT=dulce-de-leche required for non-interactive wai add; (5) rg -rn is --replace n — mangles output, don't use.
   - Remaining: wizard disposition (DDL-g6w.7) still parked with user; DDL-01q/xr4 de-flake candidates; runs/ pretender-debt*.log debris untracked (delete or ignore); ddl_cmd duplicate clean_git_env wart FIXED in this PR. Full suite 336/0; local gates green everywhere.
-  - **Next:** fresh session → /renew → bd ready (top of stack: DDL-sl9 P1 pretender gate no-op, DDL-9x4 epic close-out check). User was active in parallel (merged sad#1 + pushed 6ffdf17).
+  - **Next:** fresh session → /renew → bd ready (top of stack: DDL-sl9 P1 pretender gate no-op, DDL-9x4 epic close-out check). User was active in parallel (merged sad#1 + pushed 6ffdf17). (superseded by 1745c9398e8ce4c456b6c6293446e2c38384d21e426b1d3cf79767a56915a124)
+- 2026-11-21T17:22:48Z [id:1745c9398e8ce4c456b6c6293446e2c38384d21e426b1d3cf79767a56915a124] (#resume-ddl-sl9) Format: 1
+  Timestamp: 2026-11-21T17:22:34Z
+  Repo: charly-vibes/dulce-de-leche (~/para/areas/dev/gh/charly/dulce-de-leche)
+  Branch: main @ 20712d0 (synced with origin/main)
+  Session: 01a1fec4-5386-7129-a7e6-ba869ae4d4c5
+  Task: continuation after DDL-cxh ship; next work = DDL-sl9
+  
+  Objective: ddl fleet upkeep. DDL-cxh SHIPPED this session — PR #103 (merge 27f990f): init_cascade scaffolds openspec/ before ah init when ah is in the cascade (ah >=0.12 contract: ensure!(repo_root.join("openspec").exists())). DDL-ab4: ddl_cmd() sandboxes HOME so ~/.ddl/bin cannot shadow test stubs. Sibling PRs merged: vampiro#55 (DDL-1db §6/§7 docs wiring), sad#1 (DDL-472 v* docs tag trigger).
+  
+  Phase: commit (complete; all pushed).
+  State: main synced everywhere; DDL-cxh/DDL-ab4/DDL-1db/DDL-472 closed with ship reasons; full suite 336 passed / 0 failed across 29 binaries; clippy -D warnings + fmt clean; all 3 PRs CI green before merge. sad repo has pre-existing .genesis/tools.toml dirt (not ours).
+  Exact next action: /renew, then `bd ready` — top of stack: DDL-sl9 (P1, open/unclaimed): pre-commit pretender gate is a no-op because PRE_COMMIT_BLOCK wires `pretender check --diff-only` which reads the unstaged tree at pre-commit time; fix direction is `--staged` at pre-commit (repro in ticket: catherine repo, pretender 0.10.0, lefthook 2.2.2, ddl 0.9.0). Then DDL-9x4 epic close-out check (children shipped, epic still open). Start non-trivial work inside wai pipeline tdd-ro5 (now scaffolded: .wai/resources/pipelines/tdd-ro5.toml + .wai/resources/oracles/tests-pass.sh which runs just test).
+  Decisions/constraints: pushes and merges require explicit user authorization; code changes via feature branch + PR only (whisper/beads bookkeeping commits go direct to main per repo convention); never edit .podras/roadmap.toml or managed blocks; bd ops can flip core.bare — run `git config core.bare false` before pull/push; use non-interactive flags (cp -f/mv -f/rm -f).
+  Ticket ownership: DDL-sl9 open/unclaimed; DDL-9x4 epic open; DDL-g6w.7 wizard disposition PARKED awaiting user decision.
+  Validation: `just test` (testaruda select/exec gate runner) green; narrow: cargo test --test init_cascade (19/19); standard_conformance 23/23 (needs vampiro+sad sibling checkouts present and fixed, else locally red); full: just test-full (336/0).
+  Blockers: none known.
+  Refs: RO5U review + ship evidence in .wai/projects/dulce-de-leche/{review,research,designs,plans}; gotchas in superseded snap (pyyaml user-install for python tests; gh pr merge from correct repo cwd; rg -rn is --replace, avoid).
+  Debris: .wai/projects/dulce-de-leche/runs/pretender-debt*.log untracked — delete or gitignore sometime.
+  Previous entry: 8bc971c51cf7bf34b57a640ada43f92d135b55143cde5cfdf1a3c451377496ef (supersedes 8bc971c51cf7bf34b57a640ada43f92d135b55143cde5cfdf1a3c451377496ef)

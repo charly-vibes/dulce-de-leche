@@ -152,6 +152,7 @@ openspec list --specs      # Capabilities
 
 | Pipeline | When to Use | Start |
 |----------|-------------|-------|
+| tdd-ro5 | Autonomous feature, bugfix, or refactor work where tests and review must gate progress | `wai pipeline start tdd-ro5 --topic=<topic>` |
 
 > Pipeline steps may have gates that enforce artifact creation, review coverage, and oracle checks before advancement. Run `wai pipeline gates <name>` for details.
 

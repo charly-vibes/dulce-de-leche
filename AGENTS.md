@@ -41,6 +41,15 @@ When context reaches ~40%: stop and tell the user — responses degrade past
 this point. Recommend `wai close` then `/clear` to resume cleanly.
 Do NOT skip `wai close` — it enables resume detection.
 
+## Available Pipelines
+
+| Pipeline | When to Use | Start |
+|----------|-------------|-------|
+| tdd-ro5 | Autonomous feature, bugfix, or refactor work where tests and review must gate progress | `wai pipeline start tdd-ro5 --topic=<topic>` |
+
+> Pipeline steps may have gates that enforce artifact creation, review coverage, and oracle checks before advancement. Run `wai pipeline gates <name>` for details.
+> **Before any edit**: run `wai pipeline current --json`; if a run is active for this project, resume it (`wai pipeline next`) rather than starting ad-hoc work.
+
 ## Autonomous Work Policy
 
 Proceed without routine confirmation when the next step is clear.
@@ -63,7 +72,7 @@ Read it at the start of your first session or when you need detailed guidance.
 Keep this managed block so `wai init` can refresh the instructions.
 
 
-<!-- provenance: generator=wai version=0.13.0 source=WAI sha=c2520444 -->
+<!-- provenance: generator=wai version=0.13.0 source=WAI sha=a0fa2c64 -->
 <!-- WAI:END -->
 
 ## Behavioral Constraints
@@ -147,7 +156,7 @@ bd close <id>         # Complete work
 - Run `bd prime` for detailed command reference and session close protocol
 - Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
 
-**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
+**Architecture in one line:** issues live in `.beads/issues.jsonl` (JSONL, committed to git — the source of truth). bd runs embedded (in-process Dolt, `no-db: true`): there is no Dolt remote and no `bd dolt push/pull` sync. Git itself is the sync mechanism. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
 
 ## Session Completion
 
