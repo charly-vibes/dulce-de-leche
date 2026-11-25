@@ -6,19 +6,19 @@
   "data": {
     "schema_version": "brief.v1",
     "as_of": "2026-11-25",
-    "generated_at": "2026-11-25T18:31:03.517275806Z",
+    "generated_at": "2026-11-25T18:43:28.197707464Z",
     "sources": [
       {
         "name": "beads",
         "status": "present",
-        "observed_at": "2026-11-25T18:30:48Z",
+        "observed_at": "2026-11-25T18:43:25Z",
         "staleness": "fresh",
         "detail": "28 malformed line(s) skipped in .beads/issues.jsonl"
       },
       {
         "name": "git",
         "status": "present",
-        "observed_at": "2026-11-25T18:30:25Z",
+        "observed_at": "2026-11-25T18:38:44Z",
         "staleness": "fresh",
         "detail": null
       },
@@ -128,6 +128,16 @@
         "confirmed_at": null
       },
       {
+        "id": "DDL-9gso",
+        "title": "[bug] gently: pre-push cargo-gate is RED on clippy deny-warnings debt already on main - it blocks EVERY push (incl. the beads export)",
+        "status": "open",
+        "priority": 1,
+        "blocked_by": [],
+        "age_days": 0,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
         "id": "DDL-9kz",
         "title": "Fleet close-loop: make the session-close protocol visible to every harness (60-day session retrospective)",
         "status": "open",
@@ -196,16 +206,6 @@
           "DDL-3zm"
         ],
         "age_days": 0,
-        "reason": null,
-        "confirmed_at": null
-      },
-      {
-        "id": "DDL-cfd",
-        "title": "docs: apply README front-door standard v0.4 (§5.1)",
-        "status": "open",
-        "priority": 1,
-        "blocked_by": [],
-        "age_days": 9,
         "reason": null,
         "confirmed_at": null
       }
@@ -314,8 +314,8 @@
         "confirmed_at": null
       },
       {
-        "id": "DDL-9kz",
-        "title": "Fleet close-loop: make the session-close protocol visible to every harness (60-day session retrospective)",
+        "id": "DDL-9gso",
+        "title": "[bug] gently: pre-push cargo-gate is RED on clippy deny-warnings debt already on main - it blocks EVERY push (incl. the beads export)",
         "status": "open",
         "priority": 1,
         "blocked_by": [],
@@ -327,6 +327,18 @@
     "parked": [],
     "needs_retriage": [],
     "recent": [
+      {
+        "sha": "10b0f3cf2fd378b766a042c7a056069bbea58e49",
+        "committed_at": "2026-11-25T18:38:44Z",
+        "subject": "feat(gates): kaya record gates — hooks, CI parity, record-lag (DDL-csx.5)",
+        "outcome": null
+      },
+      {
+        "sha": "c3d89e3cfb699c058e86b2dd572682820c24d575",
+        "committed_at": "2026-11-25T18:31:03Z",
+        "subject": "beads: close dogfood trio (DDL-csx.1 kaya #106, DDL-d0um sad #107, DDL-3jes podras #107+#108); file DDL-jjox brief-drift upstream",
+        "outcome": null
+      },
       {
         "sha": "521e9e7cc0239e5f5736d2facd0cd0c3c99dd52d",
         "committed_at": "2026-11-25T18:30:25Z",
@@ -343,18 +355,6 @@
         "sha": "e72aa86bfb252da66ed20ccecf523f8595b001c1",
         "committed_at": "2026-11-25T18:24:04Z",
         "subject": "Merge pull request #107 from charly-vibes/chore/dogfood-sad-podras",
-        "outcome": null
-      },
-      {
-        "sha": "dda55615012f9088afe407de4f197c3d23e3c82c",
-        "committed_at": "2026-11-25T18:23:07Z",
-        "subject": "Merge pull request #106 from charly-vibes/chore/kaya-record",
-        "outcome": null
-      },
-      {
-        "sha": "92cddaf52cdb740f909540d1a5be399b98a9d2ae",
-        "committed_at": "2026-11-25T18:16:19Z",
-        "subject": "beads: park dogfood progress notes (DDL-csx.1 kaya bootstrap, DDL-d0um sad, DDL-3jes podras) on feature branches",
         "outcome": null
       }
     ],
@@ -378,13 +378,13 @@
       "applied": true,
       "omitted_counts": {
         "blocked": 3,
-        "in_flight": 41,
-        "next": 42,
+        "in_flight": 42,
+        "next": 43,
         "recent": 195
       }
     },
-    "head_sha": "521e9e7cc0239e5f5736d2facd0cd0c3c99dd52d",
-    "source_hash": "27e019e97047dd117674de7cc4be9000dba718ac305005c63be0c2d3afa240e9",
+    "head_sha": "10b0f3cf2fd378b766a042c7a056069bbea58e49",
+    "source_hash": "f44ff472884d8be3902963a165a5c91e0f4a0f6730d682e0fe875d47d22d9f4b",
     "warnings": [
       {
         "source": "beads",

@@ -17,6 +17,7 @@ none
 - DDL-44k — fleet: re-run ddl init --gates so every ddl-wired repo adopts the armed pre-commit gate (DDL-sl9) (status: open; priority: 1; age: 0d; blocked by: DDL-3zm)
 - DDL-73za — [bug] bajan: pre-commit specodelic/spk-lint gate is RED on a pre-existing spec Reference-Typing violation - it blocks EVERY commit, including the beads export (status: open; priority: 1; age: 0d)
 - DDL-7a7 — Implement Hegel property tests (status: open; priority: 1; age: 9d; blocked by: DDL-3et)
+- DDL-9gso — [bug] gently: pre-push cargo-gate is RED on clippy deny-warnings debt already on main - it blocks EVERY push (incl. the beads export) (status: open; priority: 1; age: 0d)
 - DDL-9kz — Fleet close-loop: make the session-close protocol visible to every harness (60-day session retrospective) (status: open; priority: 1; age: 0d)
 - DDL-9kz.4 — Fix the known gap: generated gate blocks must chain 'bd hooks run' (standardization section 9.2) (status: open; priority: 1; age: 0d)
 - DDL-9kz.5 — ddl fleet report: ship the session-telemetry pipeline (pi + omp + codex) as a ddl command (status: open; priority: 1; age: 0d)
@@ -24,8 +25,7 @@ none
 - DDL-9kz.6.1 — ddl doctor: add ddl.repo.just-ci check (a repo without a 'just ci' recipe silently opts out of the standard gate) (status: open; priority: 1; age: 0d)
 - DDL-9x4 — P1 epic: fleet provenance.json rollout — make fail-closed installs actually pass (DDL-yts/wof completion) (status: open; priority: 1; age: 35d)
 - DDL-9xf — docs(gates): correct the coverage wording for the armed pre-commit gate (source doc + CHANGELOG) (status: open; priority: 1; age: 0d; blocked by: DDL-3zm)
-- DDL-cfd — docs: apply README front-door standard v0.4 (§5.1) (status: open; priority: 1; age: 9d)
-(41 more omitted)
+(42 more omitted)
 
 ## Blocked / waiting
 
@@ -42,8 +42,8 @@ none
 - DDL-3et — Research: Hegel property-based testing plan (antithesis-research) (status: open; priority: 1; age: 9d)
 - DDL-3zm — docs(gates): document 'pretender check --adopt' as the baseline escape hatch + tell consumers to re-run ddl init --gates (status: open; priority: 1; age: 0d)
 - DDL-73za — [bug] bajan: pre-commit specodelic/spk-lint gate is RED on a pre-existing spec Reference-Typing violation - it blocks EVERY commit, including the beads export (status: open; priority: 1; age: 0d)
-- DDL-9kz — Fleet close-loop: make the session-close protocol visible to every harness (60-day session retrospective) (status: open; priority: 1; age: 0d)
-(42 more omitted)
+- DDL-9gso — [bug] gently: pre-push cargo-gate is RED on clippy deny-warnings debt already on main - it blocks EVERY push (incl. the beads export) (status: open; priority: 1; age: 0d)
+(43 more omitted)
 
 ## Parked
 
@@ -55,11 +55,11 @@ none
 
 ## Recent
 
+- 10b0f3cf2fd378b766a042c7a056069bbea58e49 feat(gates): kaya record gates — hooks, CI parity, record-lag (DDL-csx.5) (2026-11-25T18:38:44Z)
+- c3d89e3cfb699c058e86b2dd572682820c24d575 beads: close dogfood trio (DDL-csx.1 kaya #106, DDL-d0um sad #107, DDL-3jes podras #107+#108); file DDL-jjox brief-drift upstream (2026-11-25T18:31:03Z)
 - 521e9e7cc0239e5f5736d2facd0cd0c3c99dd52d Merge pull request #108 from charly-vibes/fix/brief-drift-head-churn (2026-11-25T18:30:25Z)
 - ed31895e928109fa0f548cf527158095f529b28a fix(guards): normalize HEAD-dependent sections out of brief-drift (2026-11-25T18:26:47Z)
 - e72aa86bfb252da66ed20ccecf523f8595b001c1 Merge pull request #107 from charly-vibes/chore/dogfood-sad-podras (2026-11-25T18:24:04Z)
-- dda55615012f9088afe407de4f197c3d23e3c82c Merge pull request #106 from charly-vibes/chore/kaya-record (2026-11-25T18:23:07Z)
-- 92cddaf52cdb740f909540d1a5be399b98a9d2ae beads: park dogfood progress notes (DDL-csx.1 kaya bootstrap, DDL-d0um sad, DDL-3jes podras) on feature branches (2026-11-25T18:16:19Z)
 (195 more omitted)
 
 ## Health + confidence
@@ -72,12 +72,12 @@ Health: **amber** — basis: human — owner: charly — reason: human green dow
 
 | source | status | observed_at | staleness | detail |
 | --- | --- | --- | --- | --- |
-| beads | present | 2026-11-25T18:30:48Z | fresh | 28 malformed line(s) skipped in .beads/issues.jsonl |
-| git | present | 2026-11-25T18:30:25Z | fresh | none |
+| beads | present | 2026-11-25T18:43:25Z | fresh | 28 malformed line(s) skipped in .beads/issues.jsonl |
+| git | present | 2026-11-25T18:38:44Z | fresh | none |
 | openspec | present | 2026-11-17T19:50:38Z | fresh | none |
 | whisper | present | 2026-11-25T18:00:10Z | fresh | none |
 | curation | present | 2026-11-18T21:37:03Z | fresh | none |
 
 Curation: updated_at 2026-11-18T21:37:03Z; confirmed_at 2026-11-18T00:00:00Z.
 
-Freshness: generated_at 2026-11-25T18:31:03Z; per-source observed_at and staleness are listed above.
+Freshness: generated_at 2026-11-25T18:43:28Z; per-source observed_at and staleness are listed above.
