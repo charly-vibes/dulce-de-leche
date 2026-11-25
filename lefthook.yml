@@ -29,6 +29,11 @@ pre-commit:
     # `podras brief --write`.
     brief-drift:
       run: scripts/guards/brief-drift.sh
+    # kaya record gates (DDL-csx.5): validate the record as STAGED so a bad
+    # ledger/projection pair never lands; --index reads the ledger and
+    # projections from the git index, not the worktree. Read-only.
+    record-verify-staged:
+      run: kaya check --index
 
 pre-push:
   commands:
@@ -40,3 +45,7 @@ pre-push:
       run: bd hooks run pre-push
     gates:
       run: just pre-push
+    # kaya record gates (DDL-csx.5): the committed record must verify before
+    # it leaves the machine; lag is CI's job (just record-check there).
+    record-verify:
+      run: just record-verify
