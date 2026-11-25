@@ -7,6 +7,7 @@
 [![CI](https://github.com/charly-vibes/dulce-de-leche/actions/workflows/ci.yml/badge.svg)](https://github.com/charly-vibes/dulce-de-leche/actions/workflows/ci.yml)
 [![Release](https://github.com/charly-vibes/dulce-de-leche/actions/workflows/release.yml/badge.svg)](https://github.com/charly-vibes/dulce-de-leche/actions/workflows/release.yml)
 [![Docs](https://github.com/charly-vibes/dulce-de-leche/actions/workflows/docs.yml/badge.svg)](https://github.com/charly-vibes/dulce-de-leche/actions/workflows/docs.yml)
+[![Record](https://github.com/charly-vibes/dulce-de-leche/actions/workflows/record.yml/badge.svg)](https://github.com/charly-vibes/dulce-de-leche/actions/workflows/record.yml)
 [![crates.io](https://img.shields.io/crates/v/dulce-de-leche.svg)](https://crates.io/crates/dulce-de-leche)
 [![Homebrew](https://img.shields.io/badge/brew-charly/dulce--de--leche-blue)](https://github.com/charly-vibes/homebrew-charly)
 [![Scoop](https://img.shields.io/badge/scoop-charly/dulce--de--leche-blue)](https://github.com/charly-vibes/scoop-charly)
@@ -19,6 +20,7 @@
 > formats, and version drifts — `ddl` collapses that into one install, one
 > config directory (`.ddl/`), and one health check across the ecosystem.
 > **Status:** [stable](docs/src/status.md) · core commands (init/status/migrate/upgrade) shipped · [Ecosystem & motivation](docs/src/ecosystem.md) · [charly-vibes Tool Ecosystem](https://charly-vibes.github.io/dulce-de-leche/ecosystem-map.html)
+> **Research record:** kaya ledger (`.kaya/`) → generated [research](docs/research/index.md) and [publication](docs/public/knowledge-index.md) projections; nightly `Record` workflow captures snapshots; record gates run in CI (warn on PRs, fail on main).
 
 ```
    ddl init     →  installs & configures the whole toolset
