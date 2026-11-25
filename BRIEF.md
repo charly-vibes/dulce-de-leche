@@ -55,11 +55,11 @@ none
 
 ## Recent
 
+- b6af27af13deb6d53dba808ff8af0943037a05d3 feat(ssot): pin kaya 0.4.1 — §4 matrix row, fleet flip unblocked (DDL-csx.7) (#110) (2026-11-25T19:02:29Z)
+- 33a15b598c0bb813527e88f2c9c95ff4dc468bba beads: close DDL-csx.5 — kaya record gates shipped (PR #109) (2026-11-25T18:50:18Z)
 - 1cf8e63402e6c035f70defe5c783f5a84607473d beads: file catherine's frozen-repo gate blocker (DDL-07z2); note the fail-closed-gate pattern (2026-11-25T18:47:56Z)
 - b70657c71d6d7fd1e98cffaab2eb5b0cef1f92d5 feat(gates): kaya record gates — hooks, CI parity, record-lag (DDL-csx.5) (#109) (2026-11-25T18:47:07Z)
 - c3d89e3cfb699c058e86b2dd572682820c24d575 beads: close dogfood trio (DDL-csx.1 kaya #106, DDL-d0um sad #107, DDL-3jes podras #107+#108); file DDL-jjox brief-drift upstream (2026-11-25T18:31:03Z)
-- 521e9e7cc0239e5f5736d2facd0cd0c3c99dd52d Merge pull request #108 from charly-vibes/fix/brief-drift-head-churn (2026-11-25T18:30:25Z)
-- ed31895e928109fa0f548cf527158095f529b28a fix(guards): normalize HEAD-dependent sections out of brief-drift (2026-11-25T18:26:47Z)
 (195 more omitted)
 
 ## Health + confidence
@@ -72,12 +72,12 @@ Health: **amber** — basis: human — owner: charly — reason: human green dow
 
 | source | status | observed_at | staleness | detail |
 | --- | --- | --- | --- | --- |
-| beads | present | 2026-11-25T18:47:45Z | fresh | 28 malformed line(s) skipped in .beads/issues.jsonl |
-| git | present | 2026-11-25T18:47:56Z | fresh | none |
+| beads | present | 2026-11-25T18:51:29Z | fresh | 28 malformed line(s) skipped in .beads/issues.jsonl |
+| git | present | 2026-11-25T19:02:29Z | fresh | none |
 | openspec | present | 2026-11-17T19:50:38Z | fresh | none |
 | whisper | present | 2026-11-25T18:00:10Z | fresh | none |
 | curation | present | 2026-11-18T21:37:03Z | fresh | none |
 
 Curation: updated_at 2026-11-18T21:37:03Z; confirmed_at 2026-11-18T00:00:00Z.
 
-Freshness: generated_at 2026-11-25T18:50:07Z; per-source observed_at and staleness are listed above.
+Freshness: generated_at 2026-11-25T19:07:38Z; per-source observed_at and staleness are listed above.

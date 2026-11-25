@@ -6,19 +6,19 @@
   "data": {
     "schema_version": "brief.v1",
     "as_of": "2026-11-25",
-    "generated_at": "2026-11-25T18:50:07.591450858Z",
+    "generated_at": "2026-11-25T19:07:38.478527750Z",
     "sources": [
       {
         "name": "beads",
         "status": "present",
-        "observed_at": "2026-11-25T18:47:45Z",
+        "observed_at": "2026-11-25T18:51:29Z",
         "staleness": "fresh",
         "detail": "28 malformed line(s) skipped in .beads/issues.jsonl"
       },
       {
         "name": "git",
         "status": "present",
-        "observed_at": "2026-11-25T18:47:56Z",
+        "observed_at": "2026-11-25T19:02:29Z",
         "staleness": "fresh",
         "detail": null
       },
@@ -326,6 +326,18 @@
     "needs_retriage": [],
     "recent": [
       {
+        "sha": "b6af27af13deb6d53dba808ff8af0943037a05d3",
+        "committed_at": "2026-11-25T19:02:29Z",
+        "subject": "feat(ssot): pin kaya 0.4.1 — §4 matrix row, fleet flip unblocked (DDL-csx.7) (#110)",
+        "outcome": null
+      },
+      {
+        "sha": "33a15b598c0bb813527e88f2c9c95ff4dc468bba",
+        "committed_at": "2026-11-25T18:50:18Z",
+        "subject": "beads: close DDL-csx.5 — kaya record gates shipped (PR #109)",
+        "outcome": null
+      },
+      {
         "sha": "1cf8e63402e6c035f70defe5c783f5a84607473d",
         "committed_at": "2026-11-25T18:47:56Z",
         "subject": "beads: file catherine's frozen-repo gate blocker (DDL-07z2); note the fail-closed-gate pattern",
@@ -341,18 +353,6 @@
         "sha": "c3d89e3cfb699c058e86b2dd572682820c24d575",
         "committed_at": "2026-11-25T18:31:03Z",
         "subject": "beads: close dogfood trio (DDL-csx.1 kaya #106, DDL-d0um sad #107, DDL-3jes podras #107+#108); file DDL-jjox brief-drift upstream",
-        "outcome": null
-      },
-      {
-        "sha": "521e9e7cc0239e5f5736d2facd0cd0c3c99dd52d",
-        "committed_at": "2026-11-25T18:30:25Z",
-        "subject": "Merge pull request #108 from charly-vibes/fix/brief-drift-head-churn",
-        "outcome": null
-      },
-      {
-        "sha": "ed31895e928109fa0f548cf527158095f529b28a",
-        "committed_at": "2026-11-25T18:26:47Z",
-        "subject": "fix(guards): normalize HEAD-dependent sections out of brief-drift",
         "outcome": null
       }
     ],
@@ -381,8 +381,8 @@
         "recent": 195
       }
     },
-    "head_sha": "1cf8e63402e6c035f70defe5c783f5a84607473d",
-    "source_hash": "9ac492df1723b38d3633e71c35056558fa2b53c7fea840d5ef3ef548f209871e",
+    "head_sha": "b6af27af13deb6d53dba808ff8af0943037a05d3",
+    "source_hash": "d1d577f54ad1f067abb07892d451fd19804adcb737863c73895a9180e30e203b",
     "warnings": [
       {
         "source": "beads",
