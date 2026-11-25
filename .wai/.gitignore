@@ -5,3 +5,6 @@
 # Machine-local pipeline + run state (transient; not decision history)
 pipeline-runs/
 projects/*/runs/
+
+# wai pipeline transient state (rewritten on every run — churns the worktree)
+resources/pipelines/.last-run
