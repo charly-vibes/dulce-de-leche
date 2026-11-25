@@ -1,0 +1,5 @@
+---
+tags: [pipeline-run:tdd-ro5-2026-11-25-ddl-sl9, pipeline-step:green]
+---
+
+GREEN: smallest correct change — two constants in src/gates/lefthook.rs. PRE_COMMIT_BLOCK's ddl-pretender-gate entry and DEFAULT_PRETENDER_GATE both become 'pretender check --staged --mode gate'; DEFAULT_PRETENDER_GATE gains a doc comment naming the DDL-sl9 reason (a pre-commit hook runs after git add, so the unstaged diff is empty by construction and --diff-only scans nothing). GateCommands::default derives from DEFAULT_PRETENDER_GATE, so the rendered block and the shipped default cannot drift; the .ddl/config.toml gates.pretender_gate override path is untouched. Rationale for --staged over --diff-only: it matches the hook context ('only check git-staged files') and preserves DDL-3fd's intent (a commit that does not touch files carrying pre-existing violations is not blocked). --staged and --diff-only are mutually exclusive in pretender, so the old flag cannot linger. Verified: cargo test --lib gates -> 29 passed / 0 failed; cargo test --test gates_command -> 3 passed / 0 failed; just test-full -> 29 test binaries, 0 failures.
