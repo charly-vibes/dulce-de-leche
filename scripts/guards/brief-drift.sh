@@ -23,6 +23,16 @@
 #   target/debug/podras when executable, else `podras` from PATH.
 #
 # Opt-in wiring: see the commented `brief-drift` stanza in lefthook.yml.
+#
+# Local divergence from charly-vibes/podras (upstream keeps this guard
+# commented-out opt-in and does not normalize HEAD-dependent content):
+# the comparison strips the `## Recent` git section, the JSON
+# `.data.recent` list, and `orphan_commits` signal text. Those sections
+# describe the current HEAD, so they change on every commit and would
+# make the gate unsatisfiable for consecutive commits (found 2026-11-25:
+# the gate passed only while HEAD sat exactly at the render's commit).
+# Real content drift — tickets, specs, non-orphan health signals — still
+# fails the gate. Pending upstreaming to charly-vibes/podras.
 
 set -euo pipefail
 
@@ -121,19 +131,32 @@ fi
 # JSON normalization: drop the wall-clock stamp, the content hash, per-source
 # warnings, and clone-local provenance (the curation file mtime, per-source
 # observed_at/staleness, and absolute-path details) from every row.
+# Local divergence: also drop `.data.recent` and the `orphan_commits` signal
+# text — both describe the current HEAD and churn on every commit (see the
+# header note); the orphan signal kind remains visible in signals count only
+# when it exists, so keep non-orphan signals comparable.
 normalize_json() {
     jq 'del(.data.generated_at, .data.source_hash, .data.warnings, .meta.author)
         | del(.data.curation.updated_at)
-        | (.data.sources[]? |= del(.observed_at, .staleness, .detail))' "$1"
+        | del(.data.recent)
+        | del(.data.head_sha)
+        | (.data.sources[]? |= del(.observed_at, .staleness, .detail))
+        | (.data.health.signals = ((.data.health.signals // []) | map(select(.kind != "orphan_commits"))))
+        | (.data.health.reason |= sub("orphan_commits:.*"; "orphan_commits: <head-churn omitted>"))' "$1"
 }
 
 # Markdown normalization: compare the narrative through the health section and
 # stop at the final sources/freshness section, whose mtimes and stamp are
 # clone-local. This detects content drift, not freshness drift.
+# Local divergence: skip the `## Recent` section (current-HEAD listing) and
+# orphan_commits lines (current-HEAD churn) — see the header note.
 normalize_markdown() {
     awk '
         /^## Sources & freshness/ { exit }
-        /^Freshness: generated_at / { next }
+        /^## Recent$/ { skip = 1; next }
+        /^## / { skip = 0 }
+        skip { next }
+        /orphan[-_ ]?commits/ { next }
         { print }
     ' "$1"
 }
