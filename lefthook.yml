@@ -10,6 +10,10 @@
 pre-commit:
   parallel: true
   commands:
+# sad:managed:start
+    sad-check:
+      run: sad check
+# sad:managed:end
     bd:
       run: bd hooks run pre-commit
     fmt-check:
@@ -18,9 +22,20 @@ pre-commit:
     lint:
       glob: "*.rs"
       run: just lint
+    # Committed-render drift gate (podras dogfood, DDL-3jes): fails when
+    # BRIEF.md / BRIEF.json no longer match a regeneration at the render's
+    # recorded as-of date. Kept outside the sad:managed block so `sad hooks
+    # install/uninstall` never owns it; regenerate renders with
+    # `podras brief --write`.
+    brief-drift:
+      run: scripts/guards/brief-drift.sh
 
 pre-push:
   commands:
+# sad:managed:start
+    sad-check:
+      run: sad check
+# sad:managed:end
     bd:
       run: bd hooks run pre-push
     gates:
