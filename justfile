@@ -39,7 +39,11 @@ install:
 test:
     #!/usr/bin/env bash
     set -uo pipefail
-    if [ ! -d .testaruda ]; then
+    # Init when the store is absent or half-initialized (empty dir / 0-byte
+    # store.db from a prior testaruda invocation): a schema-less store makes
+    # `testaruda exec` fail with 'Store has not been initialized' instead of
+    # degrading to cargo test.
+    if [ ! -s .testaruda/store.db ]; then
       testaruda init || { echo "❌ testaruda init failed" >&2; exit 1; }
     fi
     code=0

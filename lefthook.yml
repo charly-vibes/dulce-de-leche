@@ -10,6 +10,18 @@
 pre-commit:
   parallel: true
   commands:
+    # ddl:managed:start (pre-commit)
+    ddl-ah-check:
+      run: ah check
+    ddl-pretender-gate:
+      run: pretender check --diff-only --mode gate
+    ddl-spk-lint:
+      run: spk lint openspec/specs || test $? -eq 2
+    # ddl:managed:end (pre-commit)
+# ah:managed:start
+    ah-check:
+      run: ah check
+# ah:managed:end
 # sad:managed:start
     sad-check:
       run: sad check
@@ -37,6 +49,10 @@ pre-commit:
 
 pre-push:
   commands:
+    # ddl:managed:start (pre-push)
+    ddl-ah-check:
+      run: ah check
+    # ddl:managed:end (pre-push)
 # sad:managed:start
     sad-check:
       run: sad check

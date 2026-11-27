@@ -1,3 +1,24 @@
+<!-- DONT:START -->
+<!-- dont: managed block -->
+See .dont/ for grounded-claim workflow.
+
+<!-- provenance: generator=pretender version=0.12.3 source=DONT sha=62570e95 -->
+<!-- DONT:END -->
+
+<!-- ah:managed:start -->
+## espectacular
+
+Run `ah check` to verify spec-test correspondence before committing.
+
+- `ah check` — validate all deployed specs
+- `ah check --changes <name>` — validate with a change overlay
+- `ah init` — set up or refresh espectacular project files
+- `ah doctor` — diagnose setup issues
+- `ah explain <topic>` — playbook guidance for finding kinds and suggested actions
+- `ah doctor --enable <adapter>` — write adapter config into .espectacular/config.toml
+- `ah signals` — emit dont drift signals
+<!-- ah:managed:end -->
+
 <!-- PODRAS:START -->
 ## podras
 
@@ -11,7 +32,6 @@
 
 <!-- provenance: generator=podras version=0.13.2 source=PODRAS sha=1ace28e8 -->
 <!-- PODRAS:END -->
-
 
 <!-- WAI:START --># Workflow Tools
 
@@ -198,3 +218,21 @@ bd close <id>         # Complete work
 - **Full suite**: `just test-full` is the plain cargo test run. The push
   gate remains lefthook pre-push (testaruda select/exec + the other
   gates); selection is for fast feedback, never a gate substitute.
+<!-- DDL:START -->
+
+## dulce-de-leche (ddl v0.10.0)
+
+Orchestrator for the charly-vibes tool ecosystem. Run `ddl init` to
+install and configure all tools. Run `ddl status` for a health overview.
+
+Commands:
+- init     Bootstrap the toolset
+- install  Install a single tool
+- status   Show health overview
+- doctor   Run diagnostics
+- version  Show versions
+- upgrade  Update tools
+- migrate  Migrate configs
+- scope    Show active .ddl/
+
+<!-- DDL:END -->
