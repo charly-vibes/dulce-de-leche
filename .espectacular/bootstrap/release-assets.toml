@@ -4,3 +4,6 @@ archetype = "PF"
 status = "active"
 superseded_by = ""
 authored_with = "0.12.3"
+
+[tests]
+cargo = [{ flags = "test_release_ships_the_five_platform_assets", timeout_seconds = 120 }]

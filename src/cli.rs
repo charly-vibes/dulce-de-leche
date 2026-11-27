@@ -38,9 +38,17 @@ pub struct Args {
     pub command: Option<Commands>,
 }
 
+impl Args {
+    /// Whether `-q`/`--quiet` was passed: only errors should be shown.
+    pub fn is_quiet(&self) -> bool {
+        self.verbose_quiet.quiet
+    }
+}
+
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     /// Bootstrap the charly-vibes toolset — install, configure, and init
+    #[command(after_help = "Examples:\n  ddl init            # interactive bootstrap, all tools\n  ddl init --tools wai,dont")]
     Init {
         /// Comma-separated list of tools to install (default: all)
         #[arg(long, value_name = "TOOLS")]
@@ -59,6 +67,7 @@ pub enum Commands {
     },
 
     /// Install a single tool by name
+    #[command(after_help = "Examples:\n  ddl install wai\n  ddl install espectacular   # alias resolves to ah")]
     Install {
         /// Name of the tool to install (all managed tools are listed below;
         /// crate-name aliases like 'espectacular' also resolve)
@@ -67,9 +76,11 @@ pub enum Commands {
 
     /// Show the charly-vibes tool catalog — what exists, what it does,
     /// how to invoke it
+    #[command(after_help = "Examples:\n  ddl catalog\n  ddl catalog --json")]
     Catalog,
 
     /// Submit a feedback issue to the ddl repository
+    #[command(after_help = "Examples:\n  ddl feedback bug\n  ddl feedback bug --from-last-error --dry-run")]
     Feedback {
         /// Kind of issue (bug|feature|question|chore)
         kind: String,
@@ -88,9 +99,11 @@ pub enum Commands {
     },
 
     /// Show cross-tool health overview
+    #[command(after_help = "Examples:\n  ddl status\n  ddl status --json")]
     Status,
 
     /// Run detailed diagnostics across all tools
+    #[command(after_help = "Examples:\n  ddl doctor\n  ddl doctor --fix")]
     Doctor {
         /// Attempt to auto-fix detected issues
         #[arg(long)]
@@ -98,6 +111,7 @@ pub enum Commands {
     },
 
     /// Show versions of ddl and all managed tools
+    #[command(after_help = "Examples:\n  ddl version\n  ddl version --check")]
     Version {
         /// Check latest available versions (requires network)
         #[arg(long)]
@@ -105,12 +119,14 @@ pub enum Commands {
     },
 
     /// Update all tools to latest compatible versions
+    #[command(after_help = "Examples:\n  ddl upgrade\n  ddl upgrade wai")]
     Upgrade {
         /// Optional: upgrade a specific tool only
         tool: Option<String>,
     },
 
     /// Migrate existing configs under .ddl/
+    #[command(after_help = "Examples:\n  ddl migrate\n  ddl migrate --undo")]
     Migrate {
         /// Undo migration — restore previous layout
         #[arg(long)]
@@ -118,11 +134,13 @@ pub enum Commands {
     },
 
     /// Show which .ddl/ is active
+    #[command(after_help = "Examples:\n  ddl scope\n  ddl scope --json")]
     Scope,
 
     /// Guided first-time setup — walk from zero to a verified-initialized
     /// repo via the wizard step machine (pre-flight → migrate → scope →
     /// delegate → verify, backed by the exact `ddl init` code paths)
+    #[command(after_help = "Examples:\n  ddl setup\n  ddl setup --no-install")]
     Setup {
         /// Comma-separated list of tools to install (default: all)
         #[arg(long, value_name = "TOOLS")]
@@ -134,6 +152,7 @@ pub enum Commands {
     },
 
     /// Generate shell completions
+    #[command(after_help = "Examples:\n  ddl completions bash >> ~/.local/share/bash-completion/completions/ddl\n  ddl completions zsh > \"${fpath[1]}/_ddl\"")]
     Completions {
         /// The shell to generate completions for
         #[arg(value_enum)]
@@ -172,7 +191,8 @@ impl Args {
             .to_string();
         cmd = cmd.mut_subcommand("install", |c| {
             c.after_help(format!(
-                "Managed tools: {tools_line}\n\
+                "Examples:\n  ddl install wai\n  ddl install espectacular   # alias resolves to ah\n\n\
+                 Managed tools: {tools_line}\n\
                  Crate-name aliases resolve to their tool (e.g. \
                  'espectacular' → ah). Run `ddl catalog` for descriptions \
                  and install methods.\n\n{scopes_note}"
@@ -180,7 +200,8 @@ impl Args {
         });
         cmd = cmd.mut_subcommand("init", |c| {
             c.after_help(format!(
-                "--tools accepts a comma-separated subset (default: all): {tools_line}\
+                "Examples:\n  ddl init            # interactive bootstrap, all tools\n  ddl init --tools wai,dont\n\n\
+                 --tools accepts a comma-separated subset (default: all): {tools_line}\
                  \n\n{scopes_note}"
             ))
         });

@@ -4,3 +4,6 @@ archetype = "PF"
 status = "active"
 superseded_by = ""
 authored_with = "0.12.3"
+
+[tests]
+cargo = [{ flags = "test_check_status_marks_outdated_with_update_available", timeout_seconds = 120 }]

@@ -4,3 +4,6 @@ archetype = "PF"
 status = "active"
 superseded_by = ""
 authored_with = "0.12.3"
+
+[tests]
+cargo = [{ flags = "init_command_wai_ah_and_testaruda_run_init", timeout_seconds = 120 }]

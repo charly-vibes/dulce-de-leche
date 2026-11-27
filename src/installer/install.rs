@@ -413,3 +413,75 @@ pub(crate) fn install_npm(tool: &Tool, verbose: bool) -> Result<()> {
         )))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::platform::{Arch, Os};
+
+    fn platform(os: Os, arch: Arch) -> Platform {
+        Platform { os, arch }
+    }
+
+    #[test]
+    fn test_binary_asset_target_covers_release_matrix() {
+        assert_eq!(
+            binary_asset_target(&platform(Os::Linux, Arch::Amd64)).unwrap(),
+            "linux_amd64"
+        );
+        assert_eq!(
+            binary_asset_target(&platform(Os::Linux, Arch::Arm64)).unwrap(),
+            "linux_arm64"
+        );
+        assert_eq!(
+            binary_asset_target(&platform(Os::Macos, Arch::Amd64)).unwrap(),
+            "darwin_amd64"
+        );
+        assert_eq!(
+            binary_asset_target(&platform(Os::Macos, Arch::Arm64)).unwrap(),
+            "darwin_arm64"
+        );
+        assert_eq!(
+            binary_asset_target(&platform(Os::Windows, Arch::Amd64)).unwrap(),
+            "windows_amd64"
+        );
+    }
+
+    #[test]
+    fn test_binary_download_url_matches_release_asset_shape() {
+        let tool = crate::platform::find_tool("wai").expect("wai is managed");
+        let url = binary_download_url(
+            tool,
+            "v2026.11.17",
+            "2026.11.17",
+            "linux_amd64",
+            &platform(Os::Linux, Arch::Amd64),
+        );
+        assert_eq!(
+            url,
+            "https://github.com/charly-vibes/wai/releases/download/v2026.11.17/wai_2026.11.17_linux_amd64.tar.gz"
+        );
+        // Windows uses .zip and an .exe binary name.
+        let win = binary_download_url(
+            tool,
+            "v2026.11.17",
+            "2026.11.17",
+            "windows_amd64",
+            &platform(Os::Windows, Arch::Amd64),
+        );
+        assert!(win.ends_with(".zip"), "windows asset must be .zip, got {win}");
+        // Asset-prefix override (beads ships beads_* archives for bd).
+        let bd = crate::platform::find_tool("bd").expect("bd is managed");
+        let bd_url = binary_download_url(
+            bd,
+            "v1.0.0",
+            "1.0.0",
+            "linux_amd64",
+            &platform(Os::Linux, Arch::Amd64),
+        );
+        assert!(
+            bd_url.contains("/beads_1.0.0_linux_amd64"),
+            "bd must use the beads asset prefix, got {bd_url}"
+        );
+    }
+}

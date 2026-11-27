@@ -4,3 +4,6 @@ archetype = "PF"
 status = "active"
 superseded_by = ""
 authored_with = "0.12.3"
+
+[tests]
+cargo = [{ flags = "test_concurrent_manifest_updates_preserve_all_entries", timeout_seconds = 120 }, { flags = "test_readers_never_observe_partial_manifest_during_replacement", timeout_seconds = 120 }]

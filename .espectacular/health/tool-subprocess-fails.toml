@@ -4,3 +4,6 @@ archetype = "PF"
 status = "active"
 superseded_by = ""
 authored_with = "0.12.3"
+
+[tests]
+cargo = [{ flags = "test_doctor_tool_subprocess_fail_does_not_abort_fleet", timeout_seconds = 120 }]

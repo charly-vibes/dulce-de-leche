@@ -132,6 +132,18 @@ fn test_probe_version_at_finds_version_in_ddl_bin() {
 // --- DDL-6zn.3: init-cascade semantics ---------------------------------
 
 #[test]
+fn init_command_wai_ah_and_testaruda_run_init() {
+    // ah-init/wai-init/testaruda-init contracts (bootstrap spec): the
+    // installed tool's own `init` runs right after installation.
+    assert_eq!(init_command("wai", false), Some(("wai", vec!["init"])));
+    assert_eq!(init_command("ah", false), Some(("ah", vec!["init"])));
+    assert_eq!(
+        init_command("testaruda", false),
+        Some(("testaruda", vec!["init"]))
+    );
+}
+
+#[test]
 fn init_command_per_tool_and_mode() {
     // dont runs `init` (creates project state) — the old `prime --plain`
     // failed circularly: no .dont/ project exists until dont init runs.
@@ -255,4 +267,90 @@ fn test_verbose_print_accepts_bool() {
     // Must not panic for either value
     verbose_print(true, "trace message");
     verbose_print(false, "trace message");
+}
+
+#[test]
+fn test_fallback_after_binary_failure_is_cargo_only() {
+    // bootstrap/binary-download-returns-404 + -without-cargo +
+    // no-release-binary-and-no-cargo: cargo is the ONLY fallback (DDL-ei3);
+    // without cargo there is no further install method (None → the caller
+    // fails naming both remedies).
+    use crate::installer::method::{fallback_after_binary_failure, InstallMethod};
+    assert_eq!(
+        fallback_after_binary_failure(true),
+        Some(InstallMethod::Cargo)
+    );
+    assert_eq!(fallback_after_binary_failure(false), None);
+}
+
+#[test]
+fn test_check_prerequisites_pass_for_available_methods() {
+    use crate::installer::method::{best_install_method, InstallMethod};
+    // Standard environments (dev sandbox, CI ubuntu runners) ship curl and
+    // cargo; the methods' prerequisite gates must accept them.
+    InstallMethod::Binary
+        .check_prerequisites()
+        .expect("binary download prerequisites (curl or wget) must be met");
+    InstallMethod::Cargo
+        .check_prerequisites()
+        .expect("cargo prerequisites must be met");
+    InstallMethod::Skipped.check_prerequisites().expect("skipped is always ok");
+    // npm tools (incitaciones) always take the npm method.
+    let npm_tool = crate::platform::MANAGED_TOOLS
+        .iter()
+        .find(|t| t.npm_package.is_some())
+        .expect("registry must contain an npm-distributed tool");
+    assert_eq!(
+        best_install_method(npm_tool, &crate::platform::Platform::detect().unwrap()),
+        InstallMethod::Npm
+    );
+}
+
+#[test]
+fn test_upgrade_decision_policy_covers_up_to_date_and_rejections() {
+    // version-management/upgrade-*: the shared release-age policy decides
+    // UpToDate / Deferred (cool-down) / Upgrade deterministically.
+    use crate::installer::method::{upgrade_decision, ReleaseCandidate, UpgradeDecision};
+    use crate::manifest::LockEntry;
+    let current = LockEntry {
+        tool: "wai".to_string(),
+        version: "2026.1.0".to_string(),
+        artifact_url: "https://example.com/wai.tar.gz".to_string(),
+        sha256: "abc".to_string(),
+        recorded_epoch_day: 20_000,
+        contract_sha256: None,
+    };
+    let candidate = ReleaseCandidate {
+        version: "2026.1.0".to_string(),
+        artifact_url: "https://example.com/wai.tar.gz".to_string(),
+        sha256: "abc".to_string(),
+        published_epoch_day: 20_000,
+    };
+    assert!(
+        matches!(
+            upgrade_decision(&current, &candidate, 14, 20_010),
+            Ok(UpgradeDecision::UpToDate)
+        ),
+        "identical artifact must be UpToDate"
+    );
+    let newer = ReleaseCandidate {
+        version: "2026.2.0".to_string(),
+        artifact_url: "https://example.com/wai-2.tar.gz".to_string(),
+        sha256: "def".to_string(),
+        published_epoch_day: 20_008,
+    };
+    assert!(
+        matches!(
+            upgrade_decision(&current, &newer, 14, 20_010),
+            Ok(UpgradeDecision::Deferred { .. })
+        ),
+        "release younger than the cool-down must be Deferred, not installed"
+    );
+    assert!(
+        matches!(
+            upgrade_decision(&current, &newer, 14, 20_030),
+            Ok(UpgradeDecision::Upgrade { .. })
+        ),
+        "mature new release must upgrade"
+    );
 }

@@ -4,3 +4,6 @@ archetype = "PF"
 status = "active"
 superseded_by = ""
 authored_with = "0.12.3"
+
+[tests]
+cargo = [{ flags = "failing_tool_init_fails_run_with_resume_summary", timeout_seconds = 120 }]

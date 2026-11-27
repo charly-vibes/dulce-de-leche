@@ -4,3 +4,6 @@ archetype = "PF"
 status = "active"
 superseded_by = ""
 authored_with = "0.12.3"
+
+[tests]
+cargo = [{ flags = "test_cache_roundtrip_preserves_constraints", timeout_seconds = 120 }, { flags = "test_load_falls_back_to_cache_when_fetch_fails", timeout_seconds = 120 }]

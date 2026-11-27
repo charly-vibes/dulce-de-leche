@@ -34,7 +34,13 @@ pub enum Os {
 
 impl Os {
     pub fn detect() -> Option<Self> {
-        match std::env::consts::OS {
+        Self::from_os_str(std::env::consts::OS)
+    }
+
+    /// Map a raw OS string to [`Os`]; unsupported platforms (32-bit,
+    /// FreeBSD, …) return `None` (bootstrap/unsupported-platform).
+    pub fn from_os_str(os: &str) -> Option<Self> {
+        match os {
             "macos" => Some(Self::Macos),
             "linux" => Some(Self::Linux),
             "windows" => Some(Self::Windows),
@@ -66,7 +72,13 @@ pub enum Arch {
 
 impl Arch {
     pub fn detect() -> Option<Self> {
-        match std::env::consts::ARCH {
+        Self::from_arch_str(std::env::consts::ARCH)
+    }
+
+    /// Map a raw architecture string to [`Arch`]; unsupported
+    /// architectures return `None`.
+    pub fn from_arch_str(arch: &str) -> Option<Self> {
+        match arch {
             "x86_64" => Some(Self::Amd64),
             "aarch64" => Some(Self::Arm64),
             _ => None,
@@ -126,4 +138,47 @@ fn which(cmd: &str) -> Option<std::path::PathBuf> {
         }
         None
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_os_str_covers_all_supported_platforms() {
+        assert_eq!(Os::from_os_str("macos"), Some(Os::Macos));
+        assert_eq!(Os::from_os_str("linux"), Some(Os::Linux));
+        assert_eq!(Os::from_os_str("windows"), Some(Os::Windows));
+        // 32-bit / FreeBSD / unknown → unsupported, no Platform can be built.
+        assert_eq!(Os::from_os_str("freebsd"), None);
+        assert_eq!(Os::from_os_str(""), None);
+    }
+
+    #[test]
+    fn test_arch_str_covers_amd64_and_arm64_only() {
+        assert_eq!(Arch::from_arch_str("x86_64"), Some(Arch::Amd64));
+        assert_eq!(Arch::from_arch_str("aarch64"), Some(Arch::Arm64));
+        assert_eq!(Arch::from_arch_str("armv7"), None, "32-bit is unsupported");
+        assert_eq!(Arch::from_arch_str("riscv64"), None);
+    }
+
+    #[test]
+    fn test_platform_naming_matrix_matches_release_asset_keys() {
+        // Drift note (DDL-oymq): the contracts text says "macos-*"; the
+        // shipped convention (release.yml asset keys, download URLs) is
+        // darwin/windows/linux + amd64/arm64. This pins the actual names.
+        let p = |os: Os, arch: Arch| Platform { os, arch }.as_str();
+        assert_eq!(p(Os::Macos, Arch::Arm64), "darwin-arm64");
+        assert_eq!(p(Os::Macos, Arch::Amd64), "darwin-amd64");
+        assert_eq!(p(Os::Linux, Arch::Arm64), "linux-arm64");
+        assert_eq!(p(Os::Linux, Arch::Amd64), "linux-amd64");
+        assert_eq!(p(Os::Windows, Arch::Amd64), "windows-amd64");
+    }
+
+    #[test]
+    fn test_detect_succeeds_on_this_host() {
+        // This repo's supported hosts; the release targets above are the
+        // matrix this pins.
+        assert!(Platform::detect().is_some(), "host platform must be detectable");
+    }
 }

@@ -4,3 +4,6 @@ archetype = "PF"
 status = "active"
 superseded_by = ""
 authored_with = "0.12.3"
+
+[tests]
+cargo = [{ flags = "test_platform_naming_matrix_matches_release_asset_keys", timeout_seconds = 120 }]

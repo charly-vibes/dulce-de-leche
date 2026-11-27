@@ -116,7 +116,27 @@ fn check_tool_status(
         "not installed".to_string()
     };
 
-    let latest = latest_versions.get(tool.name);
+    check_status_with(
+        installed,
+        &version,
+        tool.name,
+        latest_versions,
+        network_ok,
+        any_outdated,
+    )
+}
+
+/// Pure core of [`check_tool_status`]: computes the status line from an
+/// already-resolved install state (unit-testable without probing the env).
+fn check_status_with(
+    installed: bool,
+    version: &str,
+    tool_name: &str,
+    latest_versions: &std::collections::HashMap<&'static str, String>,
+    network_ok: bool,
+    any_outdated: &mut bool,
+) -> (bool, String, String) {
+    let latest = latest_versions.get(tool_name);
     let status = if !installed {
         "".to_string()
     } else if let Some(lv) = latest {
@@ -132,7 +152,7 @@ fn check_tool_status(
     } else {
         "".to_string()
     };
-    (installed, version, status)
+    (installed, version.to_string(), status)
 }
 
 /// Human `--check` pass: query latest versions and print per-tool status.
@@ -194,9 +214,81 @@ pub fn cmd_version(check: bool, args: &crate::cli::Args) -> Result<()> {
     if args.is_json() {
         return version_json(check);
     }
-    human_listing();
+    if !args.is_quiet() {
+        human_listing();
+    }
     if check {
         check_updates_human()?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::platform::MANAGED_TOOLS;
+    use std::collections::HashMap;
+
+    fn latest(entries: &[(&'static str, &str)]) -> HashMap<&'static str, String> {
+        entries
+            .iter()
+            .map(|(k, v)| (*k, v.to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn test_check_status_marks_outdated_with_update_available() {
+        let m = latest(&[("wai", "9.9.9")]);
+        let mut any_outdated = false;
+        let (installed, version, status) =
+            check_status_with(true, "2026.1.0", "wai", &m, true, &mut any_outdated);
+        assert!(installed);
+        assert_eq!(status, "update available: v9.9.9");
+        assert!(any_outdated, "outdated tool must set any_outdated");
+    }
+
+    #[test]
+    fn test_check_status_up_to_date_when_versions_match() {
+        let m = latest(&[("wai", "2026.1.0")]);
+        let mut any_outdated = false;
+        let (_, _, status) =
+            check_status_with(true, "2026.1.0", "wai", &m, true, &mut any_outdated);
+        assert_eq!(status, "up to date");
+        assert!(!any_outdated);
+    }
+
+    #[test]
+    fn test_check_status_offline_reports_no_updates_and_exits_clean() {
+        // Network unavailable: empty latest_versions + network_ok=false.
+        // No tool may be marked outdated, so `ddl version --check` exits Ok.
+        let m = HashMap::new();
+        let mut any_outdated = false;
+        let (_, _, status) =
+            check_status_with(true, "2026.1.0", "wai", &m, false, &mut any_outdated);
+        assert_eq!(status, "");
+        assert!(!any_outdated, "offline check must not mark tools outdated");
+    }
+
+    #[test]
+    fn test_check_status_not_installed_reports_empty_status() {
+        let mut any_outdated = false;
+        let (installed, version, status) =
+            check_status_with(false, "not installed", "wai", &HashMap::new(), true, &mut any_outdated);
+        assert!(!installed);
+        assert_eq!(version, "not installed");
+        assert_eq!(status, "");
+        assert!(!any_outdated);
+    }
+
+    #[test]
+    fn test_check_tool_status_real_tool_round_trips() {
+        // The probe-based wrapper must produce the same shape for a real
+        // managed tool: (installed flag, version string, status string).
+        let tool = &MANAGED_TOOLS[0];
+        let mut any_outdated = false;
+        let (installed, version, _status) =
+            check_tool_status(tool, &HashMap::new(), false, &mut any_outdated);
+        assert_eq!(version.is_empty(), false);
+        assert_eq!(installed, crate::installer::is_tool_installed(tool.name));
+    }
 }

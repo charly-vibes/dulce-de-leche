@@ -4,3 +4,6 @@ archetype = "PF"
 status = "active"
 superseded_by = ""
 authored_with = "0.12.3"
+
+[tests]
+cargo = [{ flags = "test_fallback_after_binary_failure_is_cargo_only", timeout_seconds = 120 }, { flags = "test_check_prerequisites_pass_for_available_methods", timeout_seconds = 120 }]

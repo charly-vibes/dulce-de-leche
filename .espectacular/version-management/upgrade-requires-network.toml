@@ -4,3 +4,6 @@ archetype = "PF"
 status = "active"
 superseded_by = ""
 authored_with = "0.12.3"
+
+[tests]
+cargo = [{ flags = "test_upgrade_summary_reports_all_failed_with_network_hint", timeout_seconds = 120 }]

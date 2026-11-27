@@ -4,3 +4,6 @@ archetype = "PF"
 status = "active"
 superseded_by = ""
 authored_with = "0.12.3"
+
+[tests]
+cargo = [{ flags = "test_embedded_matrix_matches_manifest_embedded_json", timeout_seconds = 120 }, { flags = "test_embedded_matrix_constraints_are_parseable", timeout_seconds = 120 }]

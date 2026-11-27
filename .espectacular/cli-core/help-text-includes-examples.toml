@@ -4,3 +4,6 @@ archetype = "PF"
 status = "active"
 superseded_by = ""
 authored_with = "0.12.3"
+
+[tests]
+cargo = [{ flags = "test_cli_every_command_help_shows_usage_and_examples", timeout_seconds = 120 }]

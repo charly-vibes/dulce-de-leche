@@ -4,3 +4,6 @@ archetype = "PF"
 status = "active"
 superseded_by = ""
 authored_with = "0.12.3"
+
+[tests]
+cargo = [{ flags = "test_status_json_output", timeout_seconds = 120 }, { flags = "test_status_json_carries_tool_fields", timeout_seconds = 120 }]
