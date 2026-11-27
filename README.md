@@ -78,7 +78,7 @@ brew install dulce-de-leche
 curl -fsSL https://raw.githubusercontent.com/charly-vibes/dulce-de-leche/main/install.sh | bash
 
 # Pin a specific version instead of latest:
-curl -fsSL https://raw.githubusercontent.com/charly-vibes/dulce-de-leche/main/install.sh | DDL_VERSION=0.10.0 bash
+curl -fsSL https://raw.githubusercontent.com/charly-vibes/dulce-de-leche/main/install.sh | DDL_VERSION=0.11.0 bash
 
 # Verify it runs
 ddl --version
