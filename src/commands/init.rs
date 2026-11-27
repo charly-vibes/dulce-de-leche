@@ -58,7 +58,29 @@ fn init_tail_phase(
     force_wai(args);
     let incit_selected = selected.iter().any(|t| t == "incitaciones");
     let incit_tracked = ddl_dir.manifest.get_tool("incitaciones").is_some();
-    ensure_incitaciones_skills(args, args.yes || incit_selected || incit_tracked)
+    ensure_incitaciones_skills(args, args.yes || incit_selected || incit_tracked)?;
+
+    // DDL-76lm (openspec proposal): the status record is refreshed on
+    // `ddl init`, so a freshly gated repo is born doctor-clean — the
+    // `ddl.repo.status-fresh` check owes a record as soon as a tracked
+    // brief/beads store exists, and `init --gates` stages that store.
+    // Advisory (DDL-6ox posture): a refresh failure warns but never
+    // fails the init; `ddl status --refresh` names the remaining step.
+    let repo_root = std::env::current_dir().map_err(DdlError::Io)?;
+    match crate::repo_status::run_refresh(&repo_root, &ddl_dir.path, &ddl_dir.manifest) {
+        Ok(report) => {
+            if !args.is_json() {
+                for step in &report.steps {
+                    println!("  ✓ status: {}: {}", step.name, step.detail);
+                }
+            }
+        }
+        Err(e) if !args.is_json() => {
+            println!("  ⚠ status record not written (advisory): {e}");
+        }
+        Err(_) => {}
+    }
+    Ok(())
 }
 
 pub fn cmd_init(
