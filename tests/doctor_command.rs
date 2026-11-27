@@ -586,7 +586,10 @@ fn test_blocks_check_warns_when_scoped_openspec_published_nothing() {
     // openspec/ exists (genesis-style: used, not necessarily pinned) but
     // carries neither artifact.
     let findings = openspec_findings(
-        &[("AGENTS.md", block_doc().as_str()), ("openspec/changes/.keep", "")],
+        &[
+            ("AGENTS.md", block_doc().as_str()),
+            ("openspec/changes/.keep", ""),
+        ],
         None,
     );
     assert_eq!(
@@ -634,7 +637,10 @@ fn test_blocks_check_scopes_openspec_by_pin() {
 
 #[test]
 fn test_blocks_check_reports_retired_openspec_block_once() {
-    let agents = format!("{}<!-- OPENSPEC:START -->\n<!-- OPENSPEC:END -->\n", block_doc());
+    let agents = format!(
+        "{}<!-- OPENSPEC:START -->\n<!-- OPENSPEC:END -->\n",
+        block_doc()
+    );
     let findings = openspec_findings(&[("AGENTS.md", agents.as_str())], None);
     assert_eq!(
         findings.len(),

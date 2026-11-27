@@ -848,8 +848,7 @@ impl DoctorCheck for RepoHooksPathCheck {
         // git expands a leading `~/` in core.hooksPath against the user home.
         let expanded = if value == "~" || value.starts_with("~/") {
             match std::env::var_os("HOME") {
-                Some(home) => std::path::PathBuf::from(home)
-                    .join(value.trim_start_matches("~/")),
+                Some(home) => std::path::PathBuf::from(home).join(value.trim_start_matches("~/")),
                 None => std::path::PathBuf::from(&value),
             }
         } else {
@@ -916,16 +915,16 @@ impl DoctorCheck for RepoJustCiCheck {
             let line = line.trim_start();
             // recipe syntax: `ci:` or `ci args:`, optional `@` prefix,
             // and `just ci` inside a recipe line also implies it (aliases).
-            if line.starts_with('#') || line.starts_with('@') && !line.trim_start_matches('@').starts_with("ci") {
+            if line.starts_with('#')
+                || line.starts_with('@') && !line.trim_start_matches('@').starts_with("ci")
+            {
                 return false;
             }
             let stripped = line.trim_start_matches('@');
             let mut tokens = stripped.split_whitespace();
             let head = tokens.next().unwrap_or("");
             head == "ci:" || head == "ci"
-        }) || text
-            .lines()
-            .any(|l| l.contains("just ci"));
+        }) || text.lines().any(|l| l.contains("just ci"));
         if has_ci {
             return Ok(vec![]);
         }
@@ -1001,7 +1000,10 @@ impl DoctorCheck for RepoReadmeFrontdoorCheck {
             missing.push("## Commands");
         }
         // 8. FAQ — inline section or a link to the faq/troubleshooting page
-        if !has("FAQ") && !text.contains("docs/src/faq.md") && !text.contains("docs/src/troubleshooting.md") {
+        if !has("FAQ")
+            && !text.contains("docs/src/faq.md")
+            && !text.contains("docs/src/troubleshooting.md")
+        {
             missing.push("## FAQ (or a docs/src/faq.md|troubleshooting.md link)");
         }
         if missing.is_empty() {
@@ -1132,7 +1134,10 @@ mod tests {
                 "missing '{section}' must be listed, got: {detail}"
             );
         }
-        assert!(!detail.contains("Install"), "present section must not be listed");
+        assert!(
+            !detail.contains("Install"),
+            "present section must not be listed"
+        );
     }
 
     #[test]

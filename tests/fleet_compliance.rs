@@ -338,9 +338,9 @@ fn doctor_flags_missing_and_drifted_session_protocol_block() {
     let diags = doctor_diagnostics(dr);
     let drifted = items(&diags, "ddl.repo.blocks", Some("warn"));
     assert!(
-        drifted.iter().any(|i| i["detail"]
-            .as_str()
-            .is_some_and(|d| d.contains("drifted"))),
+        drifted
+            .iter()
+            .any(|i| i["detail"].as_str().is_some_and(|d| d.contains("drifted"))),
         "drifted span must be flagged: {drifted:?}"
     );
 }
@@ -353,13 +353,23 @@ fn real_git_repo() -> (tempfile::TempDir, std::path::PathBuf) {
     let root = temp.path().to_path_buf();
     let mut cmd = std::process::Command::new("git");
     for var in [
-        "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY",
-        "GIT_COMMON_DIR", "GIT_CONFIG", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM",
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_COMMON_DIR",
+        "GIT_CONFIG",
+        "GIT_CONFIG_GLOBAL",
+        "GIT_CONFIG_SYSTEM",
         "GIT_NAMESPACE",
     ] {
         cmd.env_remove(var);
     }
-    let out = cmd.args(["init", "-q"]).current_dir(&root).output().unwrap();
+    let out = cmd
+        .args(["init", "-q"])
+        .current_dir(&root)
+        .output()
+        .unwrap();
     assert!(out.status.success());
     (temp, root)
 }
@@ -394,7 +404,16 @@ fn beads_export_gitignore_negation_makes_plain_add_work() {
         .output()
         .unwrap();
     let _ = std::process::Command::new("git")
-        .args(["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "init"])
+        .args([
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "init",
+        ])
         .current_dir(&root)
         .env("GIT_CONFIG_GLOBAL", &global_cfg)
         .output()
@@ -540,8 +559,7 @@ fn gates_wiring_generated_blocks_chain_bd_hooks() {
     apply_gates_wiring_with_sad(root, None).unwrap();
     let lefthook = std::fs::read_to_string(root.join("lefthook.yml")).unwrap();
     assert!(
-        lefthook.contains("bd hooks run pre-commit")
-            && lefthook.contains("bd hooks run pre-push"),
+        lefthook.contains("bd hooks run pre-commit") && lefthook.contains("bd hooks run pre-push"),
         "generated lefthook.yml must chain bd hooks for both hooks: {lefthook}"
     );
 
