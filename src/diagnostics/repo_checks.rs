@@ -248,6 +248,14 @@ impl DoctorCheck for RepoAgentBlocksCheck {
                 if let Some(finding) = retired_openspec_block_finding(text, openspec_installed) {
                     problems.push(finding);
                 }
+                // DDL-9kz.1: the session-close protocol block is ddl-owned.
+                // Report a missing span so the ritual becomes visible to
+                // harnesses that stop at the repo root, and a drifted span
+                // so a mangled ritual hides nothing (the drift evidence is
+                // the product). The writer is `ddl init --gates`.
+                if let Some(finding) = session_protocol_finding(text) {
+                    problems.push(finding);
+                }
             }
         }
 
@@ -257,6 +265,41 @@ impl DoctorCheck for RepoAgentBlocksCheck {
 
         Ok(problems)
     }
+}
+
+/// DDL-9kz.1: the session-close protocol span in AGENTS.md is ddl-owned.
+/// Missing markers → one warning; markers present but the body no longer
+/// matches [`crate::session_protocol_block`] → one drifted warning. A
+/// conforming span emits nothing.
+fn session_protocol_finding(text: &str) -> Option<LintResult> {
+    let start = crate::SESSION_PROTOCOL_MARKER;
+    let end = "<!-- SESSION-PROTOCOL:END -->";
+    let Some(begin) = text.find(start) else {
+        return Some(LintResult::with_fix(
+            "AGENTS.md missing the session-close protocol block — harnesses \
+             that stop at the repo root never see the close ritual",
+            Severity::Warning,
+            "ddl init --gates",
+        ));
+    };
+    let Some(end_idx) = text[begin..].find(end) else {
+        return Some(LintResult::with_fix(
+            "AGENTS.md session-close protocol block is truncated (START \
+             marker without END)",
+            Severity::Warning,
+            "ddl init --gates",
+        ));
+    };
+    let span = &text[begin..begin + end_idx + end.len()];
+    if span != crate::session_protocol_block() {
+        return Some(LintResult::with_fix(
+            "AGENTS.md session-close protocol block has drifted from the \
+             canonical ritual text",
+            Severity::Warning,
+            "ddl init --gates (rewrites the span in place)",
+        ));
+    }
+    None
 }
 
 /// openspec 1.0.0 ("The OPSX Release", PR #578) retired this managed block: it
@@ -760,5 +803,347 @@ impl DoctorCheck for IncitacionesSkillsCheck {
                 Severity::Warning,
             )])
         }
+    }
+}
+
+/// Detect a `core.hooksPath` that points nowhere (DDL-cm1d).
+///
+/// The DDL-uce recurrence class: a copied or renamed checkout left a stale
+/// repo-local `core.hooksPath` at a nonexistent path, so NO git hook ran in
+/// that checkout — the whole gate chain (lefthook, bd validation, kaya
+/// capture) was silently dead while every other sibling repo stayed healthy.
+/// The recurrence risk is per-clone, which is exactly what a per-repo doctor
+/// check can catch at every doctor run.
+///
+/// Reads the effective `core.hooksPath` (repo-local and global, as git
+/// resolves it), expands `~/`, resolves a relative value against the repo
+/// root (git's hook lookup behavior), and flags a value whose directory does
+/// not exist at `Severity::Error` — with no hooksPath at all (the common
+/// state) it emits nothing.
+pub struct RepoHooksPathCheck;
+
+impl DoctorCheck for RepoHooksPathCheck {
+    fn name(&self) -> &'static str {
+        "ddl.repo.hooks-path"
+    }
+    fn description(&self) -> &'static str {
+        "Detect a core.hooksPath that points nowhere (hooks silently dead)"
+    }
+    fn run(
+        &self,
+        repo_root: &Path,
+    ) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
+        let Some(root) = find_git_root(repo_root) else {
+            return Ok(vec![]);
+        };
+        let out = std::process::Command::new("git")
+            .args(["config", "--get", "core.hooksPath"])
+            .current_dir(&root)
+            .output()
+            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+        let value = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if value.is_empty() {
+            return Ok(vec![]);
+        }
+        // git expands a leading `~/` in core.hooksPath against the user home.
+        let expanded = if value == "~" || value.starts_with("~/") {
+            match std::env::var_os("HOME") {
+                Some(home) => std::path::PathBuf::from(home)
+                    .join(value.trim_start_matches("~/")),
+                None => std::path::PathBuf::from(&value),
+            }
+        } else {
+            std::path::PathBuf::from(&value)
+        };
+        // A relative hooksPath is resolved by git against the repo root.
+        let target = if expanded.is_absolute() {
+            expanded
+        } else {
+            root.join(expanded)
+        };
+        if target.exists() {
+            return Ok(vec![]);
+        }
+        Ok(vec![LintResult::with_fix(
+            format!(
+                "core.hooksPath '{value}' points nowhere — no git hook (gates, \
+                 bd validation, record capture) runs in this checkout"
+            ),
+            Severity::Error,
+            "fix: git config core.hooksPath <existing dir> or unset it \
+             (per-clone risk — a copied .git/config carried the stale value)",
+        )])
+    }
+}
+
+/// Check that the repo wires the standard `just ci` gate (DDL-9kz.6.1).
+///
+/// The fleet standard runs every gate through `just ci` (parity between
+/// local and CI, docs/standardization.md §9). A repo with no justfile, or a
+/// justfile without a `ci` recipe, silently opts out of the standard gate
+/// while still looking ddl-initialized. Advisory: not every repo must adopt
+/// just, but the choice should be visible to the doctor reader.
+pub struct RepoJustCiCheck;
+
+impl DoctorCheck for RepoJustCiCheck {
+    fn name(&self) -> &'static str {
+        "ddl.repo.just-ci"
+    }
+    fn description(&self) -> &'static str {
+        "Check that the repo's justfile carries the standard ci recipe"
+    }
+    fn run(
+        &self,
+        repo_root: &Path,
+    ) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
+        let Some(root) = find_git_root(repo_root) else {
+            return Ok(vec![]);
+        };
+        let path = ["justfile", "Justfile", ".justfile"]
+            .iter()
+            .map(|f| root.join(f))
+            .find(|p| p.is_file());
+        let Some(path) = path else {
+            return Ok(vec![LintResult::with_fix(
+                "no justfile — the standard 'just ci' gate is not wired",
+                Severity::Warning,
+                "add a justfile with a ci recipe (docs/standardization.md §9)",
+            )]);
+        };
+        let text = std::fs::read_to_string(&path)
+            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+        let has_ci = text.lines().any(|line| {
+            let line = line.trim_start();
+            // recipe syntax: `ci:` or `ci args:`, optional `@` prefix,
+            // and `just ci` inside a recipe line also implies it (aliases).
+            if line.starts_with('#') || line.starts_with('@') && !line.trim_start_matches('@').starts_with("ci") {
+                return false;
+            }
+            let stripped = line.trim_start_matches('@');
+            let mut tokens = stripped.split_whitespace();
+            let head = tokens.next().unwrap_or("");
+            head == "ci:" || head == "ci"
+        }) || text
+            .lines()
+            .any(|l| l.contains("just ci"));
+        if has_ci {
+            return Ok(vec![]);
+        }
+        Ok(vec![LintResult::with_fix(
+            "justfile has no ci recipe — the standard gate recipe is missing",
+            Severity::Warning,
+            "add a ci recipe running the standard pipeline (docs/standardization.md §9)",
+        )])
+    }
+}
+
+/// Check the README front-door contract (DDL-udq, docs/standardization.md §5.1).
+///
+/// Mandatory for every ddl-managed tool (recommended elsewhere): a cold
+/// reader must be able to decide, run once, and find recurring answers from
+/// the README alone. The check verifies the required section headings of the
+/// v0.4 front-door contract and aggregates every miss into one finding that
+/// names them all — the fix points at the canonical skeleton.
+pub struct RepoReadmeFrontdoorCheck;
+
+impl DoctorCheck for RepoReadmeFrontdoorCheck {
+    fn name(&self) -> &'static str {
+        "ddl.repo.readme-frontdoor"
+    }
+    fn description(&self) -> &'static str {
+        "Check README against the front-door contract (§5.1)"
+    }
+    fn run(
+        &self,
+        repo_root: &Path,
+    ) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
+        let Some(root) = find_git_root(repo_root) else {
+            return Ok(vec![]);
+        };
+        let path = ["README.md", "readme.md", "Readme.md"]
+            .iter()
+            .map(|f| root.join(f))
+            .find(|p| p.is_file());
+        let Some(path) = path else {
+            return Ok(vec![LintResult::with_fix(
+                "no README.md — the front door is missing entirely (§5.1)",
+                Severity::Warning,
+                "add a README.md per the §5.1 front-door skeleton",
+            )]);
+        };
+        let text = std::fs::read_to_string(&path)
+            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+        let headings: Vec<&str> = text
+            .lines()
+            .filter_map(|l| l.strip_prefix("## "))
+            .map(|h| h.trim())
+            .collect();
+        let has = |needle: &str| headings.iter().any(|h| h.starts_with(needle));
+        let mut missing = Vec::new();
+        // 3. When to use
+        if !has("When to use") {
+            missing.push("## When to use");
+        }
+        // 4. Install (accept the common 'Installation' spelling)
+        if !has("Install") {
+            missing.push("## Install");
+        }
+        // 5. Quick start
+        if !has("Quick start") {
+            missing.push("## Quick start");
+        }
+        // 6. Common workflows
+        if !has("Common workflows") {
+            missing.push("## Common workflows");
+        }
+        // 7. Commands
+        if !has("Commands") {
+            missing.push("## Commands");
+        }
+        // 8. FAQ — inline section or a link to the faq/troubleshooting page
+        if !has("FAQ") && !text.contains("docs/src/faq.md") && !text.contains("docs/src/troubleshooting.md") {
+            missing.push("## FAQ (or a docs/src/faq.md|troubleshooting.md link)");
+        }
+        if missing.is_empty() {
+            return Ok(vec![]);
+        }
+        Ok(vec![LintResult::with_fix(
+            format!(
+                "README front door is missing required §5.1 sections: {}",
+                missing.join(", ")
+            ),
+            Severity::Warning,
+            "fill the sections per the §5.1 canonical skeleton (docs/standardization.md §5.1)",
+        )])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn git_repo() -> (tempfile::TempDir, std::path::PathBuf) {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().to_path_buf();
+        std::process::Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(&root)
+            .status()
+            .unwrap();
+        (temp, root)
+    }
+
+    fn run_check(check: &dyn DoctorCheck, root: &std::path::Path) -> Vec<LintResult> {
+        check.run(root).expect("check must not error")
+    }
+
+    // DDL-cm1d: ddl.repo.hooks-path
+
+    #[test]
+    fn hooks_path_ok_when_effective_value_resolves() {
+        let (_t, root) = git_repo();
+        // The check reads the EFFECTIVE config (repo-local + global). This
+        // assertion therefore covers both "unset everywhere" and "a valid
+        // machine-global value (e.g. ~/.git-hooks, this dev machine)" — a
+        // dangling global value can only be reproduced with env mutation
+        // and is out of unit-test reach; the dangling LOCAL case (the
+        // DDL-uce class) is the next test.
+        let out = run_check(&RepoHooksPathCheck, &root);
+        assert!(out.is_empty(), "valid/unset hooksPath must pass: {out:?}");
+    }
+
+    #[test]
+    fn hooks_path_rejects_nowhere_local() {
+        let (_t, root) = git_repo();
+        std::process::Command::new("git")
+            .args(["config", "core.hooksPath", "/nonexistent/ddl-uce-case"])
+            .current_dir(&root)
+            .status()
+            .unwrap();
+        let out = run_check(&RepoHooksPathCheck, &root);
+        assert!(
+            !out.is_empty(),
+            "hooksPath pointing at a nonexistent path must be flagged"
+        );
+        assert!(matches!(out[0].severity, Severity::Error));
+    }
+
+    #[test]
+    fn hooks_path_ok_when_directory_exists() {
+        let (_t, root) = git_repo();
+        std::fs::create_dir_all(root.join("hooks-dir")).unwrap();
+        std::process::Command::new("git")
+            .args(["config", "core.hooksPath", "hooks-dir"])
+            .current_dir(&root)
+            .status()
+            .unwrap();
+        let out = run_check(&RepoHooksPathCheck, &root);
+        assert!(out.is_empty(), "existing hooks dir must pass: {out:?}");
+    }
+
+    // DDL-9kz.6.1: ddl.repo.just-ci
+
+    #[test]
+    fn just_ci_flags_missing_justfile() {
+        let (_t, root) = git_repo();
+        let out = run_check(&RepoJustCiCheck, &root);
+        assert_eq!(out.len(), 1, "no justfile must be flagged");
+    }
+
+    #[test]
+    fn just_ci_flags_justfile_without_ci_recipe() {
+        let (_t, root) = git_repo();
+        std::fs::write(root.join("justfile"), "build:\n    cargo build\n").unwrap();
+        let out = run_check(&RepoJustCiCheck, &root);
+        assert_eq!(out.len(), 1, "justfile without a ci recipe must be flagged");
+    }
+
+    #[test]
+    fn just_ci_ok_with_ci_recipe() {
+        let (_t, root) = git_repo();
+        std::fs::write(root.join("justfile"), "ci:\n    @just fmt-check\n").unwrap();
+        let out = run_check(&RepoJustCiCheck, &root);
+        assert!(out.is_empty(), "ci recipe present must pass: {out:?}");
+    }
+
+    // DDL-udq: ddl.repo.readme-frontdoor
+
+    #[test]
+    fn frontdoor_flags_missing_readme() {
+        let (_t, root) = git_repo();
+        let out = run_check(&RepoReadmeFrontdoorCheck, &root);
+        assert_eq!(out.len(), 1, "missing README must be flagged");
+    }
+
+    #[test]
+    fn frontdoor_lists_missing_sections() {
+        let (_t, root) = git_repo();
+        std::fs::write(
+            root.join("README.md"),
+            "# tool\n\n> One sentence.\n> **Why:** because.\n> **Status:** beta.\n\n## Install\n\n```sh\ncargo install tool\n```\n",
+        )
+        .unwrap();
+        let out = run_check(&RepoReadmeFrontdoorCheck, &root);
+        assert_eq!(out.len(), 1);
+        let detail = &out[0].message;
+        for section in ["When to use", "Quick start", "Common workflows", "FAQ"] {
+            assert!(
+                detail.contains(section),
+                "missing '{section}' must be listed, got: {detail}"
+            );
+        }
+        assert!(!detail.contains("Install"), "present section must not be listed");
+    }
+
+    #[test]
+    fn frontdoor_ok_with_all_sections() {
+        let (_t, root) = git_repo();
+        std::fs::write(
+            root.join("README.md"),
+            "# tool\n\n> One sentence.\n> **Why:** because.\n> **Status:** beta.\n\n## When to use\n\n- use it\n\n## Install\n\n```sh\ncargo install tool\n```\n\n## Quick start\n\n```sh\ntool run\n# → ok\n```\n\n## Common workflows\n\n1. job — `cmd` → result\n\n## Commands\n\n| c | d |\n|---|---|\n\n## FAQ\n\n- q?\n\n## License\n\nMIT\n",
+        )
+        .unwrap();
+        let out = run_check(&RepoReadmeFrontdoorCheck, &root);
+        assert!(out.is_empty(), "complete front door must pass: {out:?}");
     }
 }

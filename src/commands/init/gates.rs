@@ -53,13 +53,19 @@ pub fn print_gates_report(report: &crate::gates::WiringReport) {
         println!("  → commit the staged beads files to land the tracked export");
     }
     println!("  → run `lefthook install` to activate the hooks (core.hooksPath shim)");
+    let session_label = match report.session_protocol {
+        crate::installer::SessionProtocolChange::Written => "written",
+        crate::installer::SessionProtocolChange::Rewritten => "rewritten (drift fixed)",
+        crate::installer::SessionProtocolChange::Unchanged => "already present",
+    };
+    println!("  ✓ AGENTS.md: session-close protocol block {session_label}");
 }
 
 /// JSON-mode one-line gates summary.
 fn gates_json_summary(report: &crate::gates::WiringReport) -> String {
     use crate::gates::{BeadsChange, Change, SadGateOutcome};
     format!(
-        "gates wired: lefthook {}, sad {}, gitignore +{} entries, beads {}, export {}, staged +{}",
+        "gates wired: lefthook {}, sad {}, gitignore +{} entries, beads {}, export {}, staged +{}, session-protocol {}",
         match report.lefthook {
             Change::Created => "created",
             Change::Updated => "updated",
@@ -78,6 +84,11 @@ fn gates_json_summary(report: &crate::gates::WiringReport) -> String {
         },
         if report.beads_exported { "yes" } else { "no" },
         report.beads_staged.len(),
+        match report.session_protocol {
+            crate::installer::SessionProtocolChange::Written => "written",
+            crate::installer::SessionProtocolChange::Rewritten => "rewritten (drift fixed)",
+            crate::installer::SessionProtocolChange::Unchanged => "unchanged",
+        },
     )
 }
 

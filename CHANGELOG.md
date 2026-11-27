@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`ddl doctor --strict`** — exits non-zero when any repo-hygiene
+  diagnostic (`ddl.repo.*`) is at warn/fail level; the full report is
+  emitted first, so gate consumers keep the structured evidence.
+  Machine-scope findings (tool installs, nested tool doctors) do not fail
+  a strict run (`DDL-9kz.2`)
+- **repo-local `.gitignore` negation for `.beads/`** — `ddl init --gates`
+  appends `!.beads/` + `.beads/embeddeddolt/`, so the tracked export is
+  addable without `-f` while the embedded DB stays ignored (`DDL-9kz.2`)
+- **three new `ddl.repo.*` doctor checks** — `ddl.repo.hooks-path` flags a
+  `core.hooksPath` that points nowhere at error severity (the per-clone
+  recurrence class behind DDL-uce: no git hook runs in such a checkout);
+  `ddl.repo.just-ci` warns when a repo has no justfile or no `ci` recipe
+  (silently opting out of the standard gate); `ddl.repo.readme-frontdoor`
+  warns when README.md is missing any §5.1 front-door section, naming all
+  misses in one finding
+- **session-close protocol block** (DDL-9kz.1) — `ddl init --gates` now
+  writes a second ddl-owned managed block (`SESSION-PROTOCOL`) into the
+  repo-local AGENTS.md carrying the close ritual verbatim (quality gates,
+  `bd close` with evidence, the exact `bd export -o .beads/issues.jsonl &&
+  git add -f .beads/issues.jsonl && git commit` line, rebase + `git push`,
+  `wai close`), so harnesses that stop at the repo root still see it.
+  Idempotent, self-owned (a drifted span is rewritten in place), and
+  drift-detectable (`ddl.repo.blocks` flags a missing or drifted span)
+
 - **`podras` joins the managed registry** (16th tool, extension/experimental) —
   per-repository project-status brief for humans and AI agents
   (`charly-vibes/podras`). Capability matrix, README block, ecosystem map,
@@ -23,11 +47,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of `--diff-only`. `--diff-only` computes the changed-file set from
   the *unstaged* tree, which is empty by construction at pre-commit time
   (everything is already staged), so the gate exited 0 without scanning a
-  single file in every ddl-wired repo. `--staged` checks exactly the files
-  the commit contains and keeps the DDL-3fd intent (a commit that does not
-  touch files carrying pre-existing violations is not blocked). Repos can
+  single file in every ddl-wired repo. `--staged` selects the staged path
+  set and scans the **working-tree copy** of each selected path — a commit
+  that does not touch files carrying pre-existing violations is not blocked
+  (DDL-3fd intent). Known residual gaps: the *staged blob* itself is not
+  scanned (index holds the violating version, worktree the clean one —
+  index-accurate scanning needs `git show :path` support, tracked as
+  DDL-api), and merge commits bypass the gate entirely (git does not run
+  pre-commit for `git merge`; pre-merge-commit is not wired). Repos can
   override the command via `.ddl/config.toml` (`gates.pretender_gate`)
-  (`DDL-sl9`)
+  (`DDL-sl9`). **Upgrading repos:** re-run `ddl init --gates` to adopt the
+  armed gate. First blocked commit? `pretender check --adopt` adopts every
+  current violation into the gate baseline (`pretender-baseline.json`);
+  afterwards gate mode fails only on genuinely new findings — without a
+  baseline, gate mode fails on any violation (`DDL-3zm`)
 - **`ddl init` installs openspec project skills** — on openspec 2.1+ it runs
   `openspec init --tools agents --scope project`; older (2.0 has no `--scope`)
   or unparseable versions keep the artifact-only `init --tools none` with a

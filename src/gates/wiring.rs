@@ -31,6 +31,8 @@ pub struct WiringReport {
     /// Untracked beads files were staged with `git add -f` (the global
     /// `~/.gitignore` excludes `.beads/`, so a plain add silently no-ops).
     pub beads_staged: Vec<String>,
+    /// What the session-close protocol block step did (DDL-9kz.1).
+    pub session_protocol: crate::installer::SessionProtocolChange,
 }
 
 /// Apply the full gates wiring under `repo_root`:
@@ -107,6 +109,12 @@ pub fn apply_gates_wiring_with_sad(
     // holds — `~/.gitignore` commonly excludes `.beads/`, hence `-f`.
     let beads_staged = stage_beads_files(repo_root);
 
+    // 5. session-close protocol block (DDL-9kz.1): the ritual must be
+    // visible at the repo root for every harness, and gates wiring is the
+    // self-owned writer that rewrites a drifted span.
+    let session_protocol =
+        crate::installer::ensure_session_protocol_block(repo_root)?;
+
     Ok(WiringReport {
         lefthook,
         sad,
@@ -114,6 +122,7 @@ pub fn apply_gates_wiring_with_sad(
         beads,
         beads_exported,
         beads_staged,
+        session_protocol,
     })
 }
 

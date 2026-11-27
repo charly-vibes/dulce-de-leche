@@ -63,7 +63,7 @@ fn run(args: dulce_de_leche::cli::Args) -> dulce_de_leche::error::Result<()> {
             commands::cmd_feedback(fb, &args)
         }
         Some(Commands::Status) => commands::cmd_status(&args),
-        Some(Commands::Doctor { fix }) => commands::cmd_doctor(fix, &args),
+        Some(Commands::Doctor { fix, strict }) => commands::cmd_doctor(fix, strict, &args),
         Some(Commands::Version { check }) => commands::cmd_version(check, &args),
         Some(Commands::Upgrade { ref tool }) => commands::cmd_upgrade(tool.as_deref(), &args),
         Some(Commands::Migrate { undo }) => commands::cmd_migrate(undo, &args),
