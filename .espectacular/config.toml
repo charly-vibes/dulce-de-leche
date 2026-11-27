@@ -1,0 +1,7 @@
+tool_version = "0.12.3"
+
+[paths]
+specs = "openspec/specs"
+changes = "openspec/changes"
+
+[runners]

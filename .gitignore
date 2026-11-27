@@ -63,3 +63,5 @@ docs/src/ecosystem-map.md
 # the incremental build cache and the record-capture flock target are local
 .kaya/build-state.json
 .kaya/capture.lock
+.dont/
+.vampiro/
