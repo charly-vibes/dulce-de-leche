@@ -299,6 +299,13 @@ fn wired_git_repo() -> tempfile::TempDir {
         "<!-- WAI:START -->\n<!-- WAI:END -->\n<!-- BEGIN BEADS INTEGRATION -->\n<!-- END BEADS INTEGRATION -->\n<!-- DDL:START -->\n<!-- DDL:END -->\n",
     )
     .unwrap();
+    // Session-close protocol block (DDL-9kz.1): the wired repo carries it.
+    let agents = format!(
+        "{}{}",
+        std::fs::read_to_string(temp.path().join("AGENTS.md")).unwrap(),
+        dulce_de_leche::session_protocol_block()
+    );
+    std::fs::write(temp.path().join("AGENTS.md"), agents).unwrap();
     std::fs::write(
         temp.path().join("Cargo.toml"),
         "[package]\nname = \"x\"\nlicense = \"MIT\"\n",
@@ -314,12 +321,19 @@ fn wired_git_repo() -> tempfile::TempDir {
     std::fs::write(temp.path().join("CHANGELOG.md"), "# Changelog\n").unwrap();
     std::fs::write(
         temp.path().join("justfile"),
-        "fmt:\n    cargo fmt\n\nfmt-check:\n    cargo fmt -- --check\n",
+        "ci:\n    @just fmt-check lint test\n\nfmt:\n    cargo fmt\n\nfmt-check:\n    cargo fmt -- --check\n",
     )
     .unwrap();
     std::fs::write(
         temp.path().join("versions.ddl.toml"),
         "[tools]\nwai = \"latest\"\n",
+    )
+    .unwrap();
+    // §5.1 front-door skeleton: every required section present so the
+    // readme-frontdoor check passes in the "fully wired" fixture.
+    std::fs::write(
+        temp.path().join("README.md"),
+        "# x\n\n> One sentence.\n> **Why:** because.\n> **Status:** beta.\n\n## When to use\n\n- use it\n\n## Install\n\n```sh\ncargo install x\n```\n\n## Quick start\n\n```sh\nx run\n# → ok\n```\n\n## Common workflows\n\n1. job — `cmd` → result\n\n## Commands\n\n| c | d |\n|---|---|\n\n## FAQ\n\n- q?\n",
     )
     .unwrap();
     temp
@@ -389,6 +403,9 @@ fn test_doctor_repo_checks_pass_in_fully_wired_repo() {
         "ddl.repo.fmt",
         "ddl.repo.bd-hooks",
         "ddl.repo.changelog",
+        "ddl.repo.hooks-path",
+        "ddl.repo.just-ci",
+        "ddl.repo.readme-frontdoor",
     ] {
         assert!(
             checks.contains(&expected),
@@ -444,7 +461,14 @@ fn test_doctor_repo_checks_warn_in_unwired_git_repo() {
 
 /// AGENTS.md carrying the blocks of the tools that still publish one. openspec
 /// is deliberately absent: since 1.0.0 it publishes `openspec/config.yaml`.
-const BLOCK_DOC: &str = "<!-- DDL:START -->\n<!-- DDL:END -->\n<!-- WAI:START -->\n<!-- WAI:END -->\n<!-- BEGIN BEADS INTEGRATION -->\n<!-- END BEADS INTEGRATION -->\n";
+/// AGENTS.md fixture is built at runtime so the session-close protocol
+/// span stays byte-identical to the canonical block (span comparison).
+fn block_doc() -> String {
+    format!(
+        "<!-- DDL:START -->\n<!-- DDL:END -->\n<!-- WAI:START -->\n<!-- WAI:END -->\n<!-- BEGIN BEADS INTEGRATION -->\n<!-- END BEADS INTEGRATION -->\n{}",
+        dulce_de_leche::session_protocol_block()
+    )
+}
 
 /// Run `RepoAgentBlocksCheck` directly against a fresh git repo containing
 /// `files` (plus `versions.ddl.toml` when `pins` is given).
@@ -483,7 +507,7 @@ fn openspec_findings(
 fn test_blocks_check_passes_openspec_config_layout() {
     let findings = openspec_findings(
         &[
-            ("AGENTS.md", BLOCK_DOC),
+            ("AGENTS.md", block_doc().as_str()),
             ("openspec/config.yaml", "schema: spec-driven\n"),
         ],
         None,
@@ -498,7 +522,7 @@ fn test_blocks_check_passes_openspec_config_layout() {
 fn test_blocks_check_openspec_legacy_layout_is_a_migration_warning() {
     let findings = openspec_findings(
         &[
-            ("AGENTS.md", BLOCK_DOC),
+            ("AGENTS.md", block_doc().as_str()),
             ("openspec/project.md", "# Project Context\n"),
         ],
         None,
@@ -531,7 +555,7 @@ fn test_blocks_check_openspec_legacy_layout_is_a_migration_warning() {
 fn test_blocks_check_openspec_hybrid_layout_names_config_as_authoritative() {
     let findings = openspec_findings(
         &[
-            ("AGENTS.md", BLOCK_DOC),
+            ("AGENTS.md", block_doc().as_str()),
             ("openspec/config.yaml", "schema: spec-driven\n"),
             ("openspec/project.md", "# Project Context\n"),
         ],
@@ -562,7 +586,7 @@ fn test_blocks_check_warns_when_scoped_openspec_published_nothing() {
     // openspec/ exists (genesis-style: used, not necessarily pinned) but
     // carries neither artifact.
     let findings = openspec_findings(
-        &[("AGENTS.md", BLOCK_DOC), ("openspec/changes/.keep", "")],
+        &[("AGENTS.md", block_doc().as_str()), ("openspec/changes/.keep", "")],
         None,
     );
     assert_eq!(
@@ -583,7 +607,7 @@ fn test_blocks_check_warns_when_scoped_openspec_published_nothing() {
 
 #[test]
 fn test_blocks_check_skips_openspec_without_dir_or_pin() {
-    let findings = block_findings(&[("AGENTS.md", BLOCK_DOC)], None);
+    let findings = block_findings(&[("AGENTS.md", block_doc().as_str())], None);
     assert!(
         findings.is_empty(),
         "a repo that does not use openspec gets no finding: {findings:?}"
@@ -593,7 +617,7 @@ fn test_blocks_check_skips_openspec_without_dir_or_pin() {
 #[test]
 fn test_blocks_check_scopes_openspec_by_pin() {
     let findings = openspec_findings(
-        &[("AGENTS.md", BLOCK_DOC)],
+        &[("AGENTS.md", block_doc().as_str())],
         Some("[tools]\nopenspec = \"0.19.0\"\n"),
     );
     assert_eq!(
@@ -610,7 +634,7 @@ fn test_blocks_check_scopes_openspec_by_pin() {
 
 #[test]
 fn test_blocks_check_reports_retired_openspec_block_once() {
-    let agents = format!("{BLOCK_DOC}<!-- OPENSPEC:START -->\n<!-- OPENSPEC:END -->\n");
+    let agents = format!("{}<!-- OPENSPEC:START -->\n<!-- OPENSPEC:END -->\n", block_doc());
     let findings = openspec_findings(&[("AGENTS.md", agents.as_str())], None);
     assert_eq!(
         findings.len(),

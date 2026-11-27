@@ -166,6 +166,9 @@ pub(crate) fn register_repo_checks(runner: &mut genesis::doctor::DoctorRunner) {
     runner.register(Box::new(RepoFmtCheck));
     runner.register(Box::new(RepoBdHookChainCheck));
     runner.register(Box::new(RepoChangelogCheck));
+    runner.register(Box::new(RepoHooksPathCheck));
+    runner.register(Box::new(RepoJustCiCheck));
+    runner.register(Box::new(RepoReadmeFrontdoorCheck));
 }
 
 /// Build the structured `ddl doctor` report (JSON path, DDL-6zn.4).
