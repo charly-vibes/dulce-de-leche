@@ -210,6 +210,82 @@ fn strict_violations(report: &crate::diagnostics::DiagnosticReport, strict: bool
     }
 }
 
+/// `ddl gates run` (DDL-9kz.6): run the repo gate detached. The run
+/// mechanics live in [`dulce_de_leche::gates::run_gate`]; both formats
+/// wait by default (bounded by `--wait-secs`) and exit with the gate's
+/// status — JSON consumers get the handle/tail in the envelope instead of
+/// interleaved raw output.
+pub fn cmd_gates_run(
+    detach: bool,
+    wait_secs: u64,
+    cmd: &[String],
+    args: &crate::cli::Args,
+) -> Result<()> {
+    let repo_root = crate::installer::repo_root();
+    let json = args.is_json();
+    let opts = crate::gates::GateOpts::new(detach, wait_secs, !json);
+    let outcome = crate::gates::run_gate(&repo_root, cmd, opts)?;
+    render_gate_outcome(outcome, json, detach)
+}
+
+fn render_gate_outcome(outcome: crate::gates::GateOutcome, json: bool, detach: bool) -> Result<()> {
+    match outcome {
+        crate::gates::GateOutcome::Exited { code, handle } => {
+            if json {
+                print_gate_envelope(handle, Some(code))?;
+            }
+            if !json {
+                if code == 0 {
+                    eprintln!("gate passed");
+                } else {
+                    eprintln!("gate failed with exit {code} (tail above)");
+                }
+            }
+            std::process::exit(code.clamp(0, 255));
+        }
+        crate::gates::GateOutcome::Released { handle } => {
+            if json {
+                return print_gate_envelope(handle, None);
+            }
+            if detach && handle.status == "running" {
+                println!(
+                    "{}",
+                    serde_json::to_string(&handle).map_err(|e| DdlError::Other(e.to_string()))?
+                );
+                return Ok(());
+            }
+            eprintln!(
+                "gate still running (pid {}) — released; child survives; log {}",
+                handle.pid, handle.log_path
+            );
+            println!(
+                "{}",
+                serde_json::to_string(&handle).map_err(|e| DdlError::Other(e.to_string()))?
+            );
+            Ok(())
+        }
+    }
+}
+
+/// The `gates run` JSON envelope: the run handle plus the gate exit code
+/// when the run finished inside the wait budget.
+fn print_gate_envelope(handle: crate::gates::RunHandle, exit_code: Option<i32>) -> Result<()> {
+    let mut data = serde_json::to_value(&handle).map_err(|e| DdlError::Other(e.to_string()))?;
+    if let Some(code) = exit_code {
+        data["exit_code"] = serde_json::json!(code);
+    }
+    let json_str = crate::output::json_output(
+        crate::VERSION,
+        true,
+        genesis::envelope::EnvelopeKind::Info,
+        data,
+        vec![],
+        vec![],
+    )?;
+    println!("{json_str}");
+    Ok(())
+}
+
 pub fn cmd_scope(args: &crate::cli::Args) -> Result<()> {
     if let Some(ddl_dir) = crate::find_ddl_dir() {
         if args.is_json() {

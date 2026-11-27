@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`ddl gates run`** — timeout-immune repo gate runner: spawns the gate
+  (`just ci` by default) detached under `setsid`, so a killed ddl never
+  kills the gate; waits with live output streaming, releases to a run
+  handle (pid + log + status path) past `--wait-secs` (default 100s, below
+  the common 120s harness timeout), refuses concurrent gate runs, and
+  re-attaches to a live run (`DDL-9kz.6`)
+
 - **`ddl doctor --strict`** — exits non-zero when any repo-hygiene
   diagnostic (`ddl.repo.*`) is at warn/fail level; the full report is
   emitted first, so gate consumers keep the structured evidence.

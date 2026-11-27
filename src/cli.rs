@@ -17,6 +17,29 @@
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use genesis::guide::{CliFormat, CliVerbosity};
 
+/// `ddl gates` subcommands (DDL-9kz.6).
+#[derive(Subcommand, Debug)]
+pub enum GatesCmd {
+    /// Run the repo gate detached with progress streaming — immune to the
+    /// harness tool timeout
+    #[command(
+        after_help = "Examples:\n  ddl gates run\n  ddl gates run --detach\n  ddl gates run -- just ci"
+    )]
+    Run {
+        /// Return the run handle immediately instead of waiting
+        #[arg(long)]
+        detach: bool,
+
+        /// Seconds to wait before releasing to the run handle; 0 = now
+        #[arg(long, default_value_t = 100, value_name = "SECS")]
+        wait_secs: u64,
+
+        /// Gate command to run (default: `just ci`, the repo gate)
+        #[arg(last = true, value_name = "CMD...")]
+        cmd: Vec<String>,
+    },
+}
+
 /// dulce-de-leche (ddl) — orchestrate the charly-vibes tool ecosystem.
 ///
 /// One command to install, configure, and update every charly-vibes tool.
@@ -108,6 +131,12 @@ pub enum Commands {
     #[command(after_help = "Examples:\n  ddl status\n  ddl status --json")]
     Status,
 
+    /// Gate operations (DDL-9kz.6)
+    Gates {
+        #[command(subcommand)]
+        cmd: GatesCmd,
+    },
+
     /// Run detailed diagnostics across all tools
     #[command(after_help = "Examples:\n  ddl doctor\n  ddl doctor --fix")]
     Doctor {
@@ -186,10 +215,7 @@ impl Args {
         names.join(", ")
     }
 
-    /// Parse CLI args and return the parsed structure.
-    ///
-    /// Builds the command so the install/init help text is GENERATED from
-    /// MANAGED_TOOLS instead of hand-maintained doc comments.
+    /// Parse CLI args; help text is GENERATED from MANAGED_TOOLS.
     pub fn parse_or_exit() -> Self {
         let mut cmd = Args::command();
         let tools_line = Self::managed_tools_line();
