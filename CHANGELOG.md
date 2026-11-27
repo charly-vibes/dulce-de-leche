@@ -7,7 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-27
+
 ### Added
+
+- **repo-status single source of truth: `.ddl/status.json`** (DDL-76lm) —
+  `ddl status` reads and refreshes a versioned status record (in-flight
+  summary, tracker counts, per-feed `observed_at`/`staleness`) from real
+  feeds (versions.ddl.toml, `.beads/issues.jsonl`, last git commit,
+  openspec); per-feed staleness is content-diff based (volatile fields
+  normalized out), never timestamps. `ddl status --refresh` runs the
+  obtain → `podras brief --write` → `bd export` → atomic record-write
+  ordering under the dot-ddl lock; the record's contract-precedence
+  header resolves contradictory status claims from briefs, summaries,
+  and exports. New `ddl.repo.*` doctor checks — `status-fresh`
+  (record owed and fresh wherever a tracked brief/beads store exists),
+  `beads-block` (canonical beads storage-semantics AGENTS.md block,
+  written by `ddl init`), `brief-drift-gate` (emitted by
+  `ddl init --gates` for repos with a committed brief render,
+  replacing the hand-rolled `scripts/guards/brief-drift.sh` fork), and
+  `unmanaged-status-artifacts` (hand-written root status narratives)
+  — with error-identity parity between `--json` and human output.
+  `ddl init` refreshes the record, so freshly gated repos are born
+  doctor-clean
 
 - **`ddl gates run`** — timeout-immune repo gate runner: spawns the gate
   (`just ci` by default) detached under `setsid`, so a killed ddl never
@@ -46,6 +68,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   troubleshooting list, and the §4 dogfood matrix updated; `ddl install podras`
   works once podras publishes its first crates.io/GitHub Release. ddl
   dogfoods it locally: `BRIEF.md`/`BRIEF.json` committed at the repo root.
+
+### Fixed
+
+- `ddl init --gates` no longer leaves a freshly gated repo doctor-RED:
+  the status record is written as part of the init tail (advisory on
+  failure; `ddl status --refresh` names the remaining step)
 
 ### Changed
 
