@@ -366,7 +366,8 @@ fn test_init_gates_leaves_doctor_repo_checks_clean() {
     cmd.args(["doctor", "--json"]);
     let out = cmd.assert().success().get_output().stdout.clone();
     let envelope: serde_json::Value = serde_json::from_slice(&out).unwrap();
-    let diags = envelope["data"]["diagnostics"]
+    // DDL-852c: repo findings live under data.repo.checks.
+    let diags = envelope["data"]["repo"]["checks"]
         .as_array()
         .cloned()
         .unwrap_or_default();

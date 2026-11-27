@@ -59,13 +59,19 @@ pub fn print_gates_report(report: &crate::gates::WiringReport) {
         crate::installer::SessionProtocolChange::Unchanged => "already present",
     };
     println!("  ✓ AGENTS.md: session-close protocol block {session_label}");
+    let semantics_label = match report.beads_semantics {
+        crate::installer::BeadsSemanticsChange::Written => "written",
+        crate::installer::BeadsSemanticsChange::Rewritten => "rewritten (drift fixed)",
+        crate::installer::BeadsSemanticsChange::Unchanged => "already present",
+    };
+    println!("  ✓ AGENTS.md: beads storage semantics block {semantics_label}");
 }
 
 /// JSON-mode one-line gates summary.
 fn gates_json_summary(report: &crate::gates::WiringReport) -> String {
     use crate::gates::{BeadsChange, Change, SadGateOutcome};
     format!(
-        "gates wired: lefthook {}, sad {}, gitignore +{} entries, beads {}, export {}, staged +{}, session-protocol {}",
+        "gates wired: lefthook {}, sad {}, gitignore +{} entries, beads {}, export {}, staged +{}, session-protocol {}, beads-semantics {}",
         match report.lefthook {
             Change::Created => "created",
             Change::Updated => "updated",
@@ -88,6 +94,11 @@ fn gates_json_summary(report: &crate::gates::WiringReport) -> String {
             crate::installer::SessionProtocolChange::Written => "written",
             crate::installer::SessionProtocolChange::Rewritten => "rewritten (drift fixed)",
             crate::installer::SessionProtocolChange::Unchanged => "unchanged",
+        },
+        match report.beads_semantics {
+            crate::installer::BeadsSemanticsChange::Written => "written",
+            crate::installer::BeadsSemanticsChange::Rewritten => "rewritten (drift fixed)",
+            crate::installer::BeadsSemanticsChange::Unchanged => "unchanged",
         },
     )
 }

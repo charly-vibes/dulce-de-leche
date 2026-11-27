@@ -63,7 +63,7 @@ fn run(args: dulce_de_leche::cli::Args) -> dulce_de_leche::error::Result<()> {
             }
             commands::cmd_feedback(fb, &args)
         }
-        Some(Commands::Status) => commands::cmd_status(&args),
+        Some(Commands::Status { refresh }) => commands::cmd_status(refresh, &args),
         Some(Commands::Gates { ref cmd }) => match cmd {
             dulce_de_leche::cli::GatesCmd::Run {
                 detach,

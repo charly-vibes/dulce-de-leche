@@ -13,17 +13,20 @@ mod common;
 
 const CMD_TIMEOUT: Duration = Duration::from_secs(60);
 
-/// Run `ddl doctor --json` inside `dir` and return the diagnostics array.
+/// Run `ddl doctor --json` inside `dir` and return the repo-check items.
+///
+/// DDL-852c: repo findings (`ddl.repo.*`) live under `data.repo.checks`,
+/// never inside `data.diagnostics` — every use below searches repo checks.
 fn doctor_diagnostics(dir: &std::path::Path) -> Vec<Value> {
     let mut cmd = Command::cargo_bin("ddl").unwrap();
     cmd.current_dir(dir);
     cmd.args(["doctor", "--json"]).timeout(CMD_TIMEOUT);
     let out = cmd.assert().success().get_output().stdout.clone();
     let envelope: Value = serde_json::from_slice(&out).expect("valid JSON envelope");
-    envelope["data"]["diagnostics"]
+    envelope["data"]["repo"]["checks"]
         .as_array()
         .cloned()
-        .expect("diagnostics array")
+        .expect("repo.checks array")
 }
 
 /// Find diagnostics for a check id at a given level (or any level if None).
@@ -470,11 +473,19 @@ fn doctor_strict_exits_nonzero_on_findings() {
     cmd.args(["doctor", "--json", "--strict"]);
     let out = cmd.assert().get_output().stdout.clone();
     let envelope: Value = serde_json::from_slice(&out).expect("valid envelope");
-    let warns = envelope["data"]["diagnostics"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|d| d["level"] == "warn" || d["level"] == "fail");
+    // DDL-852c: repo findings count under data.repo.checks; tool
+    // diagnostics may also carry findings on a gap repo.
+    let any_warn = |items: &[Value]| {
+        items
+            .iter()
+            .any(|d| d["level"] == "warn" || d["level"] == "fail")
+    };
+    let warns = any_warn(envelope["data"]["diagnostics"].as_array().unwrap())
+        || any_warn(
+            envelope["data"]["repo"]["checks"]
+                .as_array()
+                .unwrap_or(&vec![]),
+        );
     assert!(warns, "gap repo has warn findings");
     // The envelope printed (report consumed), then the process failed.
     assert_eq!(envelope["ok"], serde_json::json!(true));

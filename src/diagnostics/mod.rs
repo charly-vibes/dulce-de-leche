@@ -25,7 +25,10 @@ pub use repo_checks::*;
 pub(crate) use report::register_repo_checks;
 pub use report::*;
 pub(crate) use status::find_git_root;
-pub use status::{build_status_report, format_health_line, status_summary};
+pub use status::{
+    ProjectFeedStatus, ProjectStatus, build_project_status, build_status_report,
+    format_health_line, status_summary,
+};
 
 /// Run a tool's `--version` command and parse the output.
 pub fn get_tool_version(tool: &Tool) -> Option<String> {
@@ -96,27 +99,64 @@ fn build_diagnostic_runner(ddl_dir: Option<&DdlDir>) -> genesis::doctor::DoctorR
 }
 
 /// Format the doctor report as human-readable message lines.
+///
+/// Repo-scope `ddl.repo.*` checks render under their own `── Repo checks ──`
+/// section (DDL-852c, design D5) with the same `{icon} {check}: {detail}` +
+/// `→ Run: {fix}` lines as the tool diagnostics — error-identity parity:
+/// the same check name, detail, and fix strings the `--json` items carry.
 fn format_diagnostic_report(report: &genesis::doctor::DoctorReport) -> Vec<String> {
     let mut messages = Vec::new();
+    let mut repo_checks = Vec::new();
+    let mut tool_checks = Vec::new();
+    for check in &report.checks {
+        if check.name.starts_with("ddl.repo.") {
+            repo_checks.push(check);
+        } else {
+            tool_checks.push(check);
+        }
+    }
     messages.push("── Diagnostics ──".to_string());
+    // Summary counts TOOL checks only — repo findings roll up under the
+    // repo section (D5), never into the tool diagnostics.
+    let count = |status: genesis::doctor::CheckStatus| {
+        tool_checks.iter().filter(|c| c.status == status).count()
+    };
     messages.push(format!(
         "pass: {}  warn: {}  fail: {}",
-        report.summary.pass, report.summary.warn, report.summary.fail
+        count(genesis::doctor::CheckStatus::Pass),
+        count(genesis::doctor::CheckStatus::Warn),
+        count(genesis::doctor::CheckStatus::Fail),
     ));
     messages.push(String::new());
 
-    for check in &report.checks {
-        let icon = match check.status {
-            genesis::doctor::CheckStatus::Pass => "✓",
-            genesis::doctor::CheckStatus::Warn => "⚠",
-            genesis::doctor::CheckStatus::Fail => "✗",
-        };
-        messages.push(format!("  {icon} {}: {}", check.name, check.message));
-        if let Some(ref fix_cmd) = check.fix {
-            messages.push(format!("     → Run: {fix_cmd}"));
+    for check in &tool_checks {
+        messages.push(format_check_entry(check));
+    }
+
+    if !repo_checks.is_empty() {
+        messages.push(String::new());
+        messages.push("── Repo checks ──".to_string());
+        for check in &repo_checks {
+            messages.push(format_check_entry(check));
         }
     }
     messages
+}
+
+/// One check entry as human lines: `icon name: detail`, then `→ Run: fix`.
+/// The single renderer for both sections, so a check's identity (name,
+/// detail, fix) is byte-identical wherever it appears.
+fn format_check_entry(check: &genesis::doctor::CheckEntry) -> String {
+    let icon = match check.status {
+        genesis::doctor::CheckStatus::Pass => "✓",
+        genesis::doctor::CheckStatus::Warn => "⚠",
+        genesis::doctor::CheckStatus::Fail => "✗",
+    };
+    let mut line = format!("  {icon} {}: {}", check.name, check.message);
+    if let Some(fix_cmd) = &check.fix {
+        line.push_str(&format!("\n     → Run: {fix_cmd}"));
+    }
+    line
 }
 
 /// Apply DdlDir fixes when requested (create missing manifest, remove broken
@@ -179,6 +219,52 @@ mod contract_tests {
         let (sev, detail) = classify_nested_doctor("initialized: 3 specs", true);
         assert_eq!(sev, Severity::Advisory);
         assert_eq!(detail, "doctor: ran");
+    }
+
+    #[test]
+    fn report_to_diagnostics_partitions_repo_findings() {
+        // DDL-852c (design D5): ddl.repo.* findings move to the `repo` key
+        // with their own summary — tool diagnostics and their counts stay
+        // untouched by repo findings.
+        let report = DoctorReport::new(
+            "ddl",
+            vec![
+                CheckEntry::pass("platform", "d", "ok"),
+                {
+                    let mut e = CheckEntry::fail("wai", "d", "wai not installed", None);
+                    e.fix = Some("ddl install wai".to_string());
+                    e
+                },
+                CheckEntry::pass("ddl.repo.gates", "d", "no issues found"),
+                CheckEntry::warn(
+                    "ddl.repo.unmanaged-status-artifacts",
+                    "d",
+                    "unmanaged status artifacts: AGENT-SUMMARY.md",
+                ),
+            ],
+        );
+        let dr = report_to_diagnostics(&report);
+        // repo findings are OUT of the tool diagnostics
+        assert!(
+            dr.diagnostics
+                .iter()
+                .all(|i| !i.check.starts_with("ddl.repo.")),
+            "repo findings must not drown tool diagnostics: {:?}",
+            dr.diagnostics
+        );
+        // tool summary counts only tool items
+        assert_eq!(dr.summary.pass, 1);
+        assert_eq!(dr.summary.fail, 1);
+        assert_eq!(dr.summary.warn, 0);
+        // repo key carries its own summary, recomputed from its items
+        assert_eq!(dr.repo.checks.len(), 2);
+        assert_eq!(dr.repo.summary.pass, 1);
+        assert_eq!(dr.repo.summary.warn, 1);
+        assert_eq!(dr.repo.summary.fail, 0);
+        assert_eq!(
+            dr.repo.checks[1].detail,
+            "unmanaged status artifacts: AGENT-SUMMARY.md"
+        );
     }
 
     #[test]

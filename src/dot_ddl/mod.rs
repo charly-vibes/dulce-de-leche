@@ -9,7 +9,9 @@
 mod config;
 mod dir;
 mod migrate;
-mod persist;
+// pub(crate) (not private): the repo-status record writer reuses the
+// atomic staged-write and manifest-lock primitives (DDL-76lm).
+pub(crate) mod persist;
 
 pub use config::*;
 pub use dir::*;

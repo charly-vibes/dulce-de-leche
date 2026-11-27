@@ -33,6 +33,9 @@ pub struct WiringReport {
     pub beads_staged: Vec<String>,
     /// What the session-close protocol block step did (DDL-9kz.1).
     pub session_protocol: crate::installer::SessionProtocolChange,
+    /// What the canonical beads-semantics AGENTS.md block step did
+    /// (DDL-4jvz task 3.3).
+    pub beads_semantics: crate::installer::BeadsSemanticsChange,
 }
 
 /// Apply the full gates wiring under `repo_root`:
@@ -114,6 +117,12 @@ pub fn apply_gates_wiring_with_sad(
     // self-owned writer that rewrites a drifted span.
     let session_protocol = crate::installer::ensure_session_protocol_block(repo_root)?;
 
+    // 6. canonical beads-semantics block (DDL-4jvz task 3.3): the storage
+    //    semantics must be stated once, canonically, at the repo root —
+    //    same managed-block discipline as the session-protocol block
+    //    (drifted span rewritten in place on the next wiring run).
+    let beads_semantics = crate::installer::ensure_beads_semantics_block(repo_root)?;
+
     Ok(WiringReport {
         lefthook,
         sad,
@@ -122,6 +131,7 @@ pub fn apply_gates_wiring_with_sad(
         beads_exported,
         beads_staged,
         session_protocol,
+        beads_semantics,
     })
 }
 

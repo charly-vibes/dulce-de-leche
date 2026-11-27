@@ -9,8 +9,10 @@
 //!   (`report.rs` owns registration; this file owns the checks themselves)
 //! - decide each check's scope from repo evidence (dirs, pins), never from a
 //!   universal "every repo hosts every tool" assumption
-//! - report problems as `Severity::Warning` with an actionable fix hint;
-//!   `ddl doctor` never fails on a repo-scope finding
+//! - report hygiene problems as `Severity::Warning` with an actionable fix
+//!   hint; the status-pipeline checks at the bottom (DDL-852c) FAIL, since
+//!   they guard the tracked brief/export/record contract and
+//!   `ddl doctor --strict` exits non-zero on repo-scope findings
 //!
 //! Rationale: (DDL-ehu) agent instrumentation is verified against what each
 //! tool itself publishes — a managed `AGENTS.md` block or a published
@@ -1010,6 +1012,348 @@ impl DoctorCheck for RepoReadmeFrontdoorCheck {
             ),
             Severity::Warning,
             "fill the sections per the §5.1 canonical skeleton (docs/standardization.md §5.1)",
+        )])
+    }
+}
+
+// ── Status-pipeline checks (DDL-852c, openspec tasks 2.2) ────────────
+//
+// Unlike the hygiene checks above (warning-only), the status-pipeline
+// checks FAIL (`Severity::Error`): they guard the tracked brief/export/
+// record contract, and `ddl doctor --strict` exits non-zero on them.
+// All freshness verdicts are content-diff based (D2) — never timestamps.
+
+/// Feed stores whose tracked presence obliges a status record (D1: a
+/// record is owed exactly when there is committed state to orient on).
+const TRACKED_FEED_STORES: &[&str] = &[".beads/issues.jsonl", "BRIEF.md", "BRIEF.json"];
+
+/// Whether any feed's tracked store file is known to git (content-based:
+/// `git ls-files`, never timestamps).
+fn tracked_brief_or_beads_store(root: &Path) -> bool {
+    TRACKED_FEED_STORES
+        .iter()
+        .any(|p| genesis::git::tracked(root, std::path::Path::new(p)).unwrap_or(false))
+}
+
+/// The `.ddl/` manifest when present; `None` scopes the feed obtainment
+/// to "nothing installed" (every feed then reports `unavailable` and the
+/// freshness verdict conservatively passes — a missing manifest is the
+/// dot-ddl check's finding, not this one's).
+fn ddl_manifest(root: &Path) -> Option<crate::manifest::Manifest> {
+    crate::manifest::Manifest::load(&root.join(".ddl").join("manifest.json")).ok()
+}
+
+/// Check that the status record exists where it is owed and that its
+/// feeds are fresh by CONTENT DIFF (DDL-852c task 2.2, design D2).
+///
+/// - record missing + tracked brief/beads store → FAIL: run the refresh
+///   ordering ([`crate::repo_status::STATUS_ORDERING_MESSAGE`] is the
+///   prescribed sentence, shared with the gate and `--refresh` output).
+/// - record present → each recorded feed's committed artifact is
+///   re-obtained fresh through the phase-1 obtainers and compared with
+///   the volatile-field normalization; a non-empty diff is FAIL, one
+///   finding naming every stale feed. A feed whose producer cannot be
+///   obtained (not installed, no brief) passes conservatively — absence
+///   of comparison evidence is not staleness.
+/// - record missing + nothing tracked → PASS (nothing to orient on).
+///
+/// Never derives a verdict from file timestamps: the may-be-stale
+/// display heuristic lives in `ddl status`, not here.
+pub struct RepoStatusFreshCheck;
+
+impl DoctorCheck for RepoStatusFreshCheck {
+    fn name(&self) -> &'static str {
+        "ddl.repo.status-fresh"
+    }
+    fn description(&self) -> &'static str {
+        "Check that the status record exists and its feeds are fresh by content diff"
+    }
+    fn run(
+        &self,
+        repo_root: &Path,
+    ) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
+        let Some(root) = find_git_root(repo_root) else {
+            return Ok(vec![]);
+        };
+        let ddl_dir = root.join(".ddl");
+        let record_file = crate::repo_status::record_path(&ddl_dir);
+        if !record_file.exists() {
+            if tracked_brief_or_beads_store(&root) {
+                return Ok(vec![LintResult::with_fix(
+                    format!(
+                        "no status record at {} but a tracked brief/beads store exists — clones and CI have no freshness verdict; {}",
+                        record_file.display(),
+                        crate::repo_status::STATUS_ORDERING_MESSAGE
+                    ),
+                    Severity::Error,
+                    "ddl status --refresh",
+                )]);
+            }
+            return Ok(vec![]);
+        }
+        let record = crate::repo_status::load_record(&record_file).map_err(
+            |e| -> Box<dyn std::error::Error> {
+                format!("status record unreadable at {}: {e}", record_file.display()).into()
+            },
+        )?;
+
+        // Authoritative content-diff verdicts: re-obtain every feed fresh
+        // (the obtainers compare committed artifacts vs fresh output with
+        // volatile fields normalized — D2) and match by feed name.
+        let manifest = ddl_manifest(&root);
+        let installed = |name: &str| manifest.as_ref().is_some_and(|m| m.is_installed(name));
+        let ctx = crate::repo_status::FeedContext {
+            repo_root: root.clone(),
+            ddl_dir: ddl_dir.clone(),
+            podras_installed: installed("podras"),
+            bd_installed: installed("bd"),
+            openspec_installed: installed("openspec"),
+        };
+        let fresh = crate::repo_status::obtain_all(&ctx);
+        let stale: Vec<String> = record
+            .data
+            .feeds
+            .iter()
+            .filter_map(|feed| {
+                let verdict = fresh
+                    .iter()
+                    .find(|f| f.name == feed.name)
+                    .filter(|f| f.is_available())
+                    .and_then(|f| f.staleness())?;
+                (verdict == crate::repo_status::Staleness::Stale).then(|| feed.name.clone())
+            })
+            .collect();
+        if stale.is_empty() {
+            return Ok(vec![]);
+        }
+        Ok(vec![LintResult::with_fix(
+            format!(
+                "status record feeds are stale by content diff ({}) — {}",
+                stale.join(", "),
+                crate::repo_status::STATUS_ORDERING_MESSAGE
+            ),
+            Severity::Error,
+            "ddl status --refresh",
+        )])
+    }
+
+    fn auto_fixable(&self) -> bool {
+        true
+    }
+
+    /// DDL-852c task 2.3: the applied fix for a stale or missing record is
+    /// exactly the `--refresh` ordering (`run_refresh`), never a partial
+    /// repair — obtain → `podras brief --write` → `bd export` → record
+    /// rewrite, under the manifest lock.
+    fn fix(
+        &self,
+        repo_root: &Path,
+    ) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
+        let Some(root) = find_git_root(repo_root) else {
+            return Ok(vec![]);
+        };
+        let manifest = ddl_manifest(&root).ok_or_else(|| -> Box<dyn std::error::Error> {
+            "no `.ddl/manifest.json` — run `ddl init` first".into()
+        })?;
+        crate::repo_status::run_refresh(&root, &root.join(".ddl"), &manifest)
+            .map(|report| {
+                let obtained = report.record.data.feeds.len();
+                vec![LintResult::new(
+                    format!(
+                        "status record refreshed via the obtain-and-write ordering ({obtained} feeds; record at {})",
+                        crate::repo_status::record_path(&root.join(".ddl")).display()
+                    ),
+                    Severity::Advisory,
+                )]
+            })
+            .map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })
+    }
+}
+
+/// Check that the repo's AGENTS.md beads-semantics block states the
+/// export/sync semantics (DDL-852c task 2.2, DDL-4jvz task 3.3 check side).
+///
+/// FAIL when a beads block — ddl-managed or not — claims
+/// `.beads/issues.jsonl` is the source of truth: the export is a committed
+/// OUTPUT of `bd export` (the live per-machine DB is the store, git is the
+/// sync), and that contradiction is the exact class that misleads agents
+/// into treating the jsonl as writable state. PASS when the block states
+/// the export/sync semantics or when no beads block exists (writing the
+/// block is `ddl init --gates` wiring's job). A span that merely drifted
+/// from the canonical text is reported (warning) via
+/// [`crate::gates::detect_beads_semantics_block_problems`].
+pub struct RepoBeadsBlockCheck;
+
+impl DoctorCheck for RepoBeadsBlockCheck {
+    fn name(&self) -> &'static str {
+        "ddl.repo.beads-block"
+    }
+    fn description(&self) -> &'static str {
+        "Check that the AGENTS.md beads-semantics block states the export/sync semantics"
+    }
+    fn run(
+        &self,
+        repo_root: &Path,
+    ) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
+        let Some(root) = find_git_root(repo_root) else {
+            return Ok(vec![]);
+        };
+        let agents_path = root.join("AGENTS.md");
+        let Some(text) = agents_path
+            .exists()
+            .then(|| std::fs::read_to_string(&agents_path))
+            .transpose()
+            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?
+        else {
+            // No AGENTS.md: no beads block exists — pass (absence is the
+            // wiring's finding, not a semantics contradiction).
+            return Ok(vec![]);
+        };
+        // Extract the span between the markers (ddl-managed or not — the
+        // contradiction check applies to any text inside the span).
+        let span = {
+            let begin = match text.find(crate::installer::BEADS_SEMANTICS_MARKER) {
+                Some(b) => b,
+                None => return Ok(vec![]),
+            };
+            let end_marker = "<!-- BEADS-SEMANTICS:END -->";
+            match text[begin..].find(end_marker) {
+                Some(end_idx) => &text[begin..begin + end_idx + end_marker.len()],
+                None => &text[begin..],
+            }
+        };
+        let contradictory: Vec<&str> = span
+            .lines()
+            .filter(|l| {
+                let lower = l.to_lowercase();
+                lower.contains("issues.jsonl") && lower.contains("source of truth")
+            })
+            .collect();
+        if let Some(claim) = contradictory.first() {
+            return Ok(vec![LintResult::with_fix(
+                format!(
+                    "AGENTS.md beads-semantics block claims `.beads/issues.jsonl` is the source of truth (\"{}\") — the export is the committed output of `bd export`, never the source of truth (the live bd database is the store; git is the sync)",
+                    claim.trim()
+                ),
+                Severity::Error,
+                "ddl init --gates",
+            )]);
+        }
+        // No contradiction: report a span drifted from the canonical text.
+        Ok(
+            crate::gates::detect_beads_semantics_block_problems(Some(&text))
+                .into_iter()
+                .map(|problem| LintResult::with_fix(problem, Severity::Warning, "ddl init --gates"))
+                .collect(),
+        )
+    }
+}
+
+/// Check that the brief-drift gate is armed where a brief render is
+/// committed (DDL-852c task 2.2, DDL-4jvz, design D6).
+///
+/// Content-based on BOTH sides, never timestamps: a render is committed
+/// when `BRIEF.md`/`BRIEF.json` is git-tracked
+/// ([`crate::gates::GateCommands::brief_render_tracked`]); the gate is
+/// present when the lefthook pre-commit managed span carries the
+/// `ddl-brief-drift` entry. FAIL (render committed, gate absent) means a
+/// render can drift silently into commits; PASS with no render
+/// (beads-only repos keep the export-drift guard) or with the gate armed.
+pub struct RepoBriefDriftGateCheck;
+
+impl DoctorCheck for RepoBriefDriftGateCheck {
+    fn name(&self) -> &'static str {
+        "ddl.repo.brief-drift-gate"
+    }
+    fn description(&self) -> &'static str {
+        "Check that the brief-drift gate is armed where a brief render is committed"
+    }
+    fn run(
+        &self,
+        repo_root: &Path,
+    ) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
+        let Some(root) = find_git_root(repo_root) else {
+            return Ok(vec![]);
+        };
+        let commands = crate::gates::GateCommands::for_repo(&root);
+        if commands.brief_drift.is_empty() {
+            // No render committed → no gate obligation ("no render, no
+            // gate", DDL-4jvz). A config-disabled entry resolves to empty
+            // here too: the repo owns that opt-out.
+            return Ok(vec![]);
+        }
+        let lefthook = root.join("lefthook.yml");
+        let content = lefthook
+            .exists()
+            .then(|| std::fs::read_to_string(&lefthook))
+            .transpose()
+            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+        let start_marker = format!("{}pre-commit)", crate::gates::MARKER_START_PREFIX);
+        let end_marker = format!("{}pre-commit)", crate::gates::MARKER_END_PREFIX);
+        let gate_present = content.as_deref().is_some_and(|text| {
+            text.find(&start_marker)
+                .map(|begin| {
+                    text[begin..].find(&end_marker).is_some_and(|end| {
+                        text[begin..begin + end + end_marker.len()].contains("ddl-brief-drift:")
+                    })
+                })
+                .unwrap_or(false)
+        });
+        if gate_present {
+            return Ok(vec![]);
+        }
+        Ok(vec![LintResult::with_fix(
+            "a brief render is committed (BRIEF.md/BRIEF.json tracked) but the lefthook pre-commit managed span has no ddl-brief-drift gate — a drifted render can be committed silently",
+            Severity::Error,
+            "ddl init --gates",
+        )])
+    }
+}
+
+/// Check for hand-written status artifacts at the repo root (DDL-852c
+/// task 2.2, DDL-qfc5 decision input).
+///
+/// WARN (never fail): the `AGENT-SUMMARY.md` class — root-level
+/// hand-maintained status files that duplicate what the managed record
+/// maintains. Each is listed with its last-commit date; the decision to
+/// archive it out of the repo root or adopt it into the managed pipeline
+/// is a human one, so no fix command is attached.
+pub struct RepoUnmanagedArtifactsCheck;
+
+impl DoctorCheck for RepoUnmanagedArtifactsCheck {
+    fn name(&self) -> &'static str {
+        "ddl.repo.unmanaged-status-artifacts"
+    }
+    fn description(&self) -> &'static str {
+        "List hand-written status artifacts at the repo root (DDL-qfc5)"
+    }
+    fn run(
+        &self,
+        repo_root: &Path,
+    ) -> std::result::Result<Vec<LintResult>, Box<dyn std::error::Error>> {
+        let Some(root) = find_git_root(repo_root) else {
+            return Ok(vec![]);
+        };
+        let artifacts = crate::repo_status::detect_unmanaged_status_artifacts(&root);
+        if artifacts.is_empty() {
+            return Ok(vec![]);
+        }
+        let listed: Vec<String> = artifacts
+            .iter()
+            .map(|a| {
+                format!(
+                    "{} (last commit {})",
+                    a.path.display(),
+                    a.last_commit_date.as_deref().unwrap_or("untracked")
+                )
+            })
+            .collect();
+        Ok(vec![LintResult::new(
+            format!(
+                "unmanaged status artifacts at the repo root: {} — archive them out of the repo root or adopt them into the managed pipeline (`ddl status --refresh` maintains the record)",
+                listed.join("; ")
+            ),
+            Severity::Warning,
         )])
     }
 }

@@ -16,6 +16,7 @@
 
 - [Architecture](./architecture.md)
 - [Implementation Status](./status.md)
+- [Repository Status Record](./repo-status.md)
 - [Glossary](./glossary.md)
 
 # Contributing

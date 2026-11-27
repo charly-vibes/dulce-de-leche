@@ -171,3 +171,139 @@ pub(crate) fn find_git_root(start: &Path) -> Option<std::path::PathBuf> {
     }
     None
 }
+
+// ── Project-status section (DDL-852c task 2.1, design D1) ─────────────
+//
+// `ddl status` answers BOTH tool health and repo status. The project half
+// is sourced from the `.ddl/status.json` record and NEVER re-obtains feeds
+// (that is `--refresh`'s and the doctor check's job): it shows the record
+// plus a cheap display-time "may be stale" heuristic, labeled as such.
+
+/// One feed's display row: `{name, observed_at, staleness}` when
+/// available, `{name, status: "unavailable", detail}` when not.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct ProjectFeedStatus {
+    pub name: String,
+    /// When the producer was last observed (available feeds only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_at: Option<String>,
+    /// `"fresh"` | `"stale"` — the record's content-state verdict
+    /// (available feeds only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub staleness: Option<String>,
+    /// The literal `"unavailable"` when the producer could not answer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    /// The producer's error for an `unavailable` feed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+/// The project-status section. `Serialize` IS the `--json` `project`
+/// object shape: `{ record_present, generated_at?, may_be_stale,
+/// suggestion?, precedence, feeds: [...] }` — no nulls (fields absent
+/// rather than null, per the cli-core envelope conventions).
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct ProjectStatus {
+    pub record_present: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub generated_at: Option<String>,
+    /// Display-time heuristic (D1): the record's `generated_at` is older
+    /// than the last commit touching a tracked feed store file. The
+    /// authoritative content-diff verdict lives in `ddl status --refresh`
+    /// and the `ddl.repo.status-fresh` doctor check, never here.
+    pub may_be_stale: bool,
+    /// Why the section suggests a refresh, when it does.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suggestion: Option<String>,
+    /// In-band contract-precedence header: the live record is the source
+    /// of truth (shared constant from the repo-status capability).
+    pub precedence: String,
+    pub feeds: Vec<ProjectFeedStatus>,
+}
+
+/// Feed store files whose tracked last-commit date feeds the heuristic.
+const MAY_BE_STALE_STORES: &[&str] = &[".beads/issues.jsonl", "BRIEF.json", "BRIEF.md"];
+
+/// The may-be-stale heuristic (D1): compare the record's `generated_at`
+/// with the last commit date (`git log -1 --format=%cI`) of each feed's
+/// tracked store file. Cheap (one `git log` per tracked store), and
+/// labeled as a heuristic wherever it renders. Any git or parse failure
+/// conservatively reads as "not stale" — this display flag never blocks.
+fn may_be_stale_heuristic(generated_at: &str, repo_root: &Path) -> bool {
+    use chrono::DateTime;
+    let Ok(generated) = DateTime::parse_from_rfc3339(generated_at) else {
+        return false;
+    };
+    for store in MAY_BE_STALE_STORES {
+        if !genesis::git::tracked(repo_root, std::path::Path::new(store)).unwrap_or(false) {
+            continue;
+        }
+        let out = genesis::git::run(
+            repo_root,
+            genesis::git::EnvPolicy::Inherit,
+            &["log", "-1", "--format=%cI", "--", store],
+        );
+        let date = out
+            .ok()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_default();
+        if date.is_empty() {
+            continue;
+        }
+        if let Ok(last_commit) = DateTime::parse_from_rfc3339(&date)
+            && last_commit > generated
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// Build the project-status section from the status record (read-only, no
+/// feed obtainment — the record is the source of truth for the display,
+/// D1). No `.ddl/` dir, no record file, or a structurally broken record
+/// renders the no-record path with the refresh suggestion.
+pub fn build_project_status(repo_root: &Path, ddl_dir: Option<&Path>) -> ProjectStatus {
+    let precedence = crate::repo_status::CONTRACT_PRECEDENCE_HEADER.to_string();
+    let record = ddl_dir.and_then(|dir| {
+        let path = crate::repo_status::record_path(dir);
+        path.exists()
+            .then(|| crate::repo_status::load_record(&path).ok())
+            .flatten()
+    });
+    let Some(record) = record else {
+        return ProjectStatus {
+            record_present: false,
+            generated_at: None,
+            may_be_stale: false,
+            suggestion: Some("ddl status --refresh".to_string()),
+            precedence,
+            feeds: Vec::new(),
+        };
+    };
+    let may_be_stale = may_be_stale_heuristic(&record.generated_at, repo_root);
+    let feeds = record
+        .data
+        .feeds
+        .iter()
+        .map(|feed| ProjectFeedStatus {
+            name: feed.name.clone(),
+            observed_at: feed.observed_at().map(str::to_string),
+            staleness: feed.staleness().map(|s| match s {
+                crate::repo_status::Staleness::Fresh => "fresh".to_string(),
+                crate::repo_status::Staleness::Stale => "stale".to_string(),
+            }),
+            status: feed.status.clone(),
+            detail: feed.detail.clone(),
+        })
+        .collect();
+    ProjectStatus {
+        record_present: true,
+        generated_at: Some(record.generated_at),
+        may_be_stale,
+        suggestion: may_be_stale.then(|| "ddl status --refresh".to_string()),
+        precedence,
+        feeds,
+    }
+}

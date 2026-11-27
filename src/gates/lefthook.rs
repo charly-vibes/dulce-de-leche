@@ -61,6 +61,122 @@ pub const DEFAULT_PRETENDER_GATE: &str = "pretender check --staged --mode gate";
 /// Shipped default for the `ddl-spk-lint` hook entry.
 pub const DEFAULT_SPK_LINT: &str = "spk lint openspec/specs || test $? -eq 2";
 
+/// The brief-drift ordering sentence, shared with `ddl status --refresh`
+/// (task 1.5). The emitted gate script embeds this constant so the gate
+/// message and the refresh flow can never drift apart (design D4: one
+/// source of truth for the ordering).
+use crate::repo_status::STATUS_ORDERING_MESSAGE;
+
+/// The emitted `ddl-brief-drift` pre-commit gate command (DDL-4jvz task
+/// 3.1, design D6). Self-contained shell — ddl owns no external script
+/// file — rendered as a YAML block scalar under `run: |`.
+///
+/// Semantics ("renders must be determined modulo content"): regenerate the
+/// render pair into a temp dir at the committed render's own `as_of`
+/// (`podras brief --write --as-of --out-dir` — verified against podras's
+/// CLI; it never touches the working tree), normalize the volatile
+/// envelope fields (`generated_at`, `as_of`, `cli_version`, per-source
+/// `observed_at`) and the HEAD-churn sections (`## Recent`,
+/// `orphan_commits`, `head_sha` — they describe the current HEAD and churn
+/// on every commit; found 2026-11-25 in the dulce fork this replaces), then
+/// diff. On drift the failure names the committed envelope's producing
+/// podras version (`cli_version`, so a version bump is distinguishable
+/// from real drift) and states the ordering. `PODRAS_BIN` overrides the
+/// binary; a missing podras is an advisory skip, not a pass.
+pub const DEFAULT_BRIEF_DRIFT: &str = r##"set -eu
+root=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "brief-drift: not inside a git repository" >&2; exit 2; }
+cd "$root"
+md=BRIEF.md
+json=BRIEF.json
+tracked() { git ls-files --error-unmatch -- "$1" >/dev/null 2>&1; }
+if ! tracked "$md" && ! tracked "$json"; then
+  # No render, no gate (DDL-4jvz): beads-only repos are covered by the
+  # export-drift guard instead.
+  exit 0
+fi
+if ! tracked "$md" || ! tracked "$json"; then
+  echo "brief-drift: incomplete committed renders: $md and $json must exist together" >&2
+  exit 1
+fi
+command -v jq >/dev/null 2>&1 || { echo "brief-drift: jq is required to normalize renders" >&2; exit 2; }
+podras_bin=${PODRAS_BIN:-podras}
+command -v "$podras_bin" >/dev/null 2>&1 || {
+  echo "brief-drift: podras not found (set PODRAS_BIN) — render gate skipped, not passed" >&2
+  exit 0
+}
+as_of=$(jq -r '(.data.as_of // (.data.generated_at | .[0:10])) // empty' "$json" 2>/dev/null) || as_of=
+as_of=${as_of:-$(date -u +%F)}
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/ddl-brief-drift.XXXXXX")
+trap 'rm -rf "$tmp"' EXIT
+tree_before=$(git status --porcelain)
+"$podras_bin" brief --write --as-of "$as_of" --out-dir "$tmp" >/dev/null 2>&1 || {
+  echo "brief-drift: podras brief --write failed for as-of $as_of — run it manually to see the error" >&2
+  exit 1
+}
+for f in "$md" "$json"; do
+  [ -e "$tmp/$f" ] || { echo "brief-drift: regeneration produced no $f" >&2; exit 1; }
+done
+normalize_json() {
+  jq 'del(.generated_at, .cli_version, .data.generated_at, .data.as_of, .data.cli_version, .data.source_hash, .data.warnings, .meta.author)
+      | del(.data.curation.updated_at)
+      | del(.data.recent)
+      | del(.data.head_sha)
+      | (.data.sources[]? |= del(.observed_at, .staleness, .detail))
+      | (.data.health.signals = ((.data.health.signals // []) | map(select(.kind != "orphan_commits"))))
+      | (.data.health.reason = ((.data.health.reason // "") | sub("orphan_commits:.*"; "orphan_commits: <head-churn omitted>")))' "$1"
+}
+normalize_markdown() {
+  awk '
+      /^## Sources & freshness/ { exit }
+      /^## Recent$/ { skip = 1; next }
+      /^## / { skip = 0 }
+      skip { next }
+      /orphan[-_ ]?commits/ { next }
+      { print }
+  ' "$1"
+}
+drift=0
+for artifact in "$md" "$json"; do
+  if [ "$artifact" = "$json" ]; then norm=normalize_json; else norm=normalize_markdown; fi
+  "$norm" "$artifact" >"$tmp/$artifact.committed.norm"
+  "$norm" "$tmp/$artifact" >"$tmp/$artifact.fresh.norm"
+  diff -u --label "$artifact (committed)" --label "$artifact (regenerated)" "$tmp/$artifact.committed.norm" "$tmp/$artifact.fresh.norm" >"$tmp/$artifact.diff" || drift=$((drift + 1))
+done
+tree_after=$(git status --porcelain)
+if [ "$tree_before" != "$tree_after" ]; then
+  echo "brief-drift: the gate changed the working tree; it must never write the repository" >&2
+  exit 1
+fi
+if [ "$drift" -gt 0 ]; then
+  for artifact in "$md" "$json"; do
+    if [ -s "$tmp/$artifact.diff" ]; then
+      echo "brief-drift: $artifact drifted from a fresh render at $as_of" >&2
+      cat "$tmp/$artifact.diff" >&2
+    fi
+  done
+  cli_version=$(jq -r '.cli_version // .data.cli_version // empty' "$json" 2>/dev/null) || cli_version=
+  if [ -n "$cli_version" ]; then
+    echo "brief-drift: committed render was produced by podras $cli_version; re-running the ordering regenerates it with the installed podras, so a version bump alone is self-healing, not real drift" >&2
+  fi
+  # Spliced by render_brief_drift_command: the shared ordering sentence,
+  # shell-single-quoted so its backticks are never command substitution.
+  printf 'brief-drift: %s\n' $STATUS_ORDERING_MESSAGE >&2
+  exit 1
+fi
+echo "brief-drift: $md and $json match a fresh render at $as_of"
+"##;
+
+/// Inline the shared ordering sentence into the gate script: the script is
+/// a static string, so the sentence is spliced at render time by
+/// [`GateCommands::for_repo`] when arming. The splice is shell-single-
+/// quoted so backticks in the sentence are never command substitution at
+/// gate runtime. The rendered command must never be built from
+/// [`DEFAULT_BRIEF_DRIFT`] directly.
+pub(crate) fn render_brief_drift_command() -> String {
+    let quoted = format!("'{}'", STATUS_ORDERING_MESSAGE.replace('\'', r"'\''"));
+    DEFAULT_BRIEF_DRIFT.replace("$STATUS_ORDERING_MESSAGE", &quoted)
+}
+
 /// Gate command lines rendered into the managed pre-commit block (DDL-1bz).
 ///
 /// Built from [`crate::dot_ddl::GatesConfig`]; an empty string omits that
@@ -70,6 +186,11 @@ pub struct GateCommands {
     pub ah_check: String,
     pub pretender_gate: String,
     pub spk_lint: String,
+    /// Brief-render drift gate command (`ddl-brief-drift` pre-commit
+    /// entry, DDL-4jvz). Empty string omits the entry — the default, since
+    /// arming is content-based: [`GateCommands::for_repo`] sets it only
+    /// when the repo has a committed podras brief render.
+    pub brief_drift: String,
 }
 
 impl Default for GateCommands {
@@ -78,13 +199,16 @@ impl Default for GateCommands {
             ah_check: DEFAULT_AH_CHECK.to_string(),
             pretender_gate: DEFAULT_PRETENDER_GATE.to_string(),
             spk_lint: DEFAULT_SPK_LINT.to_string(),
+            brief_drift: String::new(),
         }
     }
 }
 
 impl GateCommands {
     /// Resolve the effective commands from config overrides: `None` keeps
-    /// the shipped default, `Some("")` disables that entry.
+    /// the shipped default, `Some("")` disables that entry. The brief-drift
+    /// gate has no shipped default here — arming is content-based and
+    /// happens in [`GateCommands::for_repo`], which has the repo root.
     pub fn from_config(config: &crate::dot_ddl::GatesConfig) -> Self {
         let pick = |value: &Option<String>, default: &str| match value {
             Some(v) => v.clone(),
@@ -94,6 +218,7 @@ impl GateCommands {
             ah_check: pick(&config.ah_check, DEFAULT_AH_CHECK),
             pretender_gate: pick(&config.pretender_gate, DEFAULT_PRETENDER_GATE),
             spk_lint: pick(&config.spk_lint, DEFAULT_SPK_LINT),
+            brief_drift: pick(&config.brief_drift, ""),
         }
     }
 
@@ -102,7 +227,34 @@ impl GateCommands {
     pub fn for_repo(repo_root: &std::path::Path) -> Self {
         use genesis::config::ConfigFile;
         let config = crate::dot_ddl::DdlConfig::read(&repo_root.join(".ddl")).unwrap_or_default();
-        Self::from_config(&config.gates)
+        let mut commands = Self::from_config(&config.gates);
+        if config.gates.brief_drift.is_none() {
+            // Auto-arming is content-based, never timestamp-based
+            // (DDL-4jvz "no render, no gate"): the gate exists only where
+            // a render is committed; beads-only repos keep the
+            // export-drift guard instead.
+            commands.brief_drift = if Self::brief_render_tracked(repo_root) {
+                render_brief_drift_command()
+            } else {
+                String::new()
+            };
+        }
+        commands
+    }
+
+    /// Content-based gate-arming test (DDL-4jvz): a podras brief render is
+    /// committed — BRIEF.md or BRIEF.json is git-tracked. Never
+    /// timestamp-based, so a repo whose render was merely touched but not
+    /// committed never arms or disarms the gate.
+    pub fn brief_render_tracked(repo_root: &std::path::Path) -> bool {
+        let candidates = ["BRIEF.md", "BRIEF.json"];
+        let tracked: Vec<String> =
+            genesis::git::tracked_paths(repo_root, &candidates).unwrap_or_default();
+        candidates.iter().any(|c| {
+            tracked
+                .iter()
+                .any(|t| std::path::Path::new(t.as_str()) == std::path::Path::new(c))
+        })
     }
 }
 
@@ -119,6 +271,22 @@ pub fn render_pre_commit_block(commands: &GateCommands) -> String {
     entry("ddl-ah-check", &commands.ah_check);
     entry("ddl-pretender-gate", &commands.pretender_gate);
     entry("ddl-spk-lint", &commands.spk_lint);
+    // Brief-drift gate (DDL-4jvz): armed only when a brief render is
+    // committed. The command is a self-contained script rendered as a YAML
+    // block scalar (`run: |`) so ddl owns no external script file; drift
+    // detection compares the whole span, so the scalar body must be stable
+    // — no blank lines (a blank line would render as bare indentation).
+    if !commands.brief_drift.is_empty() {
+        lines.push("    ddl-brief-drift:".to_string());
+        lines.push("      run: |".to_string());
+        for l in commands.brief_drift.lines() {
+            if l.is_empty() {
+                lines.push(String::new());
+            } else {
+                lines.push(format!("        {l}"));
+            }
+        }
+    }
     lines.push(format!("    {MARKER_END_PREFIX}pre-commit)"));
     lines.join("\n")
 }

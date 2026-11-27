@@ -21,6 +21,7 @@ pub use version::cmd_version;
 use crate::dot_ddl::DdlDir;
 use crate::error::{DdlError, Result};
 use crate::output;
+use crate::repo_status;
 use genesis::envelope::EnvelopeKind;
 
 /// Map a feedback outcome to the (message, url) user-facing pair.
@@ -101,15 +102,30 @@ pub fn cmd_catalog(args: &crate::cli::Args) -> Result<()> {
     Ok(())
 }
 
-pub fn cmd_status(args: &crate::cli::Args) -> Result<()> {
+pub fn cmd_status(refresh: bool, args: &crate::cli::Args) -> Result<()> {
     use crate::diagnostics;
     use crate::find_ddl_dir;
 
+    // --refresh (DDL-76lm): re-obtain the repo-status feeds and rewrite
+    // the record via the write ordering. Requires the manifest; the
+    // fast-path output below is unchanged without the flag.
+    if refresh {
+        return cmd_status_refresh(args);
+    }
+
     let ddl_dir = DdlDir::find();
     let report = diagnostics::build_status_report(ddl_dir.as_ref());
+    // Project-status section (DDL-852c task 2.1): read-only view of the
+    // status record; never re-obtains feeds, never affects the exit code.
+    let repo_root = std::env::current_dir().map_err(DdlError::Io)?;
+    let project =
+        diagnostics::build_project_status(&repo_root, ddl_dir.as_ref().map(|d| d.path.as_path()));
 
     if args.is_json() {
-        let data = serde_json::json!(report);
+        let data = serde_json::json!({
+            "sections": report.sections,
+            "project": project,
+        });
         let json_str = output::json_output(
             crate::VERSION,
             true,
@@ -134,6 +150,50 @@ pub fn cmd_status(args: &crate::cli::Args) -> Result<()> {
     println!();
     println!("{}", diagnostics::status_summary(&report.sections));
 
+    // ── Project status (DDL-852c task 2.1) ──
+    println!();
+    println!("── Project status ──");
+    // Contract precedence: the live record is the source of truth (the
+    // in-band header is shared with the repo-status capability).
+    println!("{}", project.precedence);
+    if !project.record_present {
+        println!("  no status record — run `ddl status --refresh`");
+    } else {
+        if let Some(generated) = &project.generated_at {
+            println!("  record generated {generated}");
+        }
+        for feed in &project.feeds {
+            match feed.staleness.as_deref() {
+                Some(staleness) => {
+                    let icon = if staleness == "fresh" { "✓" } else { "⚠" };
+                    println!(
+                        "  {icon} {:12}  observed {}  {}",
+                        feed.name,
+                        feed.observed_at.as_deref().unwrap_or("?"),
+                        staleness
+                    );
+                }
+                None => {
+                    println!(
+                        "  ○ {:12}  unavailable — {}",
+                        feed.name,
+                        feed.detail.as_deref().unwrap_or("no detail")
+                    );
+                }
+            }
+        }
+        if project.may_be_stale {
+            // Labeled as a heuristic (D1): the authoritative content-diff
+            // verdict is computed only by `--refresh` and the doctor check.
+            println!(
+                "  ⚠ may be stale (heuristic: a tracked feed store was committed after the record was generated — not the authoritative verdict)"
+            );
+        }
+        if let Some(suggestion) = &project.suggestion {
+            println!("  → Run: {suggestion}");
+        }
+    }
+
     // health/discovery-mode-no-manifest + dot-ddl/manifest-missing: outside a
     // manifest-managed checkout (no `.ddl/` or no manifest.json), status only
     // discovers from PATH — point the user at `ddl init`.
@@ -145,6 +205,50 @@ pub fn cmd_status(args: &crate::cli::Args) -> Result<()> {
         println!("No manifest found in this directory — run `ddl init` to track tools here.");
     }
 
+    Ok(())
+}
+
+/// The `ddl status --refresh` command path (DDL-76lm).
+///
+/// Without `.ddl/manifest.json` the refresh refuses (exit code 1 through
+/// the standard error path — human "Error:" line or the JSON error
+/// envelope) with `ddl init` guidance, and no record is created. With
+/// it, the ordering runs under the manifest lock; human output reports
+/// each step, JSON output emits the record as the envelope's `data`.
+fn cmd_status_refresh(args: &crate::cli::Args) -> Result<()> {
+    let ddl = match DdlDir::find() {
+        Some(d) if d.path.join("manifest.json").is_file() => d,
+        _ => {
+            return Err(DdlError::Other(
+                "no `.ddl/manifest.json` in this repository — run `ddl init` first".to_string(),
+            ));
+        }
+    };
+
+    let repo_root = std::env::current_dir().map_err(DdlError::Io)?;
+    let report = repo_status::run_refresh(&repo_root, &ddl.path, &ddl.manifest)?;
+
+    if args.is_json() {
+        let data = serde_json::json!(report.record);
+        let json_str =
+            output::json_output(crate::VERSION, true, EnvelopeKind::Ok, data, vec![], vec![])?;
+        println!("{json_str}");
+        return Ok(());
+    }
+
+    for step in &report.steps {
+        println!(
+            "{} {}: {}",
+            if step.ok { "✓" } else { "✗" },
+            step.name,
+            step.detail
+        );
+    }
+    println!();
+    println!(
+        "status record written to {} — commit it so fresh clones and CI have orientation",
+        repo_status::record_path(&ddl.path).display()
+    );
     Ok(())
 }
 
@@ -188,20 +292,23 @@ pub fn cmd_doctor(fix: bool, strict: bool, args: &crate::cli::Args) -> Result<()
 }
 
 /// `--strict` enforcement (DDL-9kz.2): exit non-zero when any REPO-SCOPE
-/// diagnostic (tool `ddl`, check `ddl.repo.*`) is at warn/fail level. The
-/// report is always emitted first, so gate consumers keep the structured
-/// evidence; the exit code is the enforcement. Machine-scope findings
-/// (tool installs, nested tool doctors) do not fail a strict run — the
-/// gate is repo hygiene: tracked beads export, hooks wiring, gitignore,
-/// front door, session protocol.
+/// diagnostic (`ddl.repo.*`, DDL-852c: including the status-pipeline
+/// checks) is at warn/fail level. The report is always emitted first, so
+/// gate consumers keep the structured evidence; the exit code is the
+/// enforcement. Machine-scope findings (tool installs, nested tool
+/// doctors) do not fail a strict run — the gate is repo hygiene: tracked
+/// beads export, hooks wiring, gitignore, front door, session protocol,
+/// status record freshness.
 fn strict_violations(report: &crate::diagnostics::DiagnosticReport, strict: bool) {
     if !strict {
         return;
     }
+    // Repo findings live under the `repo` key (DDL-852c, design D5) —
+    // same enforcement rule, different home.
     let violations = report
-        .diagnostics
+        .repo
+        .checks
         .iter()
-        .filter(|d| d.tool == "ddl" && d.check.starts_with("ddl.repo."))
         .filter(|d| d.level == "warn" || d.level == "fail")
         .count();
     if violations > 0 {

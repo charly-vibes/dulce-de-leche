@@ -3,8 +3,10 @@
 //! Pins the machine contract so it cannot drift again:
 //! - `envelope_version` is always "0.1"
 //! - `ddl doctor --json` data = { summary: {pass, warn, fail}, diagnostics:
-//!   [{tool, check, level: pass|warn|fail, detail, fix?}] } — summary is the
-//!   roll-up of the items, never contradicts them
+//!   [{tool, check, level: pass|warn|fail, detail, fix?}],
+//!   repo: { summary: {pass, warn, fail}, checks: [...] } } — each summary is
+//!   the roll-up of its own items, never contradicts them; repo findings
+//!   (ddl.repo.*) live ONLY under `repo`, never in `diagnostics` (DDL-852c)
 //! - `ddl status --json` items carry no nulls and the section summary agrees
 //!   with the item levels
 //! - no null values anywhere inside `data`
@@ -62,9 +64,44 @@ fn doctor_envelope_matches_pinned_contract() {
     keys.sort_unstable();
     assert_eq!(
         keys,
-        vec!["diagnostics", "summary"],
+        vec!["diagnostics", "repo", "summary"],
         "exactly these data keys"
     );
+
+    // repo key (DDL-852c): its own summary, recomputed from its checks —
+    // and NO repo findings leaked into `diagnostics` (tool counts stay
+    // untouched by repo findings).
+    let repo = &data["repo"];
+    let repo_checks = repo["checks"].as_array().expect("repo.checks array");
+    let repo_summary = &repo["summary"];
+    for key in ["pass", "warn", "fail"] {
+        assert!(
+            repo_summary[key].is_u64(),
+            "repo.summary.{key} must be a number"
+        );
+    }
+    let repo_count =
+        |level: &str| repo_checks.iter().filter(|i| i["level"] == level).count() as u64;
+    assert_eq!(repo_summary["pass"], serde_json::json!(repo_count("pass")));
+    assert_eq!(repo_summary["warn"], serde_json::json!(repo_count("warn")));
+    assert_eq!(repo_summary["fail"], serde_json::json!(repo_count("fail")));
+    assert!(
+        !data["diagnostics"]
+            .as_array()
+            .expect("diagnostics array")
+            .iter()
+            .any(|i| i["check"]
+                .as_str()
+                .unwrap_or_default()
+                .starts_with("ddl.repo.")),
+        "ddl.repo.* findings must live under repo, not diagnostics"
+    );
+    for (i, item) in repo_checks.iter().enumerate() {
+        let obj = item.as_object().expect("repo check is an object");
+        for key in ["tool", "check", "level", "detail"] {
+            assert!(obj.contains_key(key), "repo check {i} missing '{key}'");
+        }
+    }
 
     // diagnostics: structured items with the exact key set
     let diagnostics = data["diagnostics"].as_array().expect("diagnostics array");
@@ -96,7 +133,8 @@ fn doctor_envelope_matches_pinned_contract() {
         }
     }
 
-    // summary is the roll-up of the items — single source, never contradictory
+    // summary is the roll-up of the tool items (repo findings count under
+    // repo.summary) — single source, never contradictory
     let summary = &data["summary"];
     for key in ["pass", "warn", "fail"] {
         assert!(summary[key].is_u64(), "summary.{key} must be a number");

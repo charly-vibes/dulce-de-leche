@@ -38,3 +38,8 @@ published; macOS, Linux, and Windows are verified end-to-end by the
 - ✅ Done — completed and tested
 - 🔄 In progress — actively being worked on
 - ⬜ Not started — design complete, not implemented
+
+## See also
+
+- [Repository Status Record](./repo-status.md) — the per-repo project-status
+  contract and the ordering that keeps it fresh

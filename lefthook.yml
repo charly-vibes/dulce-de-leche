@@ -14,9 +14,92 @@ pre-commit:
     ddl-ah-check:
       run: ah check
     ddl-pretender-gate:
-      run: pretender check --diff-only --mode gate
+      run: pretender check --staged --mode gate
     ddl-spk-lint:
       run: spk lint openspec/specs || test $? -eq 2
+    ddl-brief-drift:
+      run: |
+        set -eu
+        root=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "brief-drift: not inside a git repository" >&2; exit 2; }
+        cd "$root"
+        md=BRIEF.md
+        json=BRIEF.json
+        tracked() { git ls-files --error-unmatch -- "$1" >/dev/null 2>&1; }
+        if ! tracked "$md" && ! tracked "$json"; then
+          # No render, no gate (DDL-4jvz): beads-only repos are covered by the
+          # export-drift guard instead.
+          exit 0
+        fi
+        if ! tracked "$md" || ! tracked "$json"; then
+          echo "brief-drift: incomplete committed renders: $md and $json must exist together" >&2
+          exit 1
+        fi
+        command -v jq >/dev/null 2>&1 || { echo "brief-drift: jq is required to normalize renders" >&2; exit 2; }
+        podras_bin=${PODRAS_BIN:-podras}
+        command -v "$podras_bin" >/dev/null 2>&1 || {
+          echo "brief-drift: podras not found (set PODRAS_BIN) — render gate skipped, not passed" >&2
+          exit 0
+        }
+        as_of=$(jq -r '(.data.as_of // (.data.generated_at | .[0:10])) // empty' "$json" 2>/dev/null) || as_of=
+        as_of=${as_of:-$(date -u +%F)}
+        tmp=$(mktemp -d "${TMPDIR:-/tmp}/ddl-brief-drift.XXXXXX")
+        trap 'rm -rf "$tmp"' EXIT
+        tree_before=$(git status --porcelain)
+        "$podras_bin" brief --write --as-of "$as_of" --out-dir "$tmp" >/dev/null 2>&1 || {
+          echo "brief-drift: podras brief --write failed for as-of $as_of — run it manually to see the error" >&2
+          exit 1
+        }
+        for f in "$md" "$json"; do
+          [ -e "$tmp/$f" ] || { echo "brief-drift: regeneration produced no $f" >&2; exit 1; }
+        done
+        normalize_json() {
+          jq 'del(.generated_at, .cli_version, .data.generated_at, .data.as_of, .data.cli_version, .data.source_hash, .data.warnings, .meta.author)
+              | del(.data.curation.updated_at)
+              | del(.data.recent)
+              | del(.data.head_sha)
+              | (.data.sources[]? |= del(.observed_at, .staleness, .detail))
+              | (.data.health.signals = ((.data.health.signals // []) | map(select(.kind != "orphan_commits"))))
+              | (.data.health.reason = ((.data.health.reason // "") | sub("orphan_commits:.*"; "orphan_commits: <head-churn omitted>")))' "$1"
+        }
+        normalize_markdown() {
+          awk '
+              /^## Sources & freshness/ { exit }
+              /^## Recent$/ { skip = 1; next }
+              /^## / { skip = 0 }
+              skip { next }
+              /orphan[-_ ]?commits/ { next }
+              { print }
+          ' "$1"
+        }
+        drift=0
+        for artifact in "$md" "$json"; do
+          if [ "$artifact" = "$json" ]; then norm=normalize_json; else norm=normalize_markdown; fi
+          "$norm" "$artifact" >"$tmp/$artifact.committed.norm"
+          "$norm" "$tmp/$artifact" >"$tmp/$artifact.fresh.norm"
+          diff -u --label "$artifact (committed)" --label "$artifact (regenerated)" "$tmp/$artifact.committed.norm" "$tmp/$artifact.fresh.norm" >"$tmp/$artifact.diff" || drift=$((drift + 1))
+        done
+        tree_after=$(git status --porcelain)
+        if [ "$tree_before" != "$tree_after" ]; then
+          echo "brief-drift: the gate changed the working tree; it must never write the repository" >&2
+          exit 1
+        fi
+        if [ "$drift" -gt 0 ]; then
+          for artifact in "$md" "$json"; do
+            if [ -s "$tmp/$artifact.diff" ]; then
+              echo "brief-drift: $artifact drifted from a fresh render at $as_of" >&2
+              cat "$tmp/$artifact.diff" >&2
+            fi
+          done
+          cli_version=$(jq -r '.cli_version // .data.cli_version // empty' "$json" 2>/dev/null) || cli_version=
+          if [ -n "$cli_version" ]; then
+            echo "brief-drift: committed render was produced by podras $cli_version; re-running the ordering regenerates it with the installed podras, so a version bump alone is self-healing, not real drift" >&2
+          fi
+          # Spliced by render_brief_drift_command: the shared ordering sentence,
+          # shell-single-quoted so its backticks are never command substitution.
+          printf 'brief-drift: %s\n' 'Run `ddl status --refresh` — it regenerates the brief render (podras brief --write), updates the tracked export (.beads/issues.jsonl), and rewrites the status record; then re-commit.' >&2
+          exit 1
+        fi
+        echo "brief-drift: $md and $json match a fresh render at $as_of"
     # ddl:managed:end (pre-commit)
 # ah:managed:start
     ah-check:
@@ -34,13 +117,6 @@ pre-commit:
     lint:
       glob: "*.rs"
       run: just lint
-    # Committed-render drift gate (podras dogfood, DDL-3jes): fails when
-    # BRIEF.md / BRIEF.json no longer match a regeneration at the render's
-    # recorded as-of date. Kept outside the sad:managed block so `sad hooks
-    # install/uninstall` never owns it; regenerate renders with
-    # `podras brief --write`.
-    brief-drift:
-      run: scripts/guards/brief-drift.sh
     # kaya record gates (DDL-csx.5): validate the record as STAGED so a bad
     # ledger/projection pair never lands; --index reads the ledger and
     # projections from the git index, not the worktree. Read-only.

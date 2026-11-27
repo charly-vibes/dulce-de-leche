@@ -57,8 +57,14 @@ pub fn detect_beads_export_problems(i: &BeadsExportProblemsInput) -> Vec<String>
 /// fully wired: both managed blocks present, inside `commands:`, no
 /// duplicates, no mangled markers, and each managed span matching the
 /// rendering derived from `commands` (DDL-1bz drift check). This is the
-/// single source of truth for "gates wired" shared by `init --gates` and the
-/// repo-aware doctor.
+/// single source of truth for "gates wired" shared by `init --gates` and
+/// the repo-aware doctor.
+///
+/// The `ddl-brief-drift` entry (DDL-4jvz) needs no separate arm of this
+/// check: it lives inside the pre-commit managed span, so a drifted or
+/// missing brief-drift command is reported by the same span comparison —
+/// `commands.brief_drift` is armed (content-based) exactly when the repo
+/// has a committed render.
 pub fn detect_lefthook_gates_problems(
     content: Option<&str>,
     commands: &GateCommands,
@@ -138,6 +144,38 @@ pub fn detect_lefthook_gates_problems(
         }
     }
     problems
+}
+
+/// Read-only drift check for the canonical beads-semantics AGENTS.md block
+/// (DDL-4jvz task 3.3): a `<!-- BEADS-SEMANTICS:START -->` span whose body
+/// no longer matches `crate::installer::beads_semantics_block()` — e.g.
+/// one edited to claim `.beads/issues.jsonl` is the source of truth — is
+/// reported with the writer that repairs it. An absent span (or a missing
+/// AGENTS.md) is NOT reported here: writing the block is the wiring's job;
+/// the doctor's beads-block check (later phase) owns absence and
+/// free-standing contradiction policy.
+pub fn detect_beads_semantics_block_problems(text: Option<&str>) -> Vec<String> {
+    let Some(text) = text else {
+        return Vec::new();
+    };
+    let Some(begin) = text.find(crate::installer::BEADS_SEMANTICS_MARKER) else {
+        return Vec::new();
+    };
+    let end_marker = "<!-- BEADS-SEMANTICS:END -->";
+    let Some(end_idx) = text[begin..].find(end_marker) else {
+        return vec![format!(
+            "beads-semantics block has a start marker but no end marker ({end_marker}) — run `ddl init --gates`"
+        )];
+    };
+    let span_end = begin + end_idx + end_marker.len();
+    if text[begin..span_end] != crate::installer::beads_semantics_block() {
+        vec![
+            "beads-semantics block has drifted from the canonical storage-semantics statement — run `ddl init --gates` to rewrite it"
+                .to_string(),
+        ]
+    } else {
+        Vec::new()
+    }
 }
 
 /// Canonical tool-init order (always applied): openspec before ah (ah init
