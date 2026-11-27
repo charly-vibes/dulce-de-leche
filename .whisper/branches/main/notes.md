@@ -150,3 +150,26 @@
   - A concurrent session was active in this repo during the session and merged its own work (epic DDL-9kz, fleet sweep DDL-9kz.3 plus 10 per-repo children). Re-read bd state before scheduling; do not assume this snapshot is the whole tracker.
   - DDL-44k (fleet sweep to adopt the armed gate) is partially superseded by that concurrent sweep - re-verify the per-repo definition of done before running it.
   - The merge of PR #105 needed a manual conflict resolution on the retrospective artifact (the concurrent session's newer CORR-009-corrected copy was kept).
+- 2026-11-25T19:33:32Z [id:f1b00697bbcb1f1c90417f8c2894b1d5c16edf35072c018430b9ea18c63010a6] (#kaya-adoption) Format: 1
+  Saved: 2026-11-25T19:45:00Z
+  Repo: charly-vibes/dulce-de-leche (branch main, HEAD 8ec5b22, clean, in sync with origin/main)
+  Session: omp conversation 2026-11-25 evening (id unknown — not queried at save time)
+  
+  Objective: adopt kaya (research record as SSOT) — epic DDL-csx — and ship its remaining children.
+  
+  Phase: COMPLETE. Epic closed. All children merged with green CI:
+  - DDL-csx.1 bootstrap ledger — PR #106 (dda5561).
+  - DDL-csx.5 record gates — PR #109 (b70657c): pre-commit kaya check --index, pre-push record-verify, CI record gates (warn PR / fail main), record-lag.py vendored (bound 60 < import window 100).
+  - DDL-csx.7 SSOT pin — PR #110 (b6af27a): versions.ddl.toml kaya = "0.4.1" (GitHub release download; kaya-vibes deliberately NOT on crates.io — also corrected sad/podras comments in #109's PR), DOGFOOD_MATRIX + install_marker kaya_{pin}_ arm (red→green), §4 kaya column, README Record badge.
+  - DDL-csx.6 publication — PR #111 (03c4982): build-publications.py + check-links.py vendored @ v0.4.1 (titles renamed ddl, tree logic untouched — no renderer fork); docs/public + docs/research render into book/public + book/research; record-check = verify + links + lag; mdbook pinned 0.5.2 in ci.yml + docs.yml (was 'latest', §4-fixed); live Pages verified: /public/ and /research/ both 200 (docs run 45685204552).
+  
+  Next action (if resuming): nothing pending in this task — pick from bd ready. Two live threads: (1) fleet pin flip — 14 repos may now pin kaya = "0.4.1" against the landed SSOT (DDL-csx.7 unblocked them); per-repo definition-of-done first (fleet-sweep lesson). (2) The morning's remediation set is STILL OPEN and untouched by this session: DDL-uce (fix root-cause attribution in merged PR #105 body via gh pr edit + .whisper/env.md; safe from 2b88574), then DDL-k5n (just hooks recipe), DDL-v4s (self-wiring). DDL-01q (de-flake gates/init tests) remains open — bit twice today (gates::tests::sad_gate_wired_via_hooks_install_and_idempotent failed once in CI, green in isolation + rerun; same family as test_init_json_output).
+  
+  Decisions/constraints: no direct pushes to main — feature branch + PR (one slip this session: commit landed on local main, moved to branch + reset BEFORE push, PR-only path preserved). Push/release needs explicit authorization; session-close ritual pushes beads export. Do not change gate semantics (rendered gate command stays pretender check --staged --mode gate). sad comment-channel gate is armed: vendored python prose comments must live in docstrings (bit once, fixed).
+  
+  Validation (historical, re-verify on resume): standard_conformance 23/23; test-full 108 green; just links 49 pages 0 unresolved; kaya build ×3 digest-stable; brief-drift green.
+  
+  Unresolved: 'bajan not installed' still fails ddl doctor (environment, not code). .wai/projects/dulce-de-leche/runs/pretender-debt*.log untracked debris (delete or gitignore someday). DDL-9kz.2 (.beads gitignore negation) still open — beads export needs git add -f.
+  
+  Refs: ship evidence in bd close reasons (bd is primary); kaya reference = charly-vibes/kaya @ v0.4.1 (their lefthook/CI run ahead of release: --fail-on-stale-authored + impact gate NOT in 0.4.1 — do not copy into ddl).
+  Previous entry: none (first entry for this topic; the 2026-11-25 resume-ddl-uce entry is a different task, untouched).
