@@ -127,6 +127,17 @@ pre-push: fmt-check lint test
 
 # === Setup Commands ===
 
+# Wire git hooks for this clone (idempotent). The hook shims ship committed in
+# .beads/hooks, but core.hooksPath is repo-local git config — a copied or
+# renamed .git/config can lose it and silently disable every gate (CORR-001,
+# see DDL-sl9/DDL-k5n). Re-point hooksPath explicitly, then let bd install
+# anything missing: bd hooks install --beads refuses to overwrite tracked
+# shims it does not own, so a fully populated .beads/hooks makes it a no-op.
+hooks:
+    git config core.hooksPath .beads/hooks
+    bd hooks install --beads || true
+    bd hooks list
+
 # Setup development environment
 setup:
     @echo "Checking Rust installation..."
