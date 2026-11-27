@@ -18,10 +18,12 @@ answers both tool health and repo status.
 
 #### Scenario: Stale record
 
-- **WHEN** user runs `ddl status` and the record's feeds are stale against their
-  underlying store state
-- **THEN** the project-status section shows the record with its staleness flags
+- **WHEN** user runs `ddl status` and the record's `generated_at` is older than the
+  last commit touching any feed's tracked store file (cheap display-time heuristic)
+- **THEN** the project-status section shows the record with a "may be stale" flag
 - **AND** suggests `ddl status --refresh`
+- **AND** the authoritative content-diff staleness verdict is computed only by
+  `ddl status --refresh` and the `ddl.repo.status-fresh` doctor check
 
 ### Requirement: Doctor Command reports repo checks
 

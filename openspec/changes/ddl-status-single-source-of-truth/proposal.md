@@ -60,13 +60,21 @@ replace them).
   health); `ddl doctor` gains the `ddl.repo.*` checks and separates repo-status findings
   from tool findings in its report and JSON.
 
+## Acceptance
+
+- `openspec validate --changes ddl-status-single-source-of-truth` passes and the
+  change archives cleanly.
+- **Meter:** at the next fleet re-measurement, `ddl doctor` reports 0 stale status
+  feeds across the audited repos, and the session retrospective finds no
+  brief-drift commit-retry episodes (baseline: 3 in one 2026-11-25 session).
+
 ## Impact
 
 - **Affected specs:** new `specs/repo-status/spec.md`; delta on `openspec/specs/health/spec.md`
   (Status Command + Doctor Command requirements).
 - **Affected code:** `src/platform/tool.rs` (podras descriptor — status/refresh seams),
-  `src/diagnostics.rs` (status/doctor report builders), new `src/repo_status.rs`
-  (feed obtainers + record writer + schema), `src/installer/init.rs` (gate emission),
+  `src/diagnostics/` (`status.rs` — status/doctor report builders), new
+  `src/repo_status.rs` (feed obtainers + record writer + schema), `src/installer/init.rs` (gate emission),
   `justfile`/lefthook templates for the brief-drift gate.
 - **Protocol:** subprocess only (podras `brief --json`, `bd export`/`bd list --json`,
   `git`); no shared-library linking, consistent with the existing architecture.

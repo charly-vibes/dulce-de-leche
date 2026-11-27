@@ -5,7 +5,7 @@
 - [ ] 1.1 Create `src/repo_status.rs`: `repo-status.v1` record types (versioned, tolerant envelope), serialization, and the read path used by `ddl status`
 - [ ] 1.2 `FeedObtainer` trait (subprocess protocol, per-tool timeout, error capture) + descriptor field `status_feed` on the tool table in `src/platform/tool.rs` (podras, bd, openspec, git)
 - [ ] 1.3 Feed obtainers: podras `brief --json` envelope, bd `bd list --json` counts, git branch/ahead-behind/dirty via genesis git helpers, openspec `openspec list --json`
-- [ ] 1.4 Staleness engine per design D2: brief feed = committed `BRIEF.json` vs fresh envelope diff; beads feed = tracked `.beads/issues.jsonl` vs `bd export` temp diff; git = live. Unit tests pin the whisper-class case (tracker unchanged ⇒ not stale) using content diff, not timestamps
+- [ ] 1.4 Staleness engine per design D2: brief feed = committed `BRIEF.json` `data` payload (volatile fields `generated_at`/`as_of`/`cli_version`/`observed_at` normalized out) vs fresh envelope payload, or committed render vs fresh render where a render exists; beads feed = tracked `.beads/issues.jsonl` vs `bd export` temp diff; git = live. Unit tests pin the whisper-class case (tracker unchanged ⇒ not stale) and the volatile-fields case (two fresh envelopes with differing `generated_at` ⇒ equal after normalization, not stale) using content diff, not timestamps
 - [ ] 1.5 `ddl status --refresh`: dot-ddl file lock, write ordering (obtain → `podras brief --write` when applicable → `bd export` → record write), per-step reporting, actionable failure output naming the remaining command
 - [ ] 1.6 Contract-precedence in-band header: emitted outputs identify ddl + `generated_at` + live record as source of truth (spec scenario)
 - [ ] 1.7 Unmanaged status artifact detection: root-level hand-written status files (`AGENT-SUMMARY.md` class) reported with last-commit date
@@ -26,13 +26,13 @@
 
 ## 4. Tests + verification
 
-- [ ] 4.1 Integration tests: refresh idempotent on re-run; gate passes after the ordering without manual retry (the 3-retry regression); feed-unavailable degradation (podras absent repo still exits 0 with `unavailable` feeds)
+- [ ] 4.1 Integration tests: refresh idempotent on re-run; record write is atomic under a racing reader (temp+rename); gate passes after the ordering without manual retry (the 3-retry regression); podras version-bump case (render produced by older `cli_version` → gate names the version, ordering self-heals); feed-unavailable degradation (podras absent repo still exits 0 with `unavailable` feeds)
 - [ ] 4.2 Doctor tests: contradictory beads block flagged; correct block passes; repo failures don't alter tool counts
 - [ ] 4.3 Run `just test` (testaruda loop) for the working diff; full gates via lefthook pre-push
 
 ## 5. Fleet rollout + ticket reconciliation
 
 - [ ] 5.1 Prerequisite gate: confirm DDL-kk9 (podras malformed-line FP) closed before rollout
-- [ ] 5.2 Re-scope DDL-852c and DDL-4jvz to this change (note in beads); DDL-js72 satisfied by 3.3, DDL-qfc5 decision input from 1.7 evidence
+- [ ] 5.2 Verify the DDL-852c/DDL-4jvz re-scope notes are applied in beads (added 2026-11-27); close both as implemented by this change; DDL-js72 satisfied by 3.3, DDL-qfc5 decision input from 1.7 evidence
 - [ ] 5.3 Fleet rollout via DDL-44k: re-run `ddl init --gates` across charly repos; `ddl doctor` repo checks verify adoption
 - [ ] 5.4 Update research artifact's Improvement directions section to reference the shipped change; docs page for the new record + ordering

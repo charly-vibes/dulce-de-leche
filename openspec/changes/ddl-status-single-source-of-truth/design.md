@@ -9,7 +9,7 @@ See proposal.md — Why. Current state that shapes the approach:
   (`BRIEF.json`, schema `brief.v1`).
 - ddl already talks to every managed tool over a subprocess protocol
   (`src/platform/tool.rs` descriptors; `wai status --json` parsing in
-  `src/diagnostics.rs`); genesis `git` helpers exist for repo state.
+  `src/diagnostics/status.rs`); genesis `git` helpers exist for repo state.
 - `.ddl/` is the managed repo directory (dot-ddl spec: directory layout, gitignore
   convention, file locking) — a new record file belongs there.
 - Gate emission machinery exists: `ddl init --gates` writes managed blocks
@@ -46,7 +46,12 @@ See proposal.md — Why. Current state that shapes the approach:
 CI job has orientation with zero tools installed. But it is a *contract with an expiry*:
 `ddl status` re-obtains nothing by default, shows the record with staleness flags, and
 `ddl status --refresh` re-runs the obtainers. The doctor check `ddl.repo.status-fresh`
-fails when the record's feeds are stale by content-state comparison.
+fails when the record's feeds are stale by content-state comparison. Two staleness
+tiers by cost: `ddl status` (read-only, fast) shows record age plus a "may be stale"
+flag from a cheap heuristic — last commit date of each feed's tracked store file vs
+the record's `generated_at`, labeled as a heuristic in output; the *authoritative*
+content-diff staleness (D2) is computed only by `ddl status --refresh` and the
+`status-fresh` doctor check, which run the obtainers.
 
 - Alternative rejected: untracked, always re-obtain. Loses offline/CI orientation and
   recreates the "live command fails in unconfigured repos" class (F-C evidence).
@@ -55,9 +60,16 @@ fails when the record's feeds are stale by content-state comparison.
 
 ### D2 — Staleness is computed from content state, never file timestamps
 
-For each feed, staleness compares committed artifact vs a fresh re-obtainment:
+For each feed, staleness compares committed artifact vs a fresh re-obtainment,
+**comparing semantic content only — volatile envelope fields (`generated_at`,
+`as_of`, `cli_version`, and per-source `observed_at` values) are normalized out of
+both sides before diffing** (measured: they differ on every `podras brief --json`
+invocation, so an unnormalized envelope diff is always non-empty):
 
-- brief feed: committed `BRIEF.json` vs a fresh `podras brief --json` envelope diff.
+- brief feed: committed `BRIEF.json`'s `data` payload (volatile fields removed) vs a
+  fresh `podras brief --json` `data` payload normalized the same way — or, where a
+  render exists, the committed `BRIEF.md` vs a fresh `--write` render (the method the
+  existing dulce brief-drift gate already uses).
 - beads feed: tracked `.beads/issues.jsonl` vs `bd export` to a temp file (diff).
 - git feed: computed live, always `fresh` (cheap, no committed artifact).
 
@@ -72,6 +84,14 @@ counts + export diff, openspec → active changes, git → repo state (genesis h
 A `FeedObtainer` trait (subprocess protocol, per-tool timeout, error capture) keeps
 ddl orchestrator-clean: no library linking, release cycles stay decoupled.
 
+Scope rationale: tool *health* already flows through the existing health capability
+(`wai status`, `dont doctor`, … via tool status commands). Repo-*status* feeds in v1
+are limited to podras/bd/git/openspec — the four that answer "what is in flight and
+is that answer fresh". wai pipeline state and dont claims are named future feeds,
+not omissions.
+Considered and deferred: a wai-pipeline feed reading `wai pipeline status`; rejected
+for v1 because its failure modes (multi-project resolution, DDL-9kz.9.2) are open.
+
 ### D4 — `--refresh` runs the write ordering with the existing file lock
 
 `ddl status --refresh` reuses dot-ddl's file locking (Requirement: File Locking) and
@@ -82,6 +102,13 @@ failure is actionable). The same ordering is what the emitted `brief-drift` gate
 failure message prescribes — one source of truth for the ordering (answers the 3-retry
 loop and the two-agents-racing edge case; the gate message and `--refresh` can't drift).
 
+Concurrency reality: the dot-ddl lock covers ddl-side writers only; non-ddl agents
+(pi sessions today) run the same ritual unlocked. Therefore the record write is
+atomic per file (write temp + rename), each feed entry keeps its own `observed_at`,
+and a refresh that races an external ritual may snapshot a torn view — it
+self-corrects on the next refresh, and the commit-time gate remains the real
+serialization point. The record never becomes corrupt by a racing writer.
+
 ### D5 — Doctor repo checks are a namespace, not a tool
 
 `ddl.repo.*` checks live beside tool checks in the doctor report but under a separate
@@ -91,6 +118,10 @@ tool findings (REPLy.jl #46 evidence: `pass: 0, warn: 29` noise). Checks:
 "source of truth" applied to the export), `brief-drift-gate` (gate present where render
 committed), `unmanaged-status-artifacts` (root-level hand-written status files).
 
+Considered and rejected: a separate `ddl repo doctor` subcommand — splits the answer
+across two commands and reintroduces the "which command do I run" orientation tax
+the change removes; the namespace keeps one report.
+
 ### D6 — Gate emission extends the existing installer gates
 
 The brief-drift gate template is emitted by `ddl init --gates` into the repo's
@@ -99,6 +130,12 @@ existing export-drift guard instead (spec: No render, no gate). Fleet rollout ri
 DDL-44k (re-run `ddl init --gates` across repos). The two hand-rolled gates (dulce,
 podras) are migrated to the template so the convention stops forking.
 
+Podras version drift: a committed render produced by an older/newer podras than the
+locally installed one can diff non-empty with no real drift. The gate's failure
+message therefore includes the committed envelope's `cli_version` (producing version)
+and states that re-running the ordering regenerates the render with the installed
+version — self-healing, one command.
+
 ### D7 — Record schema is versioned and tolerant
 
 `repo-status.v1` mirrors the brief envelope's shape (`ok`/`data` envelope, per-feed
@@ -106,6 +143,29 @@ entries, `schema_version`). Unknown feed fields are preserved, not rejected; a f
 schema bump (e.g. `brief.v2`) is recorded with its version rather than breaking the
 refresh. Same error-identity discipline as `cli-core` JSON output: `--json` and human
 outputs name the same error codes (wai-4hqy lesson).
+
+Target shape (illustrative):
+
+```json
+{
+  "ok": true,
+  "envelope_version": "0.1",
+  "schema_version": "repo-status.v1",
+  "generated_at": "2026-11-27T17:00:00Z",
+  "data": {
+    "feeds": [
+      { "name": "podras", "observed_at": "2026-11-27T16:59:58Z",
+        "staleness": "fresh", "payload": { "…": "brief envelope data" } },
+      { "name": "bd", "observed_at": "2026-11-27T16:59:59Z",
+        "staleness": "fresh", "payload": { "open": 33, "blocked": 4 } },
+      { "name": "openspec", "status": "unavailable",
+        "detail": "no active changes" }
+    ]
+  }
+}
+```
+Unknown feed fields are preserved under `payload`; `unavailable` entries carry the
+producer's error in `detail`.
 
 ## Risks / Trade-offs
 

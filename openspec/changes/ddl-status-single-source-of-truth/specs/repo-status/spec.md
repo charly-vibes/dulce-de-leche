@@ -22,6 +22,19 @@ protocol.
   `name`, `observed_at`, `staleness`, and the feed's status payload
 - **AND** the record is valid JSON parseable without ddl
 
+#### Scenario: Record written atomically
+
+- **WHEN** the system writes `.ddl/status.json`
+- **THEN** it writes to a temporary file and renames it into place
+- **AND** a reader never observes a partially written record
+
+#### Scenario: Refresh without a manifest is refused with guidance
+
+- **WHEN** user runs `ddl status --refresh` in a repo without `.ddl/manifest.json`
+- **THEN** the system does not create a record and reports that the repo is not
+  ddl-managed with the message to run `ddl init` first
+- **AND** exits with code 1
+
 #### Scenario: Feeds obtained via subprocess
 
 - **WHEN** the system refreshes the status record
@@ -116,6 +129,9 @@ differs from a fresh render.
   is present and active
 - **AND** the gate's failure message states the required ordering (refresh render,
   update export, re-commit) instead of only reporting drift
+- **AND** the failure message includes the committed envelope's producing podras
+  version (`cli_version`) so a podras version bump between render and check is
+  distinguishable from real drift (re-running the ordering regenerates and self-heals)
 
 #### Scenario: No render, no gate
 
