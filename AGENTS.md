@@ -158,6 +158,8 @@ bd close <id>         # Complete work
 
 **Architecture in one line:** issues live in `.beads/issues.jsonl` (JSONL, committed to git — the source of truth). bd runs embedded (in-process Dolt, `no-db: true`): there is no Dolt remote and no `bd dolt push/pull` sync. Git itself is the sync mechanism. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
 
+**Git hooks must be wired per clone:** run `just hooks` once per checkout. The hook shims ship committed in `.beads/hooks`, but `core.hooksPath` is repo-local git config — a copied or renamed `.git/config` can lose it, silently disabling every gate (see DDL-sl9 / CORR-001). Never wire hooks by hand-editing the shims; `bd hooks install --beads` (via the recipe) is the sanctioned mechanism and refuses to overwrite tracked shims it does not own.
+
 ## Session Completion
 
 **When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
