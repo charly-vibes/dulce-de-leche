@@ -6,19 +6,19 @@
   "data": {
     "schema_version": "brief.v1",
     "as_of": "2026-11-27",
-    "generated_at": "2026-11-27T17:17:49.737387486Z",
+    "generated_at": "2026-11-27T17:25:32.835682525Z",
     "sources": [
       {
         "name": "beads",
         "status": "present",
-        "observed_at": "2026-11-27T17:17:45Z",
+        "observed_at": "2026-11-27T17:25:20Z",
         "staleness": "fresh",
-        "detail": "29 malformed line(s) skipped in .beads/issues.jsonl"
+        "detail": "34 malformed line(s) skipped in .beads/issues.jsonl"
       },
       {
         "name": "git",
         "status": "present",
-        "observed_at": "2026-11-27T17:14:25Z",
+        "observed_at": "2026-11-27T17:17:54Z",
         "staleness": "fresh",
         "detail": null
       },
@@ -72,39 +72,13 @@
         "confirmed_at": null
       },
       {
-        "id": "DDL-4jvz",
-        "title": "ddl init --gates: write the brief-drift pre-commit gate into every beads repo (extend DDL-44k)",
-        "status": "open",
-        "priority": 1,
-        "blocked_by": [
-          "DDL-44k"
-        ],
-        "age_days": 0,
-        "reason": null,
-        "confirmed_at": null
-      },
-      {
         "id": "DDL-76lm",
         "title": "Epic: make repo-status SSOT self-maintaining (session-mined frictions)",
         "status": "open",
         "priority": 1,
         "blocked_by": [
-          "DDL-4jvz",
-          "DDL-852c",
           "DDL-js72",
           "DDL-qfc5"
-        ],
-        "age_days": 0,
-        "reason": null,
-        "confirmed_at": null
-      },
-      {
-        "id": "DDL-76lm.1",
-        "title": "ddl: repo-status record core — feeds, staleness engine, .ddl/status.json, --refresh ordering",
-        "status": "open",
-        "priority": 1,
-        "blocked_by": [
-          "DDL-kk9"
         ],
         "age_days": 0,
         "reason": null,
@@ -119,18 +93,6 @@
           "DDL-3et"
         ],
         "age_days": 11,
-        "reason": null,
-        "confirmed_at": null
-      },
-      {
-        "id": "DDL-852c",
-        "title": "ddl: project-status section in `ddl status` + doctor check ddl.repo.brief-fresh",
-        "status": "open",
-        "priority": 1,
-        "blocked_by": [
-          "DDL-kk9"
-        ],
-        "age_days": 0,
         "reason": null,
         "confirmed_at": null
       },
@@ -213,43 +175,47 @@
         "age_days": 42,
         "reason": null,
         "confirmed_at": null
-      }
-    ],
-    "blocked": [
+      },
       {
-        "id": "DDL-4jvz",
-        "title": "ddl init --gates: write the brief-drift pre-commit gate into every beads repo (extend DDL-44k)",
+        "id": "DDL-9kz.10",
+        "title": "DESIGN: choose how to reduce pi edit exact-match friction (8.2% of edit calls fail)",
         "status": "open",
-        "priority": 1,
-        "blocked_by": [
-          "DDL-44k"
-        ],
-        "age_days": 0,
+        "priority": 2,
+        "blocked_by": [],
+        "age_days": 2,
         "reason": null,
         "confirmed_at": null
       },
+      {
+        "id": "DDL-9kz.11.1",
+        "title": "docs: fleet-incidents entry - 'session-close protocol invisible to non-pi harnesses'",
+        "status": "open",
+        "priority": 2,
+        "blocked_by": [],
+        "age_days": 2,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "DDL-9kz.11.2",
+        "title": "docs: standardization.md section 10 - the session-close protocol must be repo-level (harness-agnostic)",
+        "status": "open",
+        "priority": 2,
+        "blocked_by": [],
+        "age_days": 2,
+        "reason": null,
+        "confirmed_at": null
+      }
+    ],
+    "blocked": [
       {
         "id": "DDL-76lm",
         "title": "Epic: make repo-status SSOT self-maintaining (session-mined frictions)",
         "status": "open",
         "priority": 1,
         "blocked_by": [
-          "DDL-4jvz",
-          "DDL-852c",
           "DDL-js72",
           "DDL-qfc5"
-        ],
-        "age_days": 0,
-        "reason": null,
-        "confirmed_at": null
-      },
-      {
-        "id": "DDL-76lm.1",
-        "title": "ddl: repo-status record core — feeds, staleness engine, .ddl/status.json, --refresh ordering",
-        "status": "open",
-        "priority": 1,
-        "blocked_by": [
-          "DDL-kk9"
         ],
         "age_days": 0,
         "reason": null,
@@ -268,14 +234,26 @@
         "confirmed_at": null
       },
       {
-        "id": "DDL-852c",
-        "title": "ddl: project-status section in `ddl status` + doctor check ddl.repo.brief-fresh",
+        "id": "DDL-fjam",
+        "title": "feat(pretender): read the staged blob instead of the working-tree copy",
         "status": "open",
-        "priority": 1,
+        "priority": 2,
         "blocked_by": [
-          "DDL-kk9"
+          "DDL-qxji"
         ],
-        "age_days": 0,
+        "age_days": 2,
+        "reason": null,
+        "confirmed_at": null
+      },
+      {
+        "id": "DDL-wstc",
+        "title": "feat(pretender): CLI surface for index-accurate scanning",
+        "status": "open",
+        "priority": 2,
+        "blocked_by": [
+          "DDL-qxji"
+        ],
+        "age_days": 2,
         "reason": null,
         "confirmed_at": null
       }
@@ -336,6 +314,12 @@
     "needs_retriage": [],
     "recent": [
       {
+        "sha": "1e3be2b85aeb90d328a3ac33573e61316307d36d",
+        "committed_at": "2026-11-27T17:17:54Z",
+        "subject": "beads: ticket the repo-status SSOT implementation (DDL-76lm.1 record core, .2 docs; task-mapping notes on 852c/4jvz)",
+        "outcome": null
+      },
+      {
         "sha": "02c4ed06c7413d7d728c38e169f247301510851e",
         "committed_at": "2026-11-27T17:14:25Z",
         "subject": "openspec: apply Rule-of-5 fixes to ddl-status-single-source-of-truth (staleness semantics, paths, meter)",
@@ -358,12 +342,6 @@
         "committed_at": "2026-11-27T16:50:28Z",
         "subject": "beads: file DDL-76lm epic + children (status-SSOT friction); export + brief regen",
         "outcome": null
-      },
-      {
-        "sha": "cb86186ff4070d4cd9b8865658474db79df3ae19",
-        "committed_at": "2026-11-27T16:50:28Z",
-        "subject": "docs: status-SSOT friction investigation (pi+omp session mining) + beads epic DDL-76lm",
-        "outcome": null
       }
     ],
     "health": {
@@ -385,19 +363,18 @@
     "truncation": {
       "applied": true,
       "omitted_counts": {
-        "blocked": 3,
-        "in_flight": 33,
+        "in_flight": 29,
         "next": 34,
         "recent": 195
       }
     },
-    "head_sha": "02c4ed06c7413d7d728c38e169f247301510851e",
-    "source_hash": "66be57c475551563ff29a65aa4a94c68a7b48492d09e5b6c6d339107ed2f47da",
+    "head_sha": "1e3be2b85aeb90d328a3ac33573e61316307d36d",
+    "source_hash": "aa0a44feaa16389987234cc8ca249233d0d17ac4f8ea242b173c37b1c4034605",
     "warnings": [
       {
         "source": "beads",
         "code": "beads_parse_error",
-        "detail": "29 malformed line(s) skipped in .beads/issues.jsonl"
+        "detail": "34 malformed line(s) skipped in .beads/issues.jsonl"
       }
     ]
   },

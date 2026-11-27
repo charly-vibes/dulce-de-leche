@@ -12,11 +12,8 @@ none
 
 - DDL-3et — Research: Hegel property-based testing plan (antithesis-research) (status: open; priority: 1; age: 11d)
 - DDL-44k — fleet: re-run ddl init --gates so every ddl-wired repo adopts the armed pre-commit gate (DDL-sl9) (status: open; priority: 1; age: 2d)
-- DDL-4jvz — ddl init --gates: write the brief-drift pre-commit gate into every beads repo (extend DDL-44k) (status: open; priority: 1; age: 0d; blocked by: DDL-44k)
-- DDL-76lm — Epic: make repo-status SSOT self-maintaining (session-mined frictions) (status: open; priority: 1; age: 0d; blocked by: DDL-4jvz, DDL-852c, DDL-js72, DDL-qfc5)
-- DDL-76lm.1 — ddl: repo-status record core — feeds, staleness engine, .ddl/status.json, --refresh ordering (status: open; priority: 1; age: 0d; blocked by: DDL-kk9)
+- DDL-76lm — Epic: make repo-status SSOT self-maintaining (session-mined frictions) (status: open; priority: 1; age: 0d; blocked by: DDL-js72, DDL-qfc5)
 - DDL-7a7 — Implement Hegel property tests (status: open; priority: 1; age: 11d; blocked by: DDL-3et)
-- DDL-852c — ddl: project-status section in `ddl status` + doctor check ddl.repo.brief-fresh (status: open; priority: 1; age: 0d; blocked by: DDL-kk9)
 - DDL-9gso — [bug] gently: pre-push cargo-gate is RED on clippy deny-warnings debt already on main - it blocks EVERY push (incl. the beads export) (status: open; priority: 1; age: 2d)
 - DDL-9kz — Fleet close-loop: make the session-close protocol visible to every harness (60-day session retrospective) (status: open; priority: 1; age: 2d)
 - DDL-arb — vampiro main CI red: openspec validate --all exits 1 in dogfood smoke (status: open; priority: 1; age: 44d)
@@ -25,16 +22,17 @@ none
 - DDL-01q — Test flakes under parallel load: init/gates integration tests fail non-deterministically (test_init_json_output, gates_is_idempotent_on_rerun, test_init_yes_creates_ddl_dir each failed a different full `cargo test` run on 2026-10-16 during the v0.9.0 release; all pass in isolation). Likely shared-state or resource contention — a release test job rerun-risk. Diagnose and de-flake (serial_test or per-test temp isolation). (status: open; priority: 2; age: 42d)
 - DDL-3av — Fleet-wide: release tarballs ship binaries without the exec bit — curl | tar xz && ./tool fails (status: open; priority: 2; age: 53d)
 - DDL-85p — Standard: testaruda-backed just test recipes across the DDL repos (status: open; priority: 2; age: 42d)
-(33 more omitted)
+- DDL-9kz.10 — DESIGN: choose how to reduce pi edit exact-match friction (8.2% of edit calls fail) (status: open; priority: 2; age: 2d)
+- DDL-9kz.11.1 — docs: fleet-incidents entry - 'session-close protocol invisible to non-pi harnesses' (status: open; priority: 2; age: 2d)
+- DDL-9kz.11.2 — docs: standardization.md section 10 - the session-close protocol must be repo-level (harness-agnostic) (status: open; priority: 2; age: 2d)
+(29 more omitted)
 
 ## Blocked / waiting
 
-- DDL-4jvz — ddl init --gates: write the brief-drift pre-commit gate into every beads repo (extend DDL-44k) (status: open; priority: 1; age: 0d; blocked by: DDL-44k)
-- DDL-76lm — Epic: make repo-status SSOT self-maintaining (session-mined frictions) (status: open; priority: 1; age: 0d; blocked by: DDL-4jvz, DDL-852c, DDL-js72, DDL-qfc5)
-- DDL-76lm.1 — ddl: repo-status record core — feeds, staleness engine, .ddl/status.json, --refresh ordering (status: open; priority: 1; age: 0d; blocked by: DDL-kk9)
+- DDL-76lm — Epic: make repo-status SSOT self-maintaining (session-mined frictions) (status: open; priority: 1; age: 0d; blocked by: DDL-js72, DDL-qfc5)
 - DDL-7a7 — Implement Hegel property tests (status: open; priority: 1; age: 11d; blocked by: DDL-3et)
-- DDL-852c — ddl: project-status section in `ddl status` + doctor check ddl.repo.brief-fresh (status: open; priority: 1; age: 0d; blocked by: DDL-kk9)
-(3 more omitted)
+- DDL-fjam — feat(pretender): read the staged blob instead of the working-tree copy (status: open; priority: 2; age: 2d; blocked by: DDL-qxji)
+- DDL-wstc — feat(pretender): CLI surface for index-accurate scanning (status: open; priority: 2; age: 2d; blocked by: DDL-qxji)
 
 ## Next / ready
 
@@ -55,11 +53,11 @@ none
 
 ## Recent
 
+- 1e3be2b85aeb90d328a3ac33573e61316307d36d beads: ticket the repo-status SSOT implementation (DDL-76lm.1 record core, .2 docs; task-mapping notes on 852c/4jvz) (2026-11-27T17:17:54Z)
 - 02c4ed06c7413d7d728c38e169f247301510851e openspec: apply Rule-of-5 fixes to ddl-status-single-source-of-truth (staleness semantics, paths, meter) (2026-11-27T17:14:25Z)
 - 6370017cd0a1c8ffb4be894caa6fcd19ebf2e335 beads+openspec: DDL-76lm re-scope notes + export; change scaffold config (2026-11-27T17:02:26Z)
 - a1d14811c849bbad3c718805e7c46d1a95d12b27 openspec: ddl-status-single-source-of-truth change (ddl owns repo-status SSOT, obtains feeds); research fixes from Ro5 review (2026-11-27T17:02:20Z)
 - 742e1542926af2c54ac980c365cc7fde8707753f beads: file DDL-76lm epic + children (status-SSOT friction); export + brief regen (2026-11-27T16:50:28Z)
-- cb86186ff4070d4cd9b8865658474db79df3ae19 docs: status-SSOT friction investigation (pi+omp session mining) + beads epic DDL-76lm (2026-11-27T16:50:28Z)
 (195 more omitted)
 
 ## Health + confidence
@@ -72,12 +70,12 @@ Health: **amber** — basis: human — owner: charly — reason: human green dow
 
 | source | status | observed_at | staleness | detail |
 | --- | --- | --- | --- | --- |
-| beads | present | 2026-11-27T17:17:45Z | fresh | 29 malformed line(s) skipped in .beads/issues.jsonl |
-| git | present | 2026-11-27T17:14:25Z | fresh | none |
+| beads | present | 2026-11-27T17:25:20Z | fresh | 34 malformed line(s) skipped in .beads/issues.jsonl |
+| git | present | 2026-11-27T17:17:54Z | fresh | none |
 | openspec | present | 2026-11-27T17:14:14Z | fresh | none |
 | whisper | present | 2026-11-27T15:06:02Z | fresh | none |
 | curation | present | 2026-11-18T21:37:03Z | fresh | none |
 
 Curation: updated_at 2026-11-18T21:37:03Z; confirmed_at 2026-11-18T00:00:00Z.
 
-Freshness: generated_at 2026-11-27T17:17:49Z; per-source observed_at and staleness are listed above.
+Freshness: generated_at 2026-11-27T17:25:32Z; per-source observed_at and staleness are listed above.
