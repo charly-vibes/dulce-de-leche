@@ -43,7 +43,10 @@ fn test_cli_unknown_command_fails_with_did_you_mean() {
         .assert()
         .failure()
         .code(2)
-        .stderr(predicate::str::contains("did you mean") .or(predicate::str::contains("similar subcommand exists")));
+        .stderr(
+            predicate::str::contains("did you mean")
+                .or(predicate::str::contains("similar subcommand exists")),
+        );
 }
 
 #[test]

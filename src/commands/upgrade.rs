@@ -138,7 +138,11 @@ mod tests {
         tally_result(&result(true, InstallMethod::Cargo), &mut counts, true);
         tally_result(&result(false, InstallMethod::Binary), &mut counts, true);
         tally_result(&result(false, InstallMethod::Skipped), &mut counts, true);
-        assert_eq!(counts, (1, 1, 1), "success/failure/skip must tally separately");
+        assert_eq!(
+            counts,
+            (1, 1, 1),
+            "success/failure/skip must tally separately"
+        );
     }
 
     #[test]

@@ -230,10 +230,7 @@ mod tests {
     use std::collections::HashMap;
 
     fn latest(entries: &[(&'static str, &str)]) -> HashMap<&'static str, String> {
-        entries
-            .iter()
-            .map(|(k, v)| (*k, v.to_string()))
-            .collect()
+        entries.iter().map(|(k, v)| (*k, v.to_string())).collect()
     }
 
     #[test]
@@ -272,8 +269,14 @@ mod tests {
     #[test]
     fn test_check_status_not_installed_reports_empty_status() {
         let mut any_outdated = false;
-        let (installed, version, status) =
-            check_status_with(false, "not installed", "wai", &HashMap::new(), true, &mut any_outdated);
+        let (installed, version, status) = check_status_with(
+            false,
+            "not installed",
+            "wai",
+            &HashMap::new(),
+            true,
+            &mut any_outdated,
+        );
         assert!(!installed);
         assert_eq!(version, "not installed");
         assert_eq!(status, "");

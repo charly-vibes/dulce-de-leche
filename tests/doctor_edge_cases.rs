@@ -20,13 +20,17 @@ fn test_doctor_tool_subprocess_fail_does_not_abort_fleet() {
     let temp = tempfile::tempdir().unwrap();
     let fake_bin = temp.path().join("fakebin");
     std::fs::create_dir_all(&fake_bin).unwrap();
-    for name in ["wai", "dont", "ah", "pretender", "testaruda", "vampiro", "turu"] {
+    for name in [
+        "wai",
+        "dont",
+        "ah",
+        "pretender",
+        "testaruda",
+        "vampiro",
+        "turu",
+    ] {
         let fake = fake_bin.join(name);
-        std::fs::write(
-            &fake,
-            "#!/usr/bin/env bash\nexit 1\n",
-        )
-        .unwrap();
+        std::fs::write(&fake, "#!/usr/bin/env bash\nexit 1\n").unwrap();
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -37,7 +41,14 @@ fn test_doctor_tool_subprocess_fail_does_not_abort_fleet() {
     let mut cmd = Command::cargo_bin("ddl").unwrap();
     common::clean_git_env(&mut cmd);
     // The fake bin dir is FIRST on PATH so the fakes shadow real tools.
-    cmd.env("PATH", format!("{}:{}", fake_bin.display(), std::env::var("PATH").unwrap_or_default()));
+    cmd.env(
+        "PATH",
+        format!(
+            "{}:{}",
+            fake_bin.display(),
+            std::env::var("PATH").unwrap_or_default()
+        ),
+    );
     cmd.current_dir(temp.path());
     cmd.arg("--human").arg("doctor");
     cmd.timeout(CMD_TIMEOUT);

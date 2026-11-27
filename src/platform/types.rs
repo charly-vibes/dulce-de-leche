@@ -179,6 +179,9 @@ mod tests {
     fn test_detect_succeeds_on_this_host() {
         // This repo's supported hosts; the release targets above are the
         // matrix this pins.
-        assert!(Platform::detect().is_some(), "host platform must be detectable");
+        assert!(
+            Platform::detect().is_some(),
+            "host platform must be detectable"
+        );
     }
 }

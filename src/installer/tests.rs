@@ -275,7 +275,7 @@ fn test_fallback_after_binary_failure_is_cargo_only() {
     // no-release-binary-and-no-cargo: cargo is the ONLY fallback (DDL-ei3);
     // without cargo there is no further install method (None → the caller
     // fails naming both remedies).
-    use crate::installer::method::{fallback_after_binary_failure, InstallMethod};
+    use crate::installer::method::{InstallMethod, fallback_after_binary_failure};
     assert_eq!(
         fallback_after_binary_failure(true),
         Some(InstallMethod::Cargo)
@@ -285,7 +285,7 @@ fn test_fallback_after_binary_failure_is_cargo_only() {
 
 #[test]
 fn test_check_prerequisites_pass_for_available_methods() {
-    use crate::installer::method::{best_install_method, InstallMethod};
+    use crate::installer::method::{InstallMethod, best_install_method};
     // Standard environments (dev sandbox, CI ubuntu runners) ship curl and
     // cargo; the methods' prerequisite gates must accept them.
     InstallMethod::Binary
@@ -294,7 +294,9 @@ fn test_check_prerequisites_pass_for_available_methods() {
     InstallMethod::Cargo
         .check_prerequisites()
         .expect("cargo prerequisites must be met");
-    InstallMethod::Skipped.check_prerequisites().expect("skipped is always ok");
+    InstallMethod::Skipped
+        .check_prerequisites()
+        .expect("skipped is always ok");
     // npm tools (incitaciones) always take the npm method.
     let npm_tool = crate::platform::MANAGED_TOOLS
         .iter()
@@ -310,7 +312,7 @@ fn test_check_prerequisites_pass_for_available_methods() {
 fn test_upgrade_decision_policy_covers_up_to_date_and_rejections() {
     // version-management/upgrade-*: the shared release-age policy decides
     // UpToDate / Deferred (cool-down) / Upgrade deterministically.
-    use crate::installer::method::{upgrade_decision, ReleaseCandidate, UpgradeDecision};
+    use crate::installer::method::{ReleaseCandidate, UpgradeDecision, upgrade_decision};
     use crate::manifest::LockEntry;
     let current = LockEntry {
         tool: "wai".to_string(),

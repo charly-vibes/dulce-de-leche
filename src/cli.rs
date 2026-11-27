@@ -48,7 +48,9 @@ impl Args {
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     /// Bootstrap the charly-vibes toolset — install, configure, and init
-    #[command(after_help = "Examples:\n  ddl init            # interactive bootstrap, all tools\n  ddl init --tools wai,dont")]
+    #[command(
+        after_help = "Examples:\n  ddl init            # interactive bootstrap, all tools\n  ddl init --tools wai,dont"
+    )]
     Init {
         /// Comma-separated list of tools to install (default: all)
         #[arg(long, value_name = "TOOLS")]
@@ -67,7 +69,9 @@ pub enum Commands {
     },
 
     /// Install a single tool by name
-    #[command(after_help = "Examples:\n  ddl install wai\n  ddl install espectacular   # alias resolves to ah")]
+    #[command(
+        after_help = "Examples:\n  ddl install wai\n  ddl install espectacular   # alias resolves to ah"
+    )]
     Install {
         /// Name of the tool to install (all managed tools are listed below;
         /// crate-name aliases like 'espectacular' also resolve)
@@ -80,7 +84,9 @@ pub enum Commands {
     Catalog,
 
     /// Submit a feedback issue to the ddl repository
-    #[command(after_help = "Examples:\n  ddl feedback bug\n  ddl feedback bug --from-last-error --dry-run")]
+    #[command(
+        after_help = "Examples:\n  ddl feedback bug\n  ddl feedback bug --from-last-error --dry-run"
+    )]
     Feedback {
         /// Kind of issue (bug|feature|question|chore)
         kind: String,
@@ -152,7 +158,9 @@ pub enum Commands {
     },
 
     /// Generate shell completions
-    #[command(after_help = "Examples:\n  ddl completions bash >> ~/.local/share/bash-completion/completions/ddl\n  ddl completions zsh > \"${fpath[1]}/_ddl\"")]
+    #[command(
+        after_help = "Examples:\n  ddl completions bash >> ~/.local/share/bash-completion/completions/ddl\n  ddl completions zsh > \"${fpath[1]}/_ddl\""
+    )]
     Completions {
         /// The shell to generate completions for
         #[arg(value_enum)]

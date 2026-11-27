@@ -1,3 +1,47 @@
+<!-- BEADS:START -->
+<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
+
+## Primary Objective
+
+**dulce-de-leche (ddl)** will enable **agents and human maintainers of charly-vibes repositories** to **install, configure, diagnose, and upgrade the full 17-tool charly-vibes ecosystem with zero manual per-tool steps** by **collapsing install, config migration, health diagnosis, and version upgrades into the single commands `ddl init`, `ddl install`, `ddl migrate`, `ddl status`, `ddl doctor`, `ddl upgrade`, and `ddl scope`** within **one `ddl init` run under 30 minutes for a clean machine and one `ddl upgrade` run under 5 minutes for the whole fleet**, as measured by **`ddl doctor` reporting 17/17 managed tools healthy with zero drift findings**, compared to **the pre-ddl baseline of a dozen independent install paths, per-tool config formats, and untracked version drift across the ecosystem**.
+
+**Kill criteria:** if by **2027-03-01** `ddl doctor` cannot reach ≥15/17 managed tools healthy on clean macOS, Linux, and Windows machines in under 30 minutes from bare `ddl init`, or a routine `ddl upgrade` still requires more than 15 minutes of documented manual intervention per release cycle, the ecosystem-orchestrator value proposition is falsified and **charly** (project owner) must either re-scope ddl to the subset that works or archive the tool.
+
+## Beads Issue Tracker
+
+This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
+
+### Quick Reference
+
+```bash
+bd ready              # Find available work
+bd show <id>          # View issue details
+bd update <id> --claim  # Claim work
+bd close <id>         # Complete work
+```
+
+### Rules
+
+- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
+- Run `bd prime` for detailed command reference and session close protocol
+- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
+
+## Session Completion
+
+**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+
+**MANDATORY WORKFLOW:**
+
+1. **File issues for remaining work** - Create issues for anything that needs follow-up
+2. **Run quality gates** (if code changed) - Tests, linters, builds
+3. **Update issue status** - Close finished work, update in-progress items
+4. **PUSH TO REMOTE** - This is MANDATORY.
+5. **Clean up** - Clear stashes, prune remote branches
+6. **Verify** - All changes committed AND pushed
+7. **Hand off** - Provide context for next session
+<!-- END BEADS INTEGRATION -->
+<!-- BEADS:END -->
+
 <!-- DONT:START -->
 <!-- dont: managed block -->
 See .dont/ for grounded-claim workflow.
@@ -236,3 +280,9 @@ Commands:
 - scope    Show active .ddl/
 
 <!-- DDL:END -->
+
+## Primary Objective
+
+**dulce-de-leche (ddl)** will enable **agents and human maintainers of charly-vibes repositories** to **install, configure, diagnose, and upgrade the full 17-tool charly-vibes ecosystem with zero manual per-tool steps** by **collapsing install, config migration, health diagnosis, and version upgrades into the single commands `ddl init`, `ddl install`, `ddl migrate`, `ddl status`, `ddl doctor`, `ddl upgrade`, and `ddl scope`** within **one `ddl init` run under 30 minutes for a clean machine and one `ddl upgrade` run under 5 minutes for the whole fleet**, as measured by **`ddl doctor` reporting 17/17 managed tools healthy with zero drift findings**, compared to **the pre-ddl baseline of a dozen independent install paths, per-tool config formats, and untracked version drift across the ecosystem**.
+
+**Kill criteria:** if by **2027-03-01** `ddl doctor` cannot reach ≥15/17 managed tools healthy on clean macOS, Linux, and Windows machines in under 30 minutes from bare `ddl init`, or a routine `ddl upgrade` still requires more than 15 minutes of documented manual intervention per release cycle, the ecosystem-orchestrator value proposition is falsified and **charly** (project owner) must either re-scope ddl to the subset that works or archive the tool.

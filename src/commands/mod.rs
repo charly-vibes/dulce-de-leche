@@ -103,6 +103,7 @@ pub fn cmd_catalog(args: &crate::cli::Args) -> Result<()> {
 
 pub fn cmd_status(args: &crate::cli::Args) -> Result<()> {
     use crate::diagnostics;
+    use crate::find_ddl_dir;
 
     let ddl_dir = DdlDir::find();
     let report = diagnostics::build_status_report(ddl_dir.as_ref());
@@ -132,6 +133,17 @@ pub fn cmd_status(args: &crate::cli::Args) -> Result<()> {
 
     println!();
     println!("{}", diagnostics::status_summary(&report.sections));
+
+    // health/discovery-mode-no-manifest + dot-ddl/manifest-missing: outside a
+    // manifest-managed checkout (no `.ddl/` or no manifest.json), status only
+    // discovers from PATH — point the user at `ddl init`.
+    let manifest_present = find_ddl_dir()
+        .map(|d| d.join("manifest.json").is_file())
+        .unwrap_or(false);
+    if !manifest_present {
+        println!();
+        println!("No manifest found in this directory — run `ddl init` to track tools here.");
+    }
 
     Ok(())
 }

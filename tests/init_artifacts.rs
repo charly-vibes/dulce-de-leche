@@ -93,7 +93,11 @@ fn test_init_yes_preserves_existing_gitignore_content() {
     // dot-ddl/gitignore-skip (drift note DDL-oymq): --yes does not clobber
     // an existing .gitignore — pre-existing user content survives.
     let temp = tempfile::tempdir().unwrap();
-    std::fs::write(temp.path().join(".gitignore"), "# my precious stuff\ntarget/\n").unwrap();
+    std::fs::write(
+        temp.path().join(".gitignore"),
+        "# my precious stuff\ntarget/\n",
+    )
+    .unwrap();
     init_yes(&temp, &[]);
     let gitignore = std::fs::read_to_string(temp.path().join(".gitignore")).unwrap();
     assert!(

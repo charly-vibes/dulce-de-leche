@@ -195,8 +195,9 @@ mod tests {
             "embedded fallback matrix must not be empty"
         );
         for (tool, constraint) in &embedded.tools {
-            semver::VersionReq::parse(constraint)
-                .unwrap_or_else(|e| panic!("constraint {constraint:?} for {tool} unparseable: {e}"));
+            semver::VersionReq::parse(constraint).unwrap_or_else(|e| {
+                panic!("constraint {constraint:?} for {tool} unparseable: {e}")
+            });
         }
         // The pinned core must always be present.
         for tool in ["wai", "dont", "ah", "pretender", "testaruda", "vampiro"] {
@@ -211,7 +212,10 @@ mod tests {
     fn test_compatible_version_within_range_installs() {
         let m = matrix_with(&[("wai", ">=2026.3.0")]);
         assert!(m.is_compatible("wai", "2026.11.17"));
-        assert!(m.is_compatible("wai", "v2026.3.0"), "v-prefix must be tolerated");
+        assert!(
+            m.is_compatible("wai", "v2026.3.0"),
+            "v-prefix must be tolerated"
+        );
     }
 
     #[test]
@@ -242,13 +246,20 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let ddl_dir = temp.path().to_path_buf();
         let cached = matrix_with(&[("wai", ">=2026.3.0")]);
-        cached.save_cache(&ddl_dir.join("compatibility-cache.json")).unwrap();
-        let (matrix, warnings) = load_compatibility_from(&ddl_dir, || {
-            Err(DdlError::Other("offline".to_string()))
-        });
-        assert_eq!(matrix.constraint("wai"), Some(">=2026.3.0"), "cache must win after failed fetch");
+        cached
+            .save_cache(&ddl_dir.join("compatibility-cache.json"))
+            .unwrap();
+        let (matrix, warnings) =
+            load_compatibility_from(&ddl_dir, || Err(DdlError::Other("offline".to_string())));
+        assert_eq!(
+            matrix.constraint("wai"),
+            Some(">=2026.3.0"),
+            "cache must win after failed fetch"
+        );
         assert!(
-            warnings.iter().any(|w| w.contains("Could not fetch compatibility matrix")),
+            warnings
+                .iter()
+                .any(|w| w.contains("Could not fetch compatibility matrix")),
             "failed fetch must warn, got {warnings:?}"
         );
     }
@@ -256,9 +267,8 @@ mod tests {
     #[test]
     fn test_load_falls_back_to_embedded_when_fetch_and_cache_fail() {
         let temp = tempfile::tempdir().unwrap();
-        let (matrix, warnings) = load_compatibility_from(temp.path(), || {
-            Err(DdlError::Other("offline".to_string()))
-        });
+        let (matrix, warnings) =
+            load_compatibility_from(temp.path(), || Err(DdlError::Other("offline".to_string())));
         assert!(
             !matrix.tools.is_empty(),
             "embedded fallback must provide constraints"

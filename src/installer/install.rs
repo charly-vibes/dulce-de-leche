@@ -469,7 +469,10 @@ mod tests {
             "windows_amd64",
             &platform(Os::Windows, Arch::Amd64),
         );
-        assert!(win.ends_with(".zip"), "windows asset must be .zip, got {win}");
+        assert!(
+            win.ends_with(".zip"),
+            "windows asset must be .zip, got {win}"
+        );
         // Asset-prefix override (beads ships beads_* archives for bd).
         let bd = crate::platform::find_tool("bd").expect("bd is managed");
         let bd_url = binary_download_url(
