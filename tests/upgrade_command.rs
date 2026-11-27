@@ -523,6 +523,11 @@ fn download_budget_accepts_within_cap() {
 #[cfg(unix)]
 #[test]
 fn hanging_child_killed_within_deadline_plus_one() {
+    // Serialize with the descendant-kill test below: a mid-kill `sleep 60`
+    // from this test is full-cmdline identical to that test's orphan probe
+    // (DDL-01q class race).
+    static KILL_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = KILL_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut cmd = std::process::Command::new("sleep");
     cmd.arg("60");
     let start = Instant::now();
@@ -541,6 +546,26 @@ fn hanging_child_killed_within_deadline_plus_one() {
 #[cfg(unix)]
 #[test]
 fn hanging_child_with_descendants_killed_within_deadline_plus_one() {
+    // Serialize against `hanging_child_killed_within_deadline_plus_one`
+    // (same binary, parallel test threads): its `sleep 60` is full-cmdline
+    // identical to this test's orphan check, and a mid-kill sibling is
+    // indistinguishable from a real leak (DDL-01q class).
+    static KILL_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = KILL_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
+    // Foreign `sleep 60` processes on the host (another session, a leaked
+    // repro) are outside this test's contract: the pgrep below matches any
+    // process whose full commandline is exactly `sleep 60`, so pre-existing
+    // ones would false-fail the assertion. Skip with the collision named.
+    let foreign: Vec<String> = pgrep_sleep60();
+    if !foreign.is_empty() {
+        eprintln!(
+            "SKIPPED (environment out of contract) — pre-existing `sleep 60` \
+             process(es) on the host would false-match the orphan check: {foreign:?}"
+        );
+        return;
+    }
+
     // `sh -c 'sleep 60'` makes the sleeper a *descendant* of the direct
     // child; both must be gone when the deadline fires.
     let mut cmd = std::process::Command::new("sh");
@@ -557,14 +582,24 @@ fn hanging_child_with_descendants_killed_within_deadline_plus_one() {
     // match: a bare `ps | grep -F 'sleep 60'` also matches UNRELATED processes
     // like a lingering `sleep 600` from another session (observed in the wild).
     std::thread::sleep(Duration::from_millis(100));
+    let survivors = pgrep_sleep60();
+    assert!(
+        survivors.is_empty(),
+        "descendants survived the runtime budget kill: {survivors:?}"
+    );
+}
+
+/// PIDs whose full commandline is exactly `sleep 60` (the orphan-check probe).
+#[cfg(unix)]
+fn pgrep_sleep60() -> Vec<String> {
     let mut pgrep = std::process::Command::new("sh");
     pgrep.arg("-c").arg("pgrep -f -x 'sleep 60'");
     let check = pgrep.output().unwrap();
-    assert!(
-        check.stdout.is_empty(),
-        "descendants survived the runtime budget kill: {:?}",
-        String::from_utf8_lossy(&check.stdout)
-    );
+    String::from_utf8_lossy(&check.stdout)
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(str::to_owned)
+        .collect()
 }
 
 #[cfg(unix)]
