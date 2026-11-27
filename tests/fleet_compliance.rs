@@ -228,3 +228,121 @@ fn checks_silent_outside_git_repo() {
         );
     }
 }
+
+// ── DDL-9kz.1: session-close protocol block ───────────────────────────
+
+use dulce_de_leche::gates::apply_gates_wiring_with_sad;
+
+/// Gates wiring writes the harness-agnostic session-close ritual into
+/// AGENTS.md as a second managed block (next to the DDL block).
+#[test]
+fn session_protocol_block_written_by_gates_wiring() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join(".git")).unwrap();
+
+    // Real init order: repo setup writes the DDL block first, gates wiring
+    // appends the session block after it.
+    dulce_de_leche::installer::ensure_agents_block(root).unwrap();
+    apply_gates_wiring_with_sad(root, None).unwrap();
+
+    let agents = std::fs::read_to_string(root.join("AGENTS.md")).unwrap();
+    for needle in [
+        "<!-- SESSION-PROTOCOL:START -->",
+        "<!-- SESSION-PROTOCOL:END -->",
+        "bd export -o .beads/issues.jsonl && git add -f .beads/issues.jsonl && git commit",
+        "just ci",
+        "git push",
+        "wai close",
+    ] {
+        assert!(agents.contains(needle), "block missing '{needle}'");
+    }
+    // Harness-agnostic: no harness name tokens in the block span.
+    let span = agents
+        .split("<!-- SESSION-PROTOCOL:START -->")
+        .nth(1)
+        .and_then(|s| s.split("<!-- SESSION-PROTOCOL:END -->").next())
+        .unwrap_or("");
+    let tokens: Vec<String> = span
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .map(str::to_lowercase)
+        .collect();
+    assert!(
+        !tokens.contains(&"omp".to_string()) && !tokens.contains(&"codex".to_string()),
+        "block must not name harnesses: {span}"
+    );
+    // Next to the DDL block: the session block sits after the DDL block
+    // that repo setup wrote, not clobbering it.
+    let ddl_end = agents.find("<!-- DDL:END -->").unwrap();
+    let session_start = agents.find("<!-- SESSION-PROTOCOL:START -->").unwrap();
+    assert!(
+        session_start > ddl_end,
+        "session block must sit after the DDL block"
+    );
+}
+
+/// Idempotent (second wiring run is byte-identical) and self-owned
+/// (a drifted span is rewritten by the next wiring run).
+#[test]
+fn session_protocol_block_idempotent_and_drift_rewritten() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join(".git")).unwrap();
+
+    apply_gates_wiring_with_sad(root, None).unwrap();
+    let first = std::fs::read_to_string(root.join("AGENTS.md")).unwrap();
+
+    // Drift: an agent (or a careless edit) dropped the bd export line.
+    let drifted = first.replace("bd export -o .beads/issues.jsonl", "");
+    assert_ne!(drifted, first);
+    std::fs::write(root.join("AGENTS.md"), &drifted).unwrap();
+
+    apply_gates_wiring_with_sad(root, None).unwrap();
+    let second = std::fs::read_to_string(root.join("AGENTS.md")).unwrap();
+
+    assert_eq!(
+        first, second,
+        "wiring must be idempotent and must rewrite a drifted span"
+    );
+}
+
+/// The doctor flags a missing session-protocol span (the AGENTS.md-missing
+/// case is covered by the scoped-block warning) and a drifted span.
+#[test]
+fn doctor_flags_missing_and_drifted_session_protocol_block() {
+    // Missing: an AGENTS.md without the block.
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join(".git")).unwrap();
+    std::fs::write(root.join("AGENTS.md"), "# notes\n").unwrap();
+    let diags = doctor_diagnostics(root);
+    let missing = items(&diags, "ddl.repo.blocks", Some("warn"));
+    assert!(
+        missing.iter().any(|i| i["detail"]
+            .as_str()
+            .is_some_and(|d| d.contains("session-close protocol"))),
+        "missing span must be flagged: {missing:?}"
+    );
+
+    // Drifted: markers present, ritual text mangled.
+    let drifted_root = tempfile::tempdir().unwrap();
+    let dr = drifted_root.path();
+    std::fs::create_dir_all(dr.join(".git")).unwrap();
+    let block = dulce_de_leche::session_protocol_block();
+    std::fs::write(
+        dr.join("AGENTS.md"),
+        format!(
+            "<!-- SESSION-PROTOCOL:START -->\nritual text elided by a careless edit\n<!-- SESSION-PROTOCOL:END -->\n"
+        ),
+    )
+    .unwrap();
+    let _ = block; // expected body reference
+    let diags = doctor_diagnostics(dr);
+    let drifted = items(&diags, "ddl.repo.blocks", Some("warn"));
+    assert!(
+        drifted.iter().any(|i| i["detail"]
+            .as_str()
+            .is_some_and(|d| d.contains("drifted"))),
+        "drifted span must be flagged: {drifted:?}"
+    );
+}

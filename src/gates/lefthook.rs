@@ -42,8 +42,13 @@ pub const DEFAULT_AH_CHECK: &str = "ah check";
 ///
 /// `--staged` (not `--diff-only`): a pre-commit hook runs after `git add`, so
 /// the unstaged diff is empty by construction and `--diff-only` would scan
-/// nothing and exit 0 — a silently disarmed gate (DDL-sl9). `--staged` checks
-/// exactly the files the commit contains.
+/// nothing and exit 0 — a silently disarmed gate (DDL-sl9). `--staged`
+/// selects the staged path set but scans the **working-tree copy** of each
+/// selected path: the staged blob itself is not scanned (index holds the
+/// violating version, worktree the clean one — index-accurate scanning needs
+/// `git show :path` support in pretender, DDL-api), and merge commits bypass
+/// the gate entirely (git does not run pre-commit for `git merge`;
+/// pre-merge-commit is not wired).
 pub const DEFAULT_PRETENDER_GATE: &str = "pretender check --staged --mode gate";
 /// Shipped default for the `ddl-spk-lint` hook entry.
 pub const DEFAULT_SPK_LINT: &str = "spk lint openspec/specs || test $? -eq 2";

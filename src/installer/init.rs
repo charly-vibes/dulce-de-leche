@@ -227,6 +227,72 @@ pub fn ensure_agents_block(repo_root: &Path) -> Result<bool> {
     Ok(true)
 }
 
+/// Locate the session-protocol span in AGENTS.md text: `(text, begin,
+/// byte-len of the span body up to (exclusive) the END marker's start)`.
+/// `None` when the START or END marker is absent.
+fn find_session_span(text: Option<&str>) -> Option<(&str, usize, usize)> {
+    let text = text?;
+    let begin = text.find(crate::SESSION_PROTOCOL_MARKER)?;
+    let end_idx = text[begin..].find("<!-- SESSION-PROTOCOL:END -->")?;
+    Some((text, begin, end_idx))
+}
+
+/// What [`ensure_session_protocol_block`] did to the AGENTS.md span.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionProtocolChange {
+    /// Block appended (no AGENTS.md before, or no span in it).
+    Written,
+    /// A drifted span was rewritten in place (DDL-9kz.1 drift contract).
+    Rewritten,
+    /// Span present and byte-identical to the canonical block.
+    Unchanged,
+}
+
+/// Write the harness-agnostic session-close protocol block (DDL-9kz.1)
+/// into AGENTS.md at `repo_root`.
+///
+/// Managed-block discipline: idempotent (byte-identical re-runs change
+/// nothing), drift-detectable (the ddl.repo.blocks doctor check flags a
+/// span whose body no longer matches [`crate::session_protocol_block`]),
+/// self-owned — a drifted span is rewritten in place on the next wiring
+/// run. When no AGENTS.md exists the file is created; otherwise the block
+/// is appended at the end of the file, next to the other managed blocks.
+pub fn ensure_session_protocol_block(repo_root: &Path) -> Result<SessionProtocolChange> {
+    let path = repo_root.join("AGENTS.md");
+    let existing = path
+        .exists()
+        .then(|| std::fs::read_to_string(&path))
+        .transpose()
+        .map_err(DdlError::Io)?;
+    let block = crate::session_protocol_block();
+
+    if let Some((text, begin, end_idx)) = find_session_span(existing.as_deref()) {
+        let end = "<!-- SESSION-PROTOCOL:END -->";
+        let span_end = begin + end_idx + end.len();
+        let current = &text[begin..span_end];
+        if current == block {
+            return Ok(SessionProtocolChange::Unchanged);
+        }
+        // Self-owned: rewrite the drifted span in place.
+        let mut rewritten = String::with_capacity(text.len());
+        rewritten.push_str(&text[..begin]);
+        rewritten.push_str(&block);
+        rewritten.push_str(&text[span_end..]);
+        std::fs::write(&path, rewritten).map_err(DdlError::Io)?;
+        return Ok(SessionProtocolChange::Rewritten);
+    }
+
+    // Absent span: create the file or append the block at the end.
+    let mut text = existing.unwrap_or_default();
+    if !text.is_empty() && !text.ends_with('\n') {
+        text.push('\n');
+    }
+    text.push_str(&block);
+    text.push('\n');
+    std::fs::write(&path, text).map_err(DdlError::Io)?;
+    Ok(SessionProtocolChange::Written)
+}
+
 /// Scaffold `versions.ddl.toml` at `repo_root` from the fleet pin when the
 /// repo has none. Returns `Ok(false)` when a pins file already exists —
 /// a repo's committed pins are its own source of truth and are never
