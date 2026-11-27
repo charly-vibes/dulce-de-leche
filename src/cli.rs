@@ -114,6 +114,11 @@ pub enum Commands {
         /// Attempt to auto-fix detected issues
         #[arg(long)]
         fix: bool,
+        /// Exit non-zero when any repo-hygiene diagnostic (ddl.repo.*) is
+        /// at warn/fail level (enforcement gate for CI and fleet sweeps;
+        /// the report is still emitted first)
+        #[arg(long)]
+        strict: bool,
     },
 
     /// Show versions of ddl and all managed tools

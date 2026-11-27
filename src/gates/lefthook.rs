@@ -19,6 +19,14 @@ pub const MARKER_END_PREFIX: &str = "# ddl:managed:end (";
 /// already handled by `dot_ddl::GITIGNORE_ENTRIES`).
 pub const GITIGNORE_TOOL_DIR_ENTRIES: &[&str] = &[".testaruda/", ".pretender/"];
 
+/// Repo-local negation of the global `.beads/` ignore (DDL-9kz.2): the
+/// tracked export must be addable without `-f`, while the embedded DB dir
+/// stays ignored. Repo-local .gitignore outranks the global excludesFile,
+/// so `!.beads/` re-includes the directory and the later re-ignore keeps
+/// the DB out. Lines appended as one managed block by
+/// [`ensure_gitignore_tool_dirs`].
+pub const GITIGNORE_BEADS_NEGATION: &[&str] = &["!.beads/", ".beads/embeddeddolt/"];
+
 /// Managed pre-commit command block (4-space indent, inside `commands:`).
 /// This is the default rendering — [`render_pre_commit_block`] reproduces it
 /// from [`GateCommands::default`] and overlays `.ddl/config.toml` values.
@@ -308,11 +316,20 @@ pub fn ensure_gitignore_tool_dirs(content: Option<&str>) -> (String, Vec<String>
         .lines()
         .map(|l| l.trim().to_string())
         .collect();
-    let to_add: Vec<String> = GITIGNORE_TOOL_DIR_ENTRIES
+    let mut to_add: Vec<String> = GITIGNORE_TOOL_DIR_ENTRIES
         .iter()
         .filter(|e| !existing.contains(&e.to_string()))
         .map(|e| e.to_string())
         .collect();
+    // Beads tracked-export negation (DDL-9kz.2): a whole-block check, not
+    // per-line — either the block is absent (both lines added) or the
+    // negation is already in place (nothing added). A partial block
+    // (negation present, DB re-ignore absent) is not produced by ddl and
+    // must not be "fixed" by duplicating lines.
+    let negation_absent = !existing.contains(&"!.beads/".to_string());
+    if negation_absent {
+        to_add.extend(GITIGNORE_BEADS_NEGATION.iter().map(|e| e.to_string()));
+    }
     if to_add.is_empty() {
         // Nothing to add — content is returned byte-identical.
         return (content.unwrap_or_default().to_string(), to_add);
@@ -326,6 +343,9 @@ pub fn ensure_gitignore_tool_dirs(content: Option<&str>) -> (String, Vec<String>
     }
     out.push_str("\n# tool data dirs (managed by `ddl init --gates`)\n");
     for e in &to_add {
+        if e == "!.beads/" {
+            out.push_str("\n# ddl: tracked beads export negates the global ignore (DDL-9kz.2)\n");
+        }
         out.push_str(e);
         out.push('\n');
     }

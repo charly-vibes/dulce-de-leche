@@ -147,14 +147,18 @@ fn gitignore_entries_added_idempotently() {
         added,
         GITIGNORE_TOOL_DIR_ENTRIES
             .iter()
+            .chain(GITIGNORE_BEADS_NEGATION.iter())
             .map(|s| s.to_string())
             .collect::<Vec<_>>()
     );
     assert!(out.contains(".testaruda/"));
+    // The beads tracked-export negation block (DDL-9kz.2).
+    assert!(out.contains("!.beads/"));
+    assert!(out.contains(".beads/embeddeddolt/"));
 
     let existing = "target/\n.ddl/**/*.db\n";
     let (out2, added2) = ensure_gitignore_tool_dirs(Some(existing));
-    assert_eq!(added2.len(), 2);
+    assert_eq!(added2.len(), 4);
     assert!(out2.starts_with("target/")); // existing content preserved
 
     let (out3, added3) = ensure_gitignore_tool_dirs(Some(&out));

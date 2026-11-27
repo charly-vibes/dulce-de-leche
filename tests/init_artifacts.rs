@@ -5,7 +5,6 @@
 mod common;
 
 use assert_cmd::Command;
-use predicates::prelude::*;
 use std::time::Duration;
 
 /// Timeout for each test.

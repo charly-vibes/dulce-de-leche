@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`ddl doctor --strict`** — exits non-zero when any repo-hygiene
+  diagnostic (`ddl.repo.*`) is at warn/fail level; the full report is
+  emitted first, so gate consumers keep the structured evidence.
+  Machine-scope findings (tool installs, nested tool doctors) do not fail
+  a strict run (`DDL-9kz.2`)
+- **repo-local `.gitignore` negation for `.beads/`** — `ddl init --gates`
+  appends `!.beads/` + `.beads/embeddeddolt/`, so the tracked export is
+  addable without `-f` while the embedded DB stays ignored (`DDL-9kz.2`)
 - **three new `ddl.repo.*` doctor checks** — `ddl.repo.hooks-path` flags a
   `core.hooksPath` that points nowhere at error severity (the per-clone
   recurrence class behind DDL-uce: no git hook runs in such a checkout);

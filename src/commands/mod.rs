@@ -148,7 +148,7 @@ pub fn cmd_status(args: &crate::cli::Args) -> Result<()> {
     Ok(())
 }
 
-pub fn cmd_doctor(fix: bool, args: &crate::cli::Args) -> Result<()> {
+pub fn cmd_doctor(fix: bool, strict: bool, args: &crate::cli::Args) -> Result<()> {
     use crate::diagnostics;
 
     let ddl_dir = DdlDir::find();
@@ -165,6 +165,7 @@ pub fn cmd_doctor(fix: bool, args: &crate::cli::Args) -> Result<()> {
             vec![],
         )?;
         println!("{json_str}");
+        strict_violations(&report, strict);
         return Ok(());
     }
 
@@ -176,7 +177,37 @@ pub fn cmd_doctor(fix: bool, args: &crate::cli::Args) -> Result<()> {
         println!("  {}", msg);
     }
 
+    if strict {
+        // Reuse the structured report for the same enforcement rule (the
+        // human path's text is not machine-parseable).
+        let report = diagnostics::run_full_report(ddl_dir.as_ref(), fix)?;
+        strict_violations(&report, strict);
+    }
+
     Ok(())
+}
+
+/// `--strict` enforcement (DDL-9kz.2): exit non-zero when any REPO-SCOPE
+/// diagnostic (tool `ddl`, check `ddl.repo.*`) is at warn/fail level. The
+/// report is always emitted first, so gate consumers keep the structured
+/// evidence; the exit code is the enforcement. Machine-scope findings
+/// (tool installs, nested tool doctors) do not fail a strict run — the
+/// gate is repo hygiene: tracked beads export, hooks wiring, gitignore,
+/// front door, session protocol.
+fn strict_violations(report: &crate::diagnostics::DiagnosticReport, strict: bool) {
+    if !strict {
+        return;
+    }
+    let violations = report
+        .diagnostics
+        .iter()
+        .filter(|d| d.tool == "ddl" && d.check.starts_with("ddl.repo."))
+        .filter(|d| d.level == "warn" || d.level == "fail")
+        .count();
+    if violations > 0 {
+        eprintln!("doctor --strict: {violations} repo-hygiene finding(s)");
+        std::process::exit(1);
+    }
 }
 
 pub fn cmd_scope(args: &crate::cli::Args) -> Result<()> {
