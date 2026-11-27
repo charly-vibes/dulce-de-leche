@@ -528,10 +528,11 @@ follow-up idea (candidate: a `ddl doctor` check keyed off registry metadata,
 or a fleet-standard README/manifest convention declaring the port's upstream
 and inherited license) rather than a silently-wrong automatic check.
 
-### 9.2 Known gap in ddl's own gate generator
+### 9.2 Gate generator chains `bd hooks run`
 
-`ddl init --gates` inserts managed blocks (PRE_COMMIT_BLOCK/PRE_PUSH_BLOCK)
-that do **not** chain `bd hooks run` — repos wired purely by `ddl init
---gates` fail `ddl.repo.bd-hooks`. The chain currently lives only in
-hand-edited lefthooks (ddl's own repo included). Follow-up: emit the chain
-from the managed blocks so the fix hint and the generator agree.
+Fixed (DDL-9kz.4): `ddl init --gates` renders the canonical template
+(`CANONICAL_LEFTHOOK_TEMPLATE`), which chains `bd hooks run pre-commit`
+**and** `bd hooks run pre-push` outside the managed blocks, so a repo
+wired purely by `ddl init --gates` passes `ddl.repo.bd-hooks` and the fix
+hint agrees with the generator. Regression test:
+`gates_wiring_generated_blocks_chain_bd_hooks` (tests/fleet_compliance.rs).

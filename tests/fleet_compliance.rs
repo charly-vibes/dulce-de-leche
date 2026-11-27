@@ -522,3 +522,34 @@ fn doctor_strict_exits_zero_when_wired() {
     cmd.args(["doctor", "--json", "--strict"]);
     cmd.assert().success();
 }
+
+// ── DDL-9kz.4: generated gate blocks chain bd hooks run ───────────────
+
+/// PREMISE CORRECTED: the ticket records that the generated blocks do NOT
+/// chain `bd hooks run`; the canonical template has done so since the
+/// 9kz.3 adoption sweep (`CANONICAL_LEFTHOOK_TEMPLATE` renders both `bd
+/// hooks run pre-commit` and `bd hooks run pre-push`). This regression
+/// test pins the agreement between the generator and the
+/// `ddl.repo.bd-hooks` fix hint.
+#[test]
+fn gates_wiring_generated_blocks_chain_bd_hooks() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join(".git")).unwrap();
+
+    apply_gates_wiring_with_sad(root, None).unwrap();
+    let lefthook = std::fs::read_to_string(root.join("lefthook.yml")).unwrap();
+    assert!(
+        lefthook.contains("bd hooks run pre-commit")
+            && lefthook.contains("bd hooks run pre-push"),
+        "generated lefthook.yml must chain bd hooks for both hooks: {lefthook}"
+    );
+
+    // And the doctor agrees: no ddl.repo.bd-hooks finding.
+    let diags = doctor_diagnostics(root);
+    let findings = items(&diags, "ddl.repo.bd-hooks", Some("warn"));
+    assert!(
+        findings.is_empty(),
+        "a ddl-init-wired repo must satisfy ddl.repo.bd-hooks: {findings:?}"
+    );
+}
