@@ -22,4 +22,4 @@ bd = "1.3.4"               # beads — pinned GitHub release download (no versio
 kaya = "0.4.1"             # kaya-vibes — pinned GitHub release download (crate deliberately not on crates.io) — research record compiler (.kaya ledger, record gates #109, nightly Record workflow)
 bajan = "0.1.0"            # crates.io — spec-driven knowledge-graph pipeline (bajan-23s)
 sad = "0.2.0"              # GitHub release download (sad-vibes repo; not on crates.io) — documentation gate (lefthook sad-check block; local gate only, no §4 matrix row yet — DDL-d0um)
-podras = "0.1.0"           # GitHub release download (podras repo; not on crates.io) — per-repo status brief (committed BRIEF renders + scripts/guards/brief-drift.sh; local gate only, no §4 matrix row yet — DDL-3jes)
+podras = "0.1.0"           # GitHub release download (podras repo; not on crates.io) — per-repo status brief (committed BRIEF renders; brief-drift gate now emitted by ddl init --gates, no §4 matrix row yet — DDL-3jes)

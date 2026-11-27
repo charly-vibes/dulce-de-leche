@@ -293,6 +293,103 @@ pub fn ensure_session_protocol_block(repo_root: &Path) -> Result<SessionProtocol
     Ok(SessionProtocolChange::Written)
 }
 
+/// START marker of the canonical beads-semantics block in AGENTS.md
+/// (DDL-4jvz task 3.3). Same genesis::aix `<!-- NAME:START -->` wrapping
+/// as the other managed blocks; shared so the writer (gates wiring), the
+/// drift check (`detect_beads_semantics_block_problems`), and the block
+/// text can never drift apart unnoticed.
+pub const BEADS_SEMANTICS_MARKER: &str = "<!-- BEADS-SEMANTICS:START -->";
+
+/// Generate the canonical beads storage-semantics block (DDL-4jvz task
+/// 3.3). The wording is binding: the live bd database is per-machine;
+/// `.beads/issues.jsonl` is the committed export (an output of `bd
+/// export`); git is the sync mechanism — no dolt remote, no `bd dolt
+/// push/pull`. It deliberately does NOT say the export is the "source of
+/// truth" — the doctor's beads-block check (later phase) flags that
+/// phrasing as contradictory.
+pub fn beads_semantics_block() -> String {
+    genesis::aix::agents_block(
+        "BEADS-SEMANTICS",
+        r#"
+## Beads storage semantics
+
+- The live bd database is per-machine — it is never committed.
+- `.beads/issues.jsonl` is the committed export, an output of `bd export`.
+- Git is the sync mechanism: commit and pull/push the export like any
+  tracked file. There is no dolt remote and no `bd dolt push`/`bd dolt pull`.
+"#,
+    )
+}
+
+/// What [`ensure_beads_semantics_block`] did to the AGENTS.md span.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BeadsSemanticsChange {
+    /// Block appended (no AGENTS.md before, or no span in it).
+    Written,
+    /// A drifted span was rewritten in place (e.g. one edited to claim
+    /// `.beads/issues.jsonl` is the source of truth).
+    Rewritten,
+    /// Span present and byte-identical to the canonical block.
+    Unchanged,
+}
+
+/// Locate the beads-semantics span in AGENTS.md text: `(text, begin,
+/// byte-len of the span body up to (exclusive) the END marker's start)`.
+/// `None` when the START or END marker is absent.
+fn find_beads_semantics_span(text: Option<&str>) -> Option<(&str, usize, usize)> {
+    let text = text?;
+    let begin = text.find(BEADS_SEMANTICS_MARKER)?;
+    let end_idx = text[begin..].find("<!-- BEADS-SEMANTICS:END -->")?;
+    Some((text, begin, end_idx))
+}
+
+/// Write the canonical beads storage-semantics block (DDL-4jvz task 3.3)
+/// into AGENTS.md at `repo_root`.
+///
+/// Managed-block discipline, identical to
+/// [`ensure_session_protocol_block`]: idempotent (byte-identical re-runs
+/// change nothing), drift-detectable
+/// (`detect_beads_semantics_block_problems`), self-owned — a drifted span
+/// (including one claiming the export is the source of truth) is rewritten
+/// in place on the next wiring run. When no AGENTS.md exists the file is
+/// created; otherwise the block is appended at the end of the file, next
+/// to the other managed blocks.
+pub fn ensure_beads_semantics_block(repo_root: &Path) -> Result<BeadsSemanticsChange> {
+    let path = repo_root.join("AGENTS.md");
+    let existing = path
+        .exists()
+        .then(|| std::fs::read_to_string(&path))
+        .transpose()
+        .map_err(DdlError::Io)?;
+    let block = beads_semantics_block();
+
+    if let Some((text, begin, end_idx)) = find_beads_semantics_span(existing.as_deref()) {
+        let end = "<!-- BEADS-SEMANTICS:END -->";
+        let span_end = begin + end_idx + end.len();
+        let current = &text[begin..span_end];
+        if current == block {
+            return Ok(BeadsSemanticsChange::Unchanged);
+        }
+        // Self-owned: rewrite the drifted span in place.
+        let mut rewritten = String::with_capacity(text.len());
+        rewritten.push_str(&text[..begin]);
+        rewritten.push_str(&block);
+        rewritten.push_str(&text[span_end..]);
+        std::fs::write(&path, rewritten).map_err(DdlError::Io)?;
+        return Ok(BeadsSemanticsChange::Rewritten);
+    }
+
+    // Absent span: create the file or append the block at the end.
+    let mut text = existing.unwrap_or_default();
+    if !text.is_empty() && !text.ends_with('\n') {
+        text.push('\n');
+    }
+    text.push_str(&block);
+    text.push('\n');
+    std::fs::write(&path, text).map_err(DdlError::Io)?;
+    Ok(BeadsSemanticsChange::Written)
+}
+
 /// Scaffold `versions.ddl.toml` at `repo_root` from the fleet pin when the
 /// repo has none. Returns `Ok(false)` when a pins file already exists —
 /// a repo's committed pins are its own source of truth and are never

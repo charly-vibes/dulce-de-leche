@@ -342,7 +342,12 @@ fn test_init_gates_leaves_doctor_repo_checks_clean() {
     }
 
     let temp = stock_repo();
-    // Fleet-standard files a stock charly repo already commits.
+    // Fleet-standard files a stock charly repo already commits. The
+    // justfile carries a `ci` recipe and the README carries the §5.1
+    // front door: since #114 (af3dd4c) `ddl.repo.just-ci` and
+    // `ddl.repo.readme-frontdoor` warn on their absence, and the
+    // doctor-clean contract below (DDL-gef) covers every ddl.repo.*
+    // check.
     std::fs::write(
         temp.path().join("LICENSE"),
         "MIT License\n\nPermission is hereby granted...\n",
@@ -351,7 +356,12 @@ fn test_init_gates_leaves_doctor_repo_checks_clean() {
     std::fs::write(temp.path().join("CHANGELOG.md"), "# Changelog\n").unwrap();
     std::fs::write(
         temp.path().join("justfile"),
-        "fmt:\n    cargo fmt\n\nfmt-check:\n    cargo fmt -- --check\n",
+        "fmt:\n    cargo fmt\n\nfmt-check:\n    cargo fmt -- --check\n\nci:\n    cargo fmt -- --check\n",
+    )
+    .unwrap();
+    std::fs::write(
+        temp.path().join("README.md"),
+        "# stock\n\n## When to use\n\nx\n\n## Install\n\nx\n\n## Quick start\n\nx\n\n## Common workflows\n\nx\n\n## Commands\n\nx\n\n## FAQ\n\nx\n",
     )
     .unwrap();
 
@@ -366,7 +376,8 @@ fn test_init_gates_leaves_doctor_repo_checks_clean() {
     cmd.args(["doctor", "--json"]);
     let out = cmd.assert().success().get_output().stdout.clone();
     let envelope: serde_json::Value = serde_json::from_slice(&out).unwrap();
-    let diags = envelope["data"]["diagnostics"]
+    // DDL-852c: repo findings live under data.repo.checks.
+    let diags = envelope["data"]["repo"]["checks"]
         .as_array()
         .cloned()
         .unwrap_or_default();
@@ -396,7 +407,9 @@ fn test_init_openspec_2_1_installs_project_scoped_skills() {
         let (_assert, argv) = ddl_init_with_openspec(&temp, version_line);
         assert_eq!(
             argv,
-            ["init --tools agents --scope project"],
+            // DDL-76lm: init now probes the openspec status feed
+            // (`openspec list --json`) for the .ddl/status.json record.
+            ["init --tools agents --scope project", "list --json"],
             "openspec `{version_line}` must init with project-scoped skills"
         );
         assert!(
@@ -415,7 +428,9 @@ fn test_init_openspec_below_2_1_warns_and_never_installs_skills() {
     let (assert, argv) = ddl_init_with_openspec(&temp, "openspec 2.0.0");
     assert_eq!(
         argv,
-        ["init --tools none"],
+        // DDL-76lm: init now probes the openspec status feed
+        // (`openspec list --json`) for the .ddl/status.json record.
+        ["init --tools none", "list --json"],
         "openspec 2.0 has no --scope: ddl must not install skills"
     );
     let output = assert.get_output();

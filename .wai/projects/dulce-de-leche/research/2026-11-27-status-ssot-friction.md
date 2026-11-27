@@ -196,6 +196,22 @@ in-flight is genesis-side. Should /renew target the DONT repo then?").
    probe (DDL-2zu). A status SSOT built on lying observers just moves the
    reconciliation cost.
 
+**Shipped:** the openspec change
+`ddl-status-single-source-of-truth` (tickets DDL-76lm.1/.2/.3, DDL-852c,
+DDL-4jvz; DDL-76lm.2 is the docs page under `docs/src/repo-status.md`) answers
+most of the above: the `.ddl/status.json` record with schema `repo-status.v1`
+becomes the repo-status contract and renders/exports become pipeline outputs
+(→ 1, 3, 5 — the contract-precedence header declares producer + freshness
+in-band); `ddl init --gates` writes the brief-drift gate template and the
+canonical beads-semantics AGENTS.md block, with `ddl doctor` checks
+`ddl.repo.brief-drift-gate`, `ddl.repo.beads-block`,
+`ddl.repo.status-fresh`, and `ddl.repo.unmanaged-status-artifacts` covering
+adoption fleet-wide (→ 2, 4, F-A and F-B; DDL-qfc5's archive-or-adopt
+decision for `AGENT-SUMMARY.md` remains pending); `ddl status --refresh` runs
+the fixed obtain → render → export → record ordering so agents stop
+re-deriving it (→ F-A ordering confusion, F-D). Direction 6 (observer-tool
+fixes) is out of scope for this change: DDL-kk9 is its prerequisite gate.
+
 ## Reproduce
 
 ```bash

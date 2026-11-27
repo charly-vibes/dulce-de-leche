@@ -81,5 +81,22 @@ pub enum DdlError {
     Other(String),
 }
 
+/// Boundary conversion for genesis::fs errors: genesis types never leak
+/// through ddl's public API — the fs primitive's variants map onto the
+/// closest ddl equivalents (io → Io, malformed JSON → Serde, a target
+/// without a parent directory → Other).
+impl From<genesis::fs::FsError> for DdlError {
+    fn from(e: genesis::fs::FsError) -> Self {
+        match e {
+            genesis::fs::FsError::Io(io) => DdlError::Io(io),
+            genesis::fs::FsError::Json { source, .. } => DdlError::Serde(source),
+            genesis::fs::FsError::NoParent(path) => DdlError::Other(format!(
+                "target path {} has no parent directory",
+                path.display()
+            )),
+        }
+    }
+}
+
 /// Convenience alias for Result types.
 pub type Result<T> = std::result::Result<T, DdlError>;

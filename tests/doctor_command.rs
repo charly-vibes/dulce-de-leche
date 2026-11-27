@@ -229,16 +229,15 @@ fn doctor_diagnostics(cmd: &mut Command) -> Vec<serde_json::Value> {
         .unwrap_or_default()
 }
 
-fn repo_items(items: &[serde_json::Value]) -> Vec<&serde_json::Value> {
-    items
-        .iter()
-        .filter(|i| {
-            i["check"]
-                .as_str()
-                .unwrap_or_default()
-                .starts_with("ddl.repo.")
-        })
-        .collect()
+/// Repo-scope findings (DDL-852c): they live under `data.repo.checks`,
+/// never inside `diagnostics` — tool counts stay untouched by repo findings.
+fn repo_checks(cmd: &mut Command) -> Vec<serde_json::Value> {
+    let out = cmd.assert().success().get_output().stdout.clone();
+    let envelope: serde_json::Value = serde_json::from_slice(&out).unwrap();
+    envelope["data"]["repo"]["checks"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
 }
 
 #[test]
@@ -247,11 +246,10 @@ fn test_doctor_repo_checks_absent_outside_git_repo() {
     // repo conformance is only meaningful inside a repository.
     let (mut cmd, _temp) = ddl_cmd();
     cmd.args(["doctor", "--json"]);
-    let items = doctor_diagnostics(&mut cmd);
+    let repo = repo_checks(&mut cmd);
     assert!(
-        repo_items(&items).is_empty(),
-        "repo checks must be skipped outside a git repo: {:?}",
-        repo_items(&items)
+        repo.is_empty(),
+        "repo checks must be skipped outside a git repo: {repo:?}"
     );
 }
 
@@ -352,8 +350,7 @@ fn test_doctor_repo_checks_found_from_subdirectory() {
     cmd.current_dir(temp.path().join("src/deep/nested"));
     cmd.timeout(CMD_TIMEOUT);
     cmd.args(["doctor", "--json"]);
-    let items = doctor_diagnostics(&mut cmd);
-    let repo = repo_items(&items);
+    let repo = repo_checks(&mut cmd);
     assert!(
         repo.iter()
             .any(|i| i["check"] == serde_json::json!("ddl.repo.gates")),
@@ -390,8 +387,7 @@ fn test_doctor_repo_checks_pass_in_fully_wired_repo() {
     cmd.current_dir(temp.path());
     cmd.timeout(CMD_TIMEOUT);
     cmd.args(["doctor", "--json"]);
-    let items = doctor_diagnostics(&mut cmd);
-    let repo = repo_items(&items);
+    let repo = repo_checks(&mut cmd);
     // All four repo-scope checks present and attributed to ddl
     let checks: Vec<&str> = repo.iter().map(|i| i["check"].as_str().unwrap()).collect();
     for expected in [
@@ -437,8 +433,7 @@ fn test_doctor_repo_checks_warn_in_unwired_git_repo() {
     cmd.current_dir(temp.path());
     cmd.timeout(CMD_TIMEOUT);
     cmd.args(["doctor", "--json"]);
-    let items = doctor_diagnostics(&mut cmd);
-    let repo = repo_items(&items);
+    let repo = repo_checks(&mut cmd);
     assert!(
         !repo.is_empty(),
         "unwired git repo must produce repo findings"

@@ -18,6 +18,13 @@ pub struct GatesConfig {
     /// Command run by the `ddl-spk-lint` hook entry (empty omits the entry).
     #[serde(default)]
     pub spk_lint: Option<String>,
+    /// Command for the `ddl-brief-drift` pre-commit entry (brief-render
+    /// drift gate, DDL-4jvz). Absent (`None`) = auto: arm the shipped gate
+    /// when the repo has a committed podras brief render, omit otherwise
+    /// (content-based, never timestamp-based). `Some("")` disables the
+    /// entry even when a render is committed.
+    #[serde(default)]
+    pub brief_drift: Option<String>,
 }
 
 /// ddl's own configuration, written to `.ddl/config.toml`.

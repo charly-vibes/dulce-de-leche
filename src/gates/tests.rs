@@ -379,6 +379,38 @@ fn default_render_matches_the_canonical_pre_commit_block() {
 }
 
 #[test]
+fn armed_brief_drift_renders_a_multi_line_entry_inside_the_pre_commit_span() {
+    // DDL-4jvz: the gate command is a self-contained script rendered as a
+    // YAML block scalar inside the managed span, so drift detection (span
+    // comparison) covers it with no extra arm.
+    let commands = GateCommands {
+        brief_drift: DEFAULT_BRIEF_DRIFT.to_string(),
+        ..default_gates()
+    };
+    let block = render_pre_commit_block(&commands);
+    assert!(block.contains("    ddl-brief-drift:\n      run: |\n"));
+    assert!(block.contains("        set -eu\n"));
+    // Unarmed commands omit the entry entirely.
+    assert!(!render_pre_commit_block(&default_gates()).contains("ddl-brief-drift"));
+}
+
+#[test]
+fn brief_drift_script_embeds_the_shared_ordering_sentence() {
+    // One source of truth (design D4): the gate's failure message must
+    // state the same ordering as `ddl status --refresh`
+    // (crate::repo_status::STATUS_ORDERING_MESSAGE, task 1.5).
+    let rendered = super::lefthook::render_brief_drift_command();
+    assert!(
+        rendered.contains(crate::repo_status::STATUS_ORDERING_MESSAGE),
+        "emitted gate command must embed the shared ordering sentence verbatim"
+    );
+    // The splice is shell-single-quoted: the sentence's backticks must
+    // never be parsed as command substitution at gate runtime.
+    assert!(!rendered.contains("\"Run `ddl status --refresh`"));
+    assert!(rendered.contains("'Run `ddl status --refresh`"));
+}
+
+#[test]
 fn default_render_matches_the_canonical_pre_push_block() {
     assert_eq!(render_pre_push_block(&default_gates()), PRE_PUSH_BLOCK);
 }

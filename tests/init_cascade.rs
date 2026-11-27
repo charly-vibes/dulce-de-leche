@@ -525,14 +525,16 @@ fn cascade_never_invokes_openspec_update() {
     cmd.timeout(CMD_TIMEOUT);
     let output = cmd.assert().success().get_output().clone();
 
-    // The fake openspec ran exactly once, with the scaffold invocation.
+    // The fake openspec ran with the scaffold invocation plus the
+    // DDL-76lm status-feed probe (`openspec list --json`) init's record
+    // refresh performs — and never the forbidden `update`.
     assert!(argv_log.exists(), "cascade never invoked the fake openspec");
     let recorded = std::fs::read_to_string(&argv_log)
         .unwrap_or_else(|e| panic!("read recorded openspec argv: {e}"));
     assert_eq!(
         recorded.lines().collect::<Vec<_>>(),
-        vec!["init --tools none"],
-        "cascade must invoke only `openspec init --tools none`, got: {recorded}"
+        vec!["init --tools none", "list --json"],
+        "cascade must invoke only `openspec init --tools none` + the status-feed probe, got: {recorded}"
     );
     assert!(
         !recorded.contains("update"),

@@ -32,18 +32,49 @@ pub struct DiagnosticSummary {
     pub fail: usize,
 }
 
+/// The repo-scope findings (DDL-852c, design D5): a namespace, not a tool.
+///
+/// `ddl.repo.*` checks live under this separate key with their own summary
+/// so repo findings can neither drown nor reshape the tool diagnostics
+/// (`diagnostics` + `summary` count tool and machine checks only). The
+/// items carry the exact same `{tool, check, level, detail, fix?}` shape
+/// as the tool diagnostics — error-identity parity with the human output.
+#[derive(Debug, Clone, serde::Serialize, PartialEq)]
+pub struct RepoFindings {
+    /// Roll-up of [`Self::checks`] — the same single-source discipline.
+    pub summary: DiagnosticSummary,
+    pub checks: Vec<DiagnosticItem>,
+}
+
+impl RepoFindings {
+    pub fn empty() -> Self {
+        Self {
+            summary: DiagnosticSummary {
+                pass: 0,
+                warn: 0,
+                fail: 0,
+            },
+            checks: Vec::new(),
+        }
+    }
+}
+
 /// The `ddl doctor --json` data payload.
 #[derive(Debug, Clone, serde::Serialize, PartialEq)]
 pub struct DiagnosticReport {
     pub summary: DiagnosticSummary,
     pub diagnostics: Vec<DiagnosticItem>,
+    /// Repo-scope `ddl.repo.*` findings (DDL-9kz.5, DDL-852c).
+    pub repo: RepoFindings,
 }
 
 /// Map a genesis doctor report onto the structured diagnostics contract.
 ///
 /// Check names that match a managed tool are attributed to that tool;
-/// everything else belongs to `"ddl"`. The summary is recomputed from the
-/// items so counts can never contradict the item list.
+/// everything else belongs to `"ddl"`. `ddl.repo.*` items are partitioned
+/// into the `repo` key with their own summary (D5) so repo findings never
+/// change how tool failures are counted; both summaries are recomputed
+/// from their item lists so counts can never contradict the items.
 pub fn report_to_diagnostics(report: &genesis::doctor::DoctorReport) -> DiagnosticReport {
     let tool_names: Vec<&str> = crate::platform::MANAGED_TOOLS
         .iter()
@@ -54,6 +85,7 @@ pub fn report_to_diagnostics(report: &genesis::doctor::DoctorReport) -> Diagnost
         warn: 0,
         fail: 0,
     };
+    let mut repo = RepoFindings::empty();
     let mut diagnostics = Vec::new();
     for check in &report.checks {
         let level = match check.status {
@@ -61,27 +93,38 @@ pub fn report_to_diagnostics(report: &genesis::doctor::DoctorReport) -> Diagnost
             genesis::doctor::CheckStatus::Warn => "warn",
             genesis::doctor::CheckStatus::Fail => "fail",
         };
-        match level {
-            "pass" => summary.pass += 1,
-            "warn" => summary.warn += 1,
-            _ => summary.fail += 1,
-        }
         let tool = if tool_names.contains(&check.name.as_str()) {
             check.name.clone()
         } else {
             "ddl".to_string()
         };
-        diagnostics.push(DiagnosticItem {
+        let item = DiagnosticItem {
             tool,
             check: check.name.clone(),
             level: level.to_string(),
             detail: check.message.clone(),
             fix: check.fix.clone(),
-        });
+        };
+        if check.name.starts_with("ddl.repo.") {
+            match level {
+                "pass" => repo.summary.pass += 1,
+                "warn" => repo.summary.warn += 1,
+                _ => repo.summary.fail += 1,
+            }
+            repo.checks.push(item);
+            continue;
+        }
+        match level {
+            "pass" => summary.pass += 1,
+            "warn" => summary.warn += 1,
+            _ => summary.fail += 1,
+        }
+        diagnostics.push(item);
     }
     DiagnosticReport {
         summary,
         diagnostics,
+        repo,
     }
 }
 
@@ -169,6 +212,12 @@ pub(crate) fn register_repo_checks(runner: &mut genesis::doctor::DoctorRunner) {
     runner.register(Box::new(RepoHooksPathCheck));
     runner.register(Box::new(RepoJustCiCheck));
     runner.register(Box::new(RepoReadmeFrontdoorCheck));
+    // Status-pipeline checks (DDL-852c task 2.2): the record contract and
+    // the semantics statements around it.
+    runner.register(Box::new(RepoStatusFreshCheck));
+    runner.register(Box::new(RepoBeadsBlockCheck));
+    runner.register(Box::new(RepoBriefDriftGateCheck));
+    runner.register(Box::new(RepoUnmanagedArtifactsCheck));
 }
 
 /// Build the structured `ddl doctor` report (JSON path, DDL-6zn.4).

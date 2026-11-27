@@ -128,8 +128,14 @@ pub enum Commands {
     },
 
     /// Show cross-tool health overview
-    #[command(after_help = "Examples:\n  ddl status\n  ddl status --json")]
-    Status,
+    #[command(after_help = "Examples:\n  ddl status\n  ddl status --json\n  ddl status --refresh")]
+    Status {
+        /// Re-obtain the repo-status feeds and rewrite `.ddl/status.json`
+        /// via the write ordering (podras brief --write, bd export,
+        /// record write). Requires `.ddl/manifest.json`.
+        #[arg(long)]
+        refresh: bool,
+    },
 
     /// Gate operations (DDL-9kz.6)
     Gates {

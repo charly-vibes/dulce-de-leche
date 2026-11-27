@@ -9,6 +9,11 @@
 //!   its markers and gate command); advisory skip or refusal note otherwise
 //! - .gitignore entries for tool data dirs (.testaruda/, .pretender/)
 //! - beads no-db stamping in .beads/config.yaml
+//! - canonical AGENTS.md blocks: session-close protocol (DDL-9kz.1) and
+//!   beads storage semantics (DDL-4jvz) — both self-repairing managed spans
+//! - brief-render drift gate (DDL-4jvz): a self-contained `ddl-brief-drift`
+//!   pre-commit command armed, content-based, only where a podras brief
+//!   render is committed
 //! - init ordering: openspec init BEFORE ah init (ah needs openspec/)
 //!
 //! Read-only counterpart (DDL-6zn.5): `detect_lefthook_gates_problems`

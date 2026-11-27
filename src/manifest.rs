@@ -86,34 +86,24 @@ impl Manifest {
     }
 
     /// Save the manifest to a file path as an atomic replace (SEC-01,
-    /// DDL-8u8).
+    /// DDL-8u8) through [`genesis::fs::atomic_write_json`].
     ///
     /// Rationale: the previous implementation wrote with `std::fs::write`
     /// (truncate-then-write). Any crash mid-write would leave an empty or
     /// partial file — and since an empty file parses as a fresh manifest,
-    /// established tool state was silently reset. Staging to a temp
-    /// sibling, fsyncing, and renaming publishes either the complete old
-    /// or the complete new file. Temp files are cleaned up on failure.
-    /// Note: manifest writes that require locking/concurrency guarantees
-    /// go through `DdlDir::save_manifest`/`record_tool`, which add the
-    /// dedicated lock file on top of this same staged-replace pattern.
+    /// established tool state was silently reset. The staged-replace
+    /// protocol (temp sibling, fsync, rename, temp removed on failure)
+    /// publishes either the complete old or the complete new file, and is
+    /// the fleet primitive genesis::fs was ported from, so ddl delegates
+    /// to it. Note: manifest writes that require locking/concurrency
+    /// guarantees go through `DdlDir::save_manifest`/`record_tool`, which
+    /// add the dedicated lock file on top of this same staged-replace
+    /// pattern.
     pub fn save(&self, path: &Path) -> Result<()> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(DdlError::Io)?;
         }
-        let contents = serde_json::to_string_pretty(self).map_err(DdlError::Serde)?;
-        let tmp_path = path.with_extension("json.tmp");
-        {
-            use std::io::Write;
-            let mut file = std::fs::File::create(&tmp_path).map_err(DdlError::Io)?;
-            file.write_all(contents.as_bytes()).map_err(DdlError::Io)?;
-            file.sync_all().map_err(DdlError::Io)?;
-        }
-        if let Err(e) = std::fs::rename(&tmp_path, path) {
-            let _ = std::fs::remove_file(&tmp_path);
-            return Err(DdlError::Io(e));
-        }
-        Ok(())
+        genesis::fs::atomic_write_json(path, self).map_err(DdlError::from)
     }
 
     /// Add or update a tool entry.
@@ -207,14 +197,15 @@ impl InstallLock {
         Ok(lock)
     }
 
-    /// Save the lock as an atomic staged replace (same pattern as
-    /// [`Manifest::save`], DDL-8u8): a crash leaves either the old or the new
-    /// lock, never a partial file.
+    /// Save the lock as an atomic staged replace through
+    /// [`genesis::fs::atomic_write_json`] (same fleet primitive as
+    /// [`Manifest::save`], DDL-8u8): a crash leaves either the old or the
+    /// new lock, never a partial file.
     pub fn save(&self, path: &Path) -> Result<()> {
-        write_file_atomic(
-            path,
-            &serde_json::to_string_pretty(self).map_err(DdlError::Serde)?,
-        )
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(DdlError::Io)?;
+        }
+        genesis::fs::atomic_write_json(path, self).map_err(DdlError::from)
     }
 
     /// Record (or replace) a tool's artifact identity.
@@ -226,27 +217,6 @@ impl InstallLock {
     pub fn get(&self, tool: &str) -> Option<&LockEntry> {
         self.entries.get(tool)
     }
-}
-
-/// Atomically replace a file with `contents`: stage to a temp sibling,
-/// fsync, rename. Shared by the manifest and install-lock saves so both
-/// publish either the complete old or the complete new file.
-fn write_file_atomic(path: &Path, contents: &str) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(DdlError::Io)?;
-    }
-    let tmp_path = path.with_extension("json.tmp");
-    {
-        use std::io::Write;
-        let mut file = std::fs::File::create(&tmp_path).map_err(DdlError::Io)?;
-        file.write_all(contents.as_bytes()).map_err(DdlError::Io)?;
-        file.sync_all().map_err(DdlError::Io)?;
-    }
-    if let Err(e) = std::fs::rename(&tmp_path, path) {
-        let _ = std::fs::remove_file(&tmp_path);
-        return Err(DdlError::Io(e));
-    }
-    Ok(())
 }
 
 /// The compatibility matrix embedded in the binary.

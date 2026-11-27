@@ -16,6 +16,7 @@ pub mod installer;
 pub mod manifest;
 pub mod output;
 pub mod platform;
+pub mod repo_status;
 pub mod setup_wizard;
 pub mod skills;
 

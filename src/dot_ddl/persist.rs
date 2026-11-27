@@ -2,85 +2,35 @@
 
 use super::*;
 use std::fs::OpenOptions;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use crate::error::{DdlError, Result};
 use crate::manifest::Manifest;
 use fs2::FileExt;
 
-pub(crate) fn is_sharing_violation(e: &DdlError) -> bool {
-    matches!(e, DdlError::Io(io) if matches!(io.raw_os_error(), Some(32) | Some(33)))
-}
-
-/// SEC-01 (DDL-8u8): atomically replace the manifest file.
+/// SEC-01 (DDL-8u8): atomically replace the manifest file, staged through
+/// [`genesis::fs::atomic_write_json`].
 ///
 /// Baseline (pre-DDL-8u8) wrote through the locked manifest handle after
 /// truncating it (`set_len(0)`): a crash in that window left an empty file
 /// — which [`Manifest::parse`] then accepted as a fresh manifest, silently
 /// resetting established tool state — and a crash mid-write left partial
-/// JSON on disk.
-///
-/// Replacement strategy: stage the serialized manifest in a temp sibling
-/// file, fsync it, then `rename()` over the target. POSIX rename is atomic,
-/// so readers observe either the complete old or the complete new manifest
-/// — never partial JSON — and a failure anywhere before the rename leaves
-/// the prior manifest byte-for-byte intact. On Windows `std::fs::rename`
-/// uses MOVEFILE_REPLACE_EXISTING; transient sharing violations during the
-/// rename are retried by the caller's [`with_sharing_retry`].
-///
-/// The staging file is opened no-follow (SEC-05): a link swapped in at the
-/// temp path cannot redirect the staged write.
-pub(crate) fn stage_manifest(manifest_path: &Path, manifest: &Manifest) -> Result<PathBuf> {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static TMP_COUNTER: AtomicU64 = AtomicU64::new(0);
-
-    let dir = manifest_path.parent().ok_or_else(|| {
-        DdlError::Other(format!(
-            "manifest path {} has no parent directory",
-            manifest_path.display()
-        ))
-    })?;
-    let stem = manifest_path
-        .file_name()
-        .map(|n| n.to_os_string())
-        .unwrap_or_else(|| "manifest.json".into());
-    let counter = TMP_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let tmp_path = dir.join(format!(
-        "{}.tmp.{}.{}",
-        stem.to_string_lossy(),
-        std::process::id(),
-        counter
-    ));
-
-    let contents = serde_json::to_string_pretty(manifest).map_err(DdlError::Serde)?;
-    let mut file = open_manifest_no_follow(&tmp_path)?;
-    file.write_all(contents.as_bytes()).map_err(DdlError::Io)?;
-    // fsync the staged file so the rename cannot publish zero-length or
-    // torn contents after a crash.
-    file.sync_all().map_err(DdlError::Io)?;
-    Ok(tmp_path)
-}
-
-/// Replace `manifest_path` with the already-staged file, then (Unix)
-/// best-effort fsync the parent directory so the rename itself survives a
-/// power loss. Best-effort: a failed directory fsync degrades durability
-/// but never loses the on-disk new state.
-pub(crate) fn commit_staged(tmp_path: &Path, manifest_path: &Path) -> Result<()> {
-    if let Err(e) = std::fs::rename(tmp_path, manifest_path) {
-        // Leave no staging debris behind on a failed rename.
-        let _ = std::fs::remove_file(tmp_path);
-        return Err(DdlError::Io(e));
-    }
-    sync_parent_dir(manifest_path);
-    Ok(())
-}
-
-/// Write the manifest as an atomic replace (SEC-01, DDL-8u8). See
-/// [`stage_manifest`] for the durability rationale.
+/// JSON on disk. The staged-replace protocol (temp sibling in the target's
+/// own directory, fsync, rename, best-effort parent-dir fsync on Unix,
+/// bounded Windows sharing-violation retry on the rename, staging file
+/// removed on every failure path) is the fleet primitive genesis::fs was
+/// ported from, so ddl delegates to it instead of hand-rolling a second
+/// copy.
 pub(crate) fn write_manifest_atomic(manifest_path: &Path, manifest: &Manifest) -> Result<()> {
-    let tmp_path = stage_manifest(manifest_path, manifest)?;
-    commit_staged(&tmp_path, manifest_path)
+    genesis::fs::atomic_write_json(manifest_path, manifest).map_err(DdlError::from)
+}
+
+/// Atomically replace `target` with `contents` — the SEC-01 staged-write
+/// protocol generalized (DDL-76lm) for non-manifest managed files such
+/// as `.ddl/status.json` and the tracked beads export, delegated to
+/// [`genesis::fs::atomic_write`] for the same durability guarantees.
+pub(crate) fn write_bytes_atomic(target: &Path, contents: &[u8]) -> Result<()> {
+    genesis::fs::atomic_write(target, contents).map_err(DdlError::from)
 }
 
 /// Path of the dedicated manifest lock file (a stable sibling that is
@@ -109,40 +59,39 @@ pub(crate) fn manifest_lock_guard(manifest_path: &Path) -> Result<std::fs::File>
     Ok(file)
 }
 
-/// Best-effort fsync of the directory containing `path` (Unix only).
-#[cfg(unix)]
-pub(crate) fn sync_parent_dir(path: &Path) {
-    if let Some(dir) = path.parent() {
-        let _ = std::fs::File::open(dir).map(|f| f.sync_all());
-    }
-}
-
-/// Best-effort directory fsync is a Unix durability nicety; Windows
-/// relies on MOVEFILE_REPLACE_EXISTING journaling semantics.
-#[cfg(not(unix))]
-pub(crate) fn sync_parent_dir(_path: &Path) {}
-
 /// Run a manifest write operation, retrying transient Windows file locks
-/// (DDL-71i). Windows LockFileEx locks held by antivirus scanners or other
-/// processes block our open/lock step; exponential backoff (6 attempts,
-/// ~6.3s worst case) rides those out without slowing down real failures.
+/// (DDL-71i). The retry policy itself is genesis's
+/// [`genesis::fs::with_sharing_retry`] — exponential backoff, 6 attempts,
+/// ~6.3s worst case, bounded so a process holding the target open cannot
+/// turn the rename into a hang. This wrapper only adapts repo errors to
+/// it: sharing/lock violations are forwarded as retryable, everything
+/// else (including the SEC-05 symlink refusal) is returned as-is.
 pub(crate) fn with_sharing_retry<F>(mut op: F) -> Result<()>
 where
     F: FnMut() -> Result<()>,
 {
-    const MAX_ATTEMPTS: u32 = 6;
-    for attempt in 1..=MAX_ATTEMPTS {
-        match op() {
-            Ok(()) => return Ok(()),
-            Err(e) if is_sharing_violation(&e) && attempt < MAX_ATTEMPTS => {
-                std::thread::sleep(std::time::Duration::from_millis(
-                    100 * 2u64.pow(attempt - 1),
-                ));
-            }
-            Err(e) => return Err(e),
+    let last: std::cell::RefCell<Option<DdlError>> = std::cell::RefCell::new(None);
+    let outcome = genesis::fs::with_sharing_retry(|| match op() {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            let probe = match &e {
+                DdlError::Io(io) => io.raw_os_error().map_or_else(
+                    || std::io::Error::other("non-sharing"),
+                    std::io::Error::from_raw_os_error,
+                ),
+                _ => std::io::Error::other("non-sharing"),
+            };
+            *last.borrow_mut() = Some(e);
+            Err(genesis::fs::FsError::Io(probe))
         }
+    });
+    match outcome {
+        Ok(()) => Ok(()),
+        Err(_) => match last.into_inner() {
+            Some(e) => Err(e),
+            None => unreachable!("retry wrapper always records the last repo error"),
+        },
     }
-    unreachable!("retry loop always returns")
 }
 
 /// SEC-05 (DDL-sg8): refuse manifest writes that links could redirect

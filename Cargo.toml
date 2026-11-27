@@ -62,8 +62,8 @@ tar = "0.4"
 flate2 = "1"
 zip = { version = "9", default-features = false, features = ["deflate"] }
 
-# Shared infra crate (envelope, suggestions, scaffold)
-genesis-vibes = "0.14"
+# Shared infra crate (envelope, suggestions, scaffold, atomic fs primitives)
+genesis-vibes = "0.15"
 
 # O_NOFOLLOW for race-free manifest opens (SEC-05); unix-only.
 # Keep target-gated deps in their own section at the END of the file — a

@@ -195,3 +195,24 @@
   Unresolved: 'bajan not installed' still fails ddl doctor (environment). DDL-9kz.2 (.beads gitignore negation) still open — used git add -f. test-blast on a schema-less store still errors (harmless: creates the poison store that just test now self-heals). .wai run logs debris untracked.
 
   Next action (if resuming): pick from bd ready — fleet kaya pin flip (14 repos, per-repo DoD first) or DDL-01q de-flaking; DDL-oymq (84 contract tests) unblocks DDL-v4s closure and DDL-9kz.1.
+- 2026-11-27T15:06:02Z [id:d15ca12d3b352d291e19d71f1e63a233c0e37caacc2307f0929dcbfaa33005b0] (#resume-fleet-close-loop) - 2026-11-27T15:11:00Z [next] (#resume-fleet-close-loop) Format: 1
+  Saved: 2026-11-27T15:11:00Z
+  Repo: charly-vibes/dulce-de-leche (branch main, HEAD 2eaefad, clean, in sync with origin/main)
+  Session: omp conversation 2026-11-27 afternoon (next-mode handoff)
+  
+  Objective: finish the Fleet close-loop epic DDL-9kz children (9kz.5, 9kz.8, 9kz.10, 9kz.9.x) after shipping 9kz.6 this session.
+  Phase: implementation (per-child); no active pipeline run.
+  
+  State: DDL-9kz.6 shipped + closed (PR #115 squash 8bfdd58; 'ddl gates run' detached runner; tests/fleet_report.rs 5 green). Children closed: 9kz.1-.4, 9kz.6(.1), 9kz.7; 9kz.2 shipped in #114. State mirrored into bd DDL-9kz note (bd-primary).
+  
+  Next action: claim DDL-9kz.5 ('ddl fleet report' session-telemetry pipeline). Open design choice: reuse canticos/terapia parsers vs fresh module; new module must carry Purpose/Responsibilities/Rationale header; docs/src page + README command block per ticket metadata. Then 9kz.8 (DECISION required between (a) symlink canonical root into each harness, (b) fleet AGENTS block states root, (c) harness resolves symlinks), 9kz.10 (DESIGN), 9kz.9.x (cross-repo, charly-vibes/wai).
+  
+  Constraints/authorization: no direct main pushes for code - feature branch + PR; PRs via git credential fill token + api.github.com (no gh CLI); squash-merge authorized pattern from prior sessions; pretender gate: fix own violations, --adopt pre-existing debt (DDL-3zm hatch), baselines live in pretender-baseline.json; fmt tree sweep was committed standalone (3aaa1f6) so fmt-check passes; bd close reason carries ship evidence; export via 'bd export > .beads/issues.jsonl' then git add -f (direct-main sanctioned for beads commits).
+  
+  Validation (historical, re-verify on resume): just test green 385 ingested; pretender gate=0; fmt-check ok; brief-drift green; clippy 0 warnings. Known unrelated flake: upgrade_command::hanging_child_with_descendants_killed_within_deadline_plus_one (reproduces on clean tree).
+  
+  Unresolved: .wai/projects/dulce-de-leche/runs/pretender-debt*.log untracked debris (delete or gitignore someday); 'bajan not installed' fails ddl doctor (environment).
+  
+  Refs: whisper repo-scope note (inert-hooks correction, 20261127T122526Z) unchanged and still valid; gates run handles live at .ddl/gates/run.json when a run exists.
+  
+  Previous entry: none for this topic.
