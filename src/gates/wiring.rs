@@ -112,8 +112,7 @@ pub fn apply_gates_wiring_with_sad(
     // 5. session-close protocol block (DDL-9kz.1): the ritual must be
     // visible at the repo root for every harness, and gates wiring is the
     // self-owned writer that rewrites a drifted span.
-    let session_protocol =
-        crate::installer::ensure_session_protocol_block(repo_root)?;
+    let session_protocol = crate::installer::ensure_session_protocol_block(repo_root)?;
 
     Ok(WiringReport {
         lefthook,

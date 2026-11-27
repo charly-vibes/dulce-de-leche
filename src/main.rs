@@ -63,6 +63,13 @@ fn run(args: dulce_de_leche::cli::Args) -> dulce_de_leche::error::Result<()> {
             commands::cmd_feedback(fb, &args)
         }
         Some(Commands::Status) => commands::cmd_status(&args),
+        Some(Commands::Gates { ref cmd }) => match cmd {
+            dulce_de_leche::cli::GatesCmd::Run {
+                detach,
+                wait_secs,
+                cmd,
+            } => commands::cmd_gates_run(*detach, *wait_secs, cmd, &args),
+        },
         Some(Commands::Doctor { fix, strict }) => commands::cmd_doctor(fix, strict, &args),
         Some(Commands::Version { check }) => commands::cmd_version(check, &args),
         Some(Commands::Upgrade { ref tool }) => commands::cmd_upgrade(tool.as_deref(), &args),

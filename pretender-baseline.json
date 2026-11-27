@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "adopted_at": "2026-11-27T14:59:01Z",
+  "finding_ids": [
+    "src/cli.rs::cmd_setup::function_lines_max",
+    "src/cli.rs::parse_or_exit::function_lines_max",
+    "src/cli.rs::setup_json_report::function_lines_max",
+    "src/commands/mod.rs::cmd_doctor::function_lines_max",
+    "src/commands/mod.rs::cmd_feedback::function_lines_max",
+    "src/commands/mod.rs::cmd_scope::function_lines_max",
+    "src/commands/mod.rs::cmd_status::function_lines_max",
+    "src/commands/mod.rs::render_gate_outcome::function_lines_max",
+    "src/main.rs::::mut_ratio",
+    "src/main.rs::run::function_lines_max",
+    "tests/fleet_report.rs::::mock_count",
+    "tests/fleet_report.rs::::unwraps"
+  ]
+}
