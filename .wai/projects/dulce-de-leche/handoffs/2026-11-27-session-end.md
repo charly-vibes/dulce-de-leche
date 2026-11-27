@@ -8,27 +8,37 @@ phase: research
 
 ## What Was Done
 
-<!-- Summary of completed work -->
+- **v0.11.0 released** (repo-status SSOT: `.ddl/status.json`, born doctor-clean gated repos). PRs #118 (SSOT feature + init status-record fix), #119 (release bump/changelog cut), #120 (RustSec url/zip bumps blocking the advisory gate). Tag moved once (first run failed `cargo audit`); final run 46066690952 success, 7 assets, tarballs verified exec-bit, downloaded binary runs.
+- **DDL-kk9 closed** — podras FP already fixed upstream (podras-ite 74d0856).
+- **DDL-3av closed for ddl** — publish-job chmod verified in the wild; open for wai/dont/espectacular/specodelic/whisper.
+- **DDL-8uiv filed + hardened** — the orphan-check pgrep matched any full-cmdline `sleep 60` (foreign leaks / parallel sibling mid-kill); tests serialized + skip-with-reason. Kill logic verified correct.
+- DDL-44k noted UNBLOCKED (kk9 closed) — fleet `ddl init --gates` rollout can proceed.
 
 ## Key Decisions
 
-<!-- Decisions made and rationale -->
+- init tail writes the status record advisory-only (DDL-6ox posture), silent in JSON mode.
+- Release posture = v0.10.0's: clear RustSec blockers, chrono-unmaintained stays the one allowed warning; tag force-moved pre-publication (release never created on the failed run).
 
 ## Gotchas & Surprises
 
-<!-- What behaved unexpectedly? Non-obvious requirements? Hidden dependencies? -->
+- `cargo update -p url` no-ops — security bumps need `--precise`.
+- `gh run watch --exit-status | tail -N` masks the failure exit code (PIPESTATUS).
+- testaruda pre-push selection widens on Cargo.lock changes — host-env-failing tests then block every push.
+- DDL-3av's "fix committed on branch in all 9 repos" was false for ddl: the branch is gone; main already had the chmod.
 
 ## What Took Longer Than Expected
 
-<!-- Steps that needed multiple attempts. Commands that failed before the right one. -->
+- The doctor-clean CI failure: local runs skip the contract (unpinned wai), so CI was the only honest oracle; verification of the fix needed a manual init→doctor repro bypassing the skip gate.
 
 ## Open Questions
 
-<!-- Unresolved questions -->
+- None blocking.
 
 ## Next Steps
 
-<!-- Prioritized list of what to do next -->
+1. DDL-44k: fleet `ddl init --gates` rollout (now unblocked) — verify each repo with `ddl doctor --json`.
+2. DDL-3av: re-verify/land exec-bit fixes in wai/dont/espectacular/specodelic/whisper.
+3. P1s: DDL-arb (vampiro CI red), DDL-cfd (README front-door).
 
 ## Context
 
@@ -65,7 +75,6 @@ phase: research
 └── ○ DDL-wstc P2 feat(pretender): CLI surface for index-accurate scanning
 ○ DDL-gzak P2 gates: migrate src/gates/lefthook.rs onto genesis::git_hooks
 ○ DDL-js72 P2 ddl: canonical bd-semantics AGENTS.md block + doctor check for contradictory claims
-○ DDL-kk9 P2 [bug] bug(podras): false '23 malformed line(s)' report on a valid .beads/issues.jsonl
 ○ DDL-myf P2 Fleet sweep: migrate the nine legacy openspec repos (openspec update, project.md → config.yaml)
 ○ DDL-qfc5 P2 Decide AGENT-SUMMARY.md convention: manage it or archive it to .wai
 ○ DDL-t5r P2 ddl: manage just as a DDL tool + doctor gate for the DDL-85p test-runner recipes
@@ -73,6 +82,7 @@ phase: research
 ○ DDL-6gg P3 chore(wai): doctor warnings - missing tdd-ro5-gate omp rule and projects without .state
 ○ DDL-6gq P3 [bug] ddl init invokes a stale wai and re-injects a duplicate ah managed block
 ○ DDL-7ag P3 Replicate dont CI speedup pattern (rust-cache + cargo-binstall + nightly coverage) across charly-vibes repos
+○ DDL-8uiv P3 hanging_child_with_descendants_killed_within_deadline_plus_one fails deterministically on workstation
 ○ DDL-bij8 P3 chore(wai): add the cleanup-round research artifact
 ○ DDL-g6w P3 Adoption/UX reframe: reduce onboarding friction (setup-wizard entry point experiment)
 ○ DDL-jjox P3 upstream brief-drift HEAD-churn normalization to charly-vibes/podras
