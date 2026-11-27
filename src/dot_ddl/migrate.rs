@@ -398,6 +398,29 @@ pub fn is_git_tracked(path: &Path) -> bool {
     }
 }
 
+/// Batched sibling of [`is_git_tracked`]: the subset of `paths` git tracks
+/// (staged or committed), via one `genesis::git::tracked_paths` spawn
+/// instead of one spawn per path. The repository root is resolved from the
+/// first path's parent (all legacy candidates share it), keeping the
+/// invocation independent of the current working directory like
+/// [`is_git_tracked`]. Returns an empty list when git is unavailable, the
+/// paths are outside any repository, or nothing is tracked.
+pub fn tracked_among<P: AsRef<Path>>(paths: &[P]) -> Vec<String> {
+    let Some(first) = paths.first() else {
+        return Vec::new();
+    };
+    let parent = first
+        .as_ref()
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    match genesis::git::repo_root_from(parent) {
+        Ok(root) => genesis::git::tracked_paths(&root, paths).unwrap_or_default(),
+        // Outside any repository: nothing is tracked.
+        Err(_) => Vec::new(),
+    }
+}
+
 /// Check if a path is a symlink.
 pub(crate) fn is_symlink(path: &Path) -> bool {
     std::fs::symlink_metadata(path)

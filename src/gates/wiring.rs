@@ -184,16 +184,18 @@ fn stage_beads_files(repo_root: &std::path::Path) -> Vec<String> {
     if existing.is_empty() {
         return Vec::new();
     }
-    let tracked = std::process::Command::new("git")
-        .args(["ls-files"])
-        .args(&existing)
-        .current_dir(repo_root)
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
-        .unwrap_or_default();
+    // One batched `git ls-files` spawn (genesis::git::tracked_paths) instead
+    // of one spawn per candidate; on git failure degrade to "nothing is
+    // tracked" so the best-effort staging attempt still runs.
+    let tracked: Vec<String> =
+        genesis::git::tracked_paths(repo_root, &existing).unwrap_or_default();
     let untracked: Vec<&String> = existing
         .iter()
-        .filter(|f| !tracked.lines().any(|t| t.trim() == **f))
+        .filter(|f| {
+            !tracked
+                .iter()
+                .any(|t| std::path::Path::new(t.as_str()) == std::path::Path::new(f.as_str()))
+        })
         .collect();
     if untracked.is_empty() {
         return Vec::new();

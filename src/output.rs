@@ -90,6 +90,10 @@ fn collect_json(data: &serde_json::Value) -> bool {
     }
 }
 
+/// Dulce's own envelope protocol version (pinned by tests/envelope_contract.rs).
+/// genesis-vibes 0.14 makes `envelope_version` caller-supplied at construction.
+const ENVELOPE_VERSION: &str = "0.1";
+
 /// Render a result as JSON using the genesis-vibes envelope format.
 pub fn json_output<T: Serialize + std::fmt::Debug>(
     cli_version: &str,
@@ -100,7 +104,8 @@ pub fn json_output<T: Serialize + std::fmt::Debug>(
     hints: Vec<HintEntry>,
 ) -> Result<String> {
     if ok {
-        let envelope = Envelope::success(cli_version, kind, data, warnings, hints);
+        let envelope =
+            Envelope::success(ENVELOPE_VERSION, cli_version, kind, data, warnings, hints);
         serde_json::to_string_pretty(&envelope)
             .map_err(|e| DdlError::Other(format!("JSON serialization failed: {e}")))
     } else {
@@ -118,7 +123,7 @@ pub fn json_output<T: Serialize + std::fmt::Debug>(
             }],
         )
         .map_err(|e| DdlError::Other(format!("Failed to build error envelope: {e}")))?;
-        let envelope = Envelope::error(cli_version, err, warnings);
+        let envelope = Envelope::error(ENVELOPE_VERSION, cli_version, err, warnings);
         serde_json::to_string_pretty(&envelope)
             .map_err(|e| DdlError::Other(format!("JSON serialization failed: {e}")))
     }

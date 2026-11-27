@@ -726,13 +726,7 @@ impl DoctorCheck for RepoBeadsExportCheck {
             .then(|| std::fs::read_to_string(&jsonl).map(|t| t.lines().count()))
             .transpose()
             .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
-        let tracked = std::process::Command::new("git")
-            .args(["ls-files", "--error-unmatch", ".beads/issues.jsonl"])
-            .current_dir(&root)
-            .stdin(std::process::Stdio::null())
-            .output()
-            .ok()
-            .map(|o| o.status.success());
+        let tracked = genesis::git::tracked(&root, &jsonl).ok();
         let bd_count = crate::gates::find_in_path("bd").and_then(|bd| {
             std::process::Command::new(bd)
                 .arg("count")

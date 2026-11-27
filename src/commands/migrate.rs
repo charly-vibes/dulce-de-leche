@@ -37,9 +37,10 @@ fn migrate_one(
     ddl_dir: &mut DdlDir,
     tool_name: &str,
     legacy_path: &std::path::Path,
+    tracked: bool,
     args: &crate::cli::Args,
 ) -> Result<bool> {
-    if crate::dot_ddl::is_git_tracked(legacy_path) {
+    if tracked {
         if !args.is_json() {
             println!(
                 "  Skipping {}: {} is git-tracked — symlinking it would break the repo for other clones. To migrate anyway, untrack it first (git rm -r --cached {}) and commit.",
@@ -116,9 +117,18 @@ fn migrate_all_configs(
     legacy_configs: &[(&'static str, std::path::PathBuf)],
     args: &crate::cli::Args,
 ) -> Result<bool> {
+    // One batched git query for the whole set, not one spawn per config.
+    let paths: Vec<&std::path::Path> = legacy_configs.iter().map(|(_, p)| p.as_path()).collect();
+    let tracked_paths = crate::dot_ddl::tracked_among(&paths);
     let mut skipped_tracked = 0usize;
     for (tool_name, legacy_path) in legacy_configs {
-        if migrate_one(ddl_dir, tool_name, legacy_path, args)? {
+        // `tracked_paths` lists tracked files, so a directory config counts
+        // as tracked when any tracked file lies under it.
+        let tracked = tracked_paths.iter().any(|t| {
+            let t = std::path::Path::new(t);
+            t == *legacy_path || t.starts_with(legacy_path)
+        });
+        if migrate_one(ddl_dir, tool_name, legacy_path, tracked, args)? {
             skipped_tracked += 1;
         }
     }

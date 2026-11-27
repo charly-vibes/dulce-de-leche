@@ -25,7 +25,7 @@ none
 - DDL-9kz.11.1 — docs: fleet-incidents entry - 'session-close protocol invisible to non-pi harnesses' (status: open; priority: 2; age: 2d)
 - DDL-9kz.11.2 — docs: standardization.md section 10 - the session-close protocol must be repo-level (harness-agnostic) (status: open; priority: 2; age: 2d)
 - DDL-9kz.5 — ddl fleet report: ship the session-telemetry pipeline (pi + omp + codex) as a ddl command (status: open; priority: 2; age: 2d)
-(26 more omitted)
+(25 more omitted)
 
 ## Blocked / waiting
 
@@ -40,7 +40,7 @@ none
 - DDL-9gso — [bug] gently: pre-push cargo-gate is RED on clippy deny-warnings debt already on main - it blocks EVERY push (incl. the beads export) (status: open; priority: 1; age: 2d)
 - DDL-9kz — Fleet close-loop: make the session-close protocol visible to every harness (60-day session retrospective) (status: open; priority: 1; age: 2d)
 - DDL-arb — vampiro main CI red: openspec validate --all exits 1 in dogfood smoke (status: open; priority: 1; age: 44d)
-(32 more omitted)
+(31 more omitted)
 
 ## Parked
 
@@ -52,11 +52,11 @@ none
 
 ## Recent
 
+- 2eaefad14fc18b8559fd71b2c0ab5af0a077339a beads: close DDL-9kz.6 - gates run shipped (PR #115, timeout-immune detached runner) (2026-11-27T15:01:48Z)
+- 8bfdd586f6e1c9b5ede7bbfe3c904197e8fefefa feat(gates): ddl gates run - timeout-immune detached gate runner (DDL-9kz.6) (#115) (2026-11-27T15:00:37Z)
 - af3dd4cb0613be9d3b5e51ff7a05877200c1915f feat(doctor): hooks-path/just-ci/readme-frontdoor checks, session-protocol block, --strict gate, beads gitignore negation (#114) (2026-11-27T14:39:33Z)
 - d218a728a9fab239af14c145d327330dff05b954 chore(podras): regenerate brief after grounding round (2026-11-27T14:10:48Z)
 - 96c27c84d15899ba183ef396598df3aa817b43d6 beads: reopen DDL-9kz.11.1 (wrongly closed in same round; fleet-incidents entry still unwritten) (2026-11-27T14:10:45Z)
-- 459dbfa31d47a2c35b5277a30ca475d2962888a7 beads: grounding round 2026-11-27 — close 7 stale tickets, reprioritize 8, close retro-corrections epic (2026-11-27T14:10:34Z)
-- 322f5cf1748e74ce591748d32e8cf2e216d78fb9 chore(wai): session close handoff 2026-11-27 (2026-11-27T13:59:25Z)
 (195 more omitted)
 
 ## Health + confidence
@@ -69,12 +69,12 @@ Health: **amber** — basis: human — owner: charly — reason: human green dow
 
 | source | status | observed_at | staleness | detail |
 | --- | --- | --- | --- | --- |
-| beads | present | 2026-11-27T14:37:03Z | fresh | 29 malformed line(s) skipped in .beads/issues.jsonl |
-| git | present | 2026-11-27T14:39:33Z | fresh | none |
+| beads | present | 2026-11-27T15:00:59Z | fresh | 29 malformed line(s) skipped in .beads/issues.jsonl |
+| git | present | 2026-11-27T15:01:48Z | fresh | none |
 | openspec | present | 2026-11-17T19:50:38Z | fresh | none |
-| whisper | present | 2026-11-27T13:20:00Z | fresh | none |
+| whisper | present | 2026-11-27T15:06:02Z | fresh | none |
 | curation | present | 2026-11-18T21:37:03Z | fresh | none |
 
 Curation: updated_at 2026-11-18T21:37:03Z; confirmed_at 2026-11-18T00:00:00Z.
 
-Freshness: generated_at 2026-11-27T14:51:13Z; per-source observed_at and staleness are listed above.
+Freshness: generated_at 2026-11-27T15:21:28Z; per-source observed_at and staleness are listed above.

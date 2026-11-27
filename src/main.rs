@@ -30,6 +30,7 @@ fn main() {
                 exit: 1,
                 footer: None,
                 kind: "error".to_string(),
+                message: Some(format!("{e}")),
             },
         );
         output::print_error(&format!("{e}"), want_json);

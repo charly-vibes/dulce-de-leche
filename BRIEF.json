@@ -6,19 +6,19 @@
   "data": {
     "schema_version": "brief.v1",
     "as_of": "2026-11-27",
-    "generated_at": "2026-11-27T14:51:13.646717803Z",
+    "generated_at": "2026-11-27T15:21:28.955008580Z",
     "sources": [
       {
         "name": "beads",
         "status": "present",
-        "observed_at": "2026-11-27T14:37:03Z",
+        "observed_at": "2026-11-27T15:00:59Z",
         "staleness": "fresh",
         "detail": "29 malformed line(s) skipped in .beads/issues.jsonl"
       },
       {
         "name": "git",
         "status": "present",
-        "observed_at": "2026-11-27T14:39:33Z",
+        "observed_at": "2026-11-27T15:01:48Z",
         "staleness": "fresh",
         "detail": null
       },
@@ -32,7 +32,7 @@
       {
         "name": "whisper",
         "status": "present",
-        "observed_at": "2026-11-27T13:20:00Z",
+        "observed_at": "2026-11-27T15:06:02Z",
         "staleness": "fresh",
         "detail": null
       },
@@ -298,6 +298,18 @@
     "needs_retriage": [],
     "recent": [
       {
+        "sha": "2eaefad14fc18b8559fd71b2c0ab5af0a077339a",
+        "committed_at": "2026-11-27T15:01:48Z",
+        "subject": "beads: close DDL-9kz.6 - gates run shipped (PR #115, timeout-immune detached runner)",
+        "outcome": null
+      },
+      {
+        "sha": "8bfdd586f6e1c9b5ede7bbfe3c904197e8fefefa",
+        "committed_at": "2026-11-27T15:00:37Z",
+        "subject": "feat(gates): ddl gates run - timeout-immune detached gate runner (DDL-9kz.6) (#115)",
+        "outcome": null
+      },
+      {
         "sha": "af3dd4cb0613be9d3b5e51ff7a05877200c1915f",
         "committed_at": "2026-11-27T14:39:33Z",
         "subject": "feat(doctor): hooks-path/just-ci/readme-frontdoor checks, session-protocol block, --strict gate, beads gitignore negation (#114)",
@@ -313,18 +325,6 @@
         "sha": "96c27c84d15899ba183ef396598df3aa817b43d6",
         "committed_at": "2026-11-27T14:10:45Z",
         "subject": "beads: reopen DDL-9kz.11.1 (wrongly closed in same round; fleet-incidents entry still unwritten)",
-        "outcome": null
-      },
-      {
-        "sha": "459dbfa31d47a2c35b5277a30ca475d2962888a7",
-        "committed_at": "2026-11-27T14:10:34Z",
-        "subject": "beads: grounding round 2026-11-27 — close 7 stale tickets, reprioritize 8, close retro-corrections epic",
-        "outcome": null
-      },
-      {
-        "sha": "322f5cf1748e74ce591748d32e8cf2e216d78fb9",
-        "committed_at": "2026-11-27T13:59:25Z",
-        "subject": "chore(wai): session close handoff 2026-11-27",
         "outcome": null
       }
     ],
@@ -347,13 +347,13 @@
     "truncation": {
       "applied": true,
       "omitted_counts": {
-        "in_flight": 26,
-        "next": 32,
+        "in_flight": 25,
+        "next": 31,
         "recent": 195
       }
     },
-    "head_sha": "af3dd4cb0613be9d3b5e51ff7a05877200c1915f",
-    "source_hash": "03c91eb9d9879b5790c9ffc6f9032c7cf44766bb186f3cf63ae537d557776849",
+    "head_sha": "2eaefad14fc18b8559fd71b2c0ab5af0a077339a",
+    "source_hash": "5ae0848460878ef588d6f6ec017f698d54c6df8bb18f768bfd017c6ab781a73e",
     "warnings": [
       {
         "source": "beads",
